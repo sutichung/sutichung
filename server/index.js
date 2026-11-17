@@ -494,7 +494,7 @@ async function route(req,res){
         ...company,
         businessDescription:issuerProfile?.['主要經營業務']||issuerProfile?.['營業項目']||issuerProfile?.['公司簡介']||null,
         address:issuerProfile?.['住址']||null,
-        website:issuerProfile?.['網址']||issuerProfile?.['公司網址']||null,
+        website:(()=>{const raw=String(issuerProfile?.['網址']||issuerProfile?.['公司網址']||'').trim();return raw?(/^https?:\\/\\//i.test(raw)?raw:'https://'+raw):null;})(),
         chairman:issuerProfile?.['董事長']||null,
         establishedDate:issuerProfile?.['成立日期']||null,
         capital:issuerProfile?.['實收資本額']||null,
