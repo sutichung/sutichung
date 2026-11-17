@@ -2,6 +2,7 @@ import React,{useEffect} from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import AuthGate from './AuthGate.jsx';
+import './premium.css';
 
 // Classify the current browsing layout from the live viewport, not a one-time
 // user-agent guess. Re-evaluate on resize, rotation, and pointer changes.
