@@ -1,0 +1,42 @@
+name: Taiwan market scan and close review
+on:
+  schedule:
+    # Taiwan cash market: 09:00–13:59 (UTC+8 = 01:00–05:59 UTC), weekdays.
+    - cron: "*/5 1-5 * * 1-5"
+    # Close review after the cash session: 13:40 Taiwan time.
+    - cron: "40 5 * * 1-5"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: taiwan-market-automation
+  cancel-in-progress: false
+jobs:
+  intraday-scan:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '*/5 1-5 * * 1-5'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refresh full-market scan
+        env:
+          MARKET_APP_URL: ${{ secrets.MARKET_APP_URL }}
+        run: |
+          test -n "$MARKET_APP_URL" || { echo "Set GitHub Actions secret MARKET_APP_URL to the deployed app URL"; exit 1; }
+          curl --fail --silent --show-error --max-time 45 "$MARKET_APP_URL/api/market/scan" -o /tmp/scan.json
+          node -e "const x=require('/tmp/scan.json'); console.log('Scanned symbols:', x.scannedCount ?? Object.keys(x.data||{}).length, 'source:', x.source||'unknown')"
+  close-review:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '40 5 * * 1-5'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Generate close review archive
+        env:
+          MARKET_APP_URL: ${{ secrets.MARKET_APP_URL }}
+        run: node server/jobs/close-review.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: taiwan-market-close-review-${{ github.run_id }}
+          path: reports/
+          retention-days: 90
