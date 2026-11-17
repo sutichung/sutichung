@@ -20,7 +20,8 @@
 正式部署：可直接使用根目錄 Dockerfile 與 render.yaml，在 Render 建立 Blueprint 服務；詳細步驟見 [DEPLOYMENT.md](./DEPLOYMENT.md)。Docker 正式模式由同一個 Node 服務提供 React 網頁與 /api，不必另設前端代理。不可將 FinMind Token 或其他 API 金鑰放在瀏覽器環境變數。
 
 ## API
-- `GET /api/health`：服務健康狀態、Node 版本、執行模式與各資料供應商是否已設定。
+- `GET /api/health`：服務健康狀態、Node 版本、執行模式、資料供應商設定狀態與實盤交易鎖定狀態。
+- `GET /api/trading/readiness`：實盤交易就緒檢查；目前固定回報 `executionEnabled: false`，並列出券商 API、成交對帳、稽核、樣本外驗證及硬性風控缺口。
 - `GET /api/market/universe`：FinMind TaiwanStockInfo 股票清單（需 FINMIND_TOKEN）。
 - `GET /api/market/snapshot`：優先使用 Fugle TSE/OTC 全市場快照（`FUGLE_API_KEY`），否則使用 `MARKET_REALTIME_URL`。
 - `GET /api/market/scan`：優先使用 FinMind 全市場日 K + Fugle 即時快照計算所有股票分數；FinMind 方案不足時可改接 `MARKET_SCAN_URL`。回傳每檔 `scorecard`。
@@ -63,4 +64,4 @@ Fugle 全市場快照上游每五秒更新一次；前端每秒輪詢只代表�
 目前尚未配置持久化資料庫與模型訓練流程；真正的自我學習必須保存歷史訊號、隔日／隔週實際報酬、成本與滑價，再做 walk-forward 樣本外驗證，不能只把當日排名稱為學習。即時網路研究／LLM 自動推理也需額外的搜尋與模型 API 服務金鑰；本系統目前只接新聞資料來源，不會假裝 ChatGPT 在雲端服務內持續思考。
 
 ## 安全提醒
-API Key 僅放後端環境變數；不要提交 .env、Token、券商帳密或個人憑證。此專案不會自動下單，也不是投資建議。
+API Key 僅放後端環境變數；不要提交 .env、Token、券商帳密或個人憑證。此專案目前是非模擬報價的市場研究／監控介面，不是可直接下單的正式交易終端。實盤委託功能預設鎖定；在券商正式 API、委託與成交對帳、持久化稽核、成本後樣本外驗證及硬性風控全部完成前，不得解除鎖定。不得將研究評分當成交易指令。
