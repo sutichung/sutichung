@@ -444,8 +444,34 @@ async function route(req,res){
     return json(res,200,result);
   }
   if(u.pathname==='/api/market/futures'){
-    const result=await safeLoad('futures',TTL.futures,async()=>{
-      if(process.env.MARKET_FUTURES_URL){const x=await external('MARKET_FUTURES_URL','');return {data:x.data||null,source:x.source||'Configured futures provider',timestamp:x.timestamp||now()};}
+    const result=await safeLoad('futures',FUGLE_API_KEY?5000:TTL.futures,async()=>{
+      let nightSession=null,nightSessionError=null,daySession=null;
+      if(FUGLE_API_KEY){
+        const base=(process.env.FUGLE_FUTOPT_BASE_URL||'https://api.fugle.tw/marketdata/v1.0/futopt').replace(/\/$/,'');
+        const headers={'X-API-KEY':FUGLE_API_KEY};
+        const toIso=value=>{const n=Number(value);return Number.isFinite(n)&&n>0?new Date(n>1e14?n/1000:n>1e11?n:n*1000).toISOString():null;};
+        const normalize=(q,session)=>{
+          if(!q||typeof q!=='object')return null;
+          const last=q.isTrial?(Number(q.lastTrade?.price)>0?Number(q.lastTrade.price):null):(Number(q.lastPrice??q.closePrice)>0?Number(q.lastPrice??q.closePrice):null);
+          return {symbol:q.symbol||'TXF1!',name:q.name||'臺股期貨近月',last,change:Number.isFinite(Number(q.change))?Number(q.change):null,changePct:Number.isFinite(Number(q.changePercent))?Number(q.changePercent):null,previousClose:Number(q.previousClose)>0?Number(q.previousClose):null,open:Number(q.openPrice)>0?Number(q.openPrice):null,high:Number(q.highPrice)>0?Number(q.highPrice):null,low:Number(q.lowPrice)>0?Number(q.lowPrice):null,volume:Number(q.total?.tradeVolume??0),timestamp:toIso(q.lastUpdated||q.lastTrade?.time||q.closeTime),date:q.date||null,isTrial:!!q.isTrial,session};
+        };
+        try{
+          const q=await fetchJson(base+'/intraday/quote/TXF1!?session=afterhours',8000,headers);
+          nightSession=normalize(q,'afterhours');
+          if(!nightSession||nightSession.last==null)nightSessionError='富果已回應，但目前沒有可用的正式夜盤成交價（可能尚未開盤或只有試撮）';
+        }catch(e){nightSessionError='富果夜盤報價連線失敗：'+e.message;}
+        try{
+          const q=await fetchJson(base+'/intraday/quote/TXF1!',8000,headers);
+          daySession=normalize(q,'regular');
+        }catch(e){if(!nightSessionError)nightSessionError='富果日盤報價連線失敗：'+e.message;}
+        if(nightSession||daySession){
+          return {data:{last:daySession?.last??null,changePct:daySession?.changePct??null,openInterestChange:null,volume:daySession?.volume??null,contractDate:nightSession?.symbol||daySession?.symbol||'TXF1!',frequency:'intraday-rest',daySession,nightSession,nightSessionError,nightSessionSource:'Fugle Futopt REST API',nightSessionRefreshMs:5000},source:'Fugle Futopt REST API（TXF1!；日盤／夜盤分開查詢）',timestamp:now()};
+        }
+      }
+      if(process.env.MARKET_FUTURES_URL){
+        const x=await external('MARKET_FUTURES_URL','');
+        return {data:x.data||null,source:x.source||'Configured futures provider',timestamp:x.timestamp||now()};
+      }
       if(FINMIND_TOKEN){
         const d=new Date();d.setDate(d.getDate()-14);const startDate=d.toISOString().slice(0,10);
         const rows=await finmind('TaiwanFuturesDaily',{data_id:'TX',start_date:startDate},20000);
@@ -455,7 +481,7 @@ async function route(req,res){
         const latest=today[0],contract=String(latest.contract_date||'');
         const prior=rows.filter(x=>String(x.contract_date||'')===contract&&String(x.date)<latestDate).sort((a,b)=>String(b.date).localeCompare(String(a.date)))[0];
         const last=Number(latest.close),prev=Number(prior?.close);
-        return {data:{last:Number.isFinite(last)?last:null,changePct:Number.isFinite(prev)&&prev!==0?(last/prev-1)*100:null,openInterestChange:prior?Number(latest.open_interest||0)-Number(prior.open_interest||0):null,volume:Number(latest.volume||0),contractDate:contract,asOf:latestDate,frequency:'daily'},source:'FinMind TaiwanFuturesDaily（日資料，非即時）',timestamp:now()};
+        return {data:{last:Number.isFinite(last)?last:null,changePct:Number.isFinite(prev)&&prev!==0?(last/prev-1)*100:null,openInterestChange:prior?Number(latest.open_interest||0)-Number(prior.open_interest||0):null,volume:Number(latest.volume||0),contractDate:contract,asOf:latestDate,frequency:'daily',nightSession:null,nightSessionError:nightSessionError||'目前沒有可用的夜盤即時行情來源'},source:'FinMind TaiwanFuturesDaily（日資料，非即時）',timestamp:now()};
       }
       const rows=await fetchJson('https://openapi.taifex.com.tw/v1/DailyMarketReportFut',15000,{'User-Agent':'Mozilla/5.0','Accept':'application/json'});
       if(!Array.isArray(rows)||!rows.length)throw new Error('TAIFEX OpenAPI 未回傳期貨日報');
@@ -472,7 +498,7 @@ async function route(req,res){
       }).filter(r=>r.month&&r.last>0).sort((a,b)=>a.month.localeCompare(b.month));
       const near=sorted.find(r=>r.month.slice(0,6)>=currentMonth)||sorted[0];
       if(!near)throw new Error('TAIFEX TX 近月合約欄位無法解析');
-      return {data:{last:near.last,changePct:near.changePct,openInterestChange:null,openInterest:near.openInterest,volume:near.volume,contractDate:near.month,asOf:near.date,frequency:'daily'},source:'TAIFEX OpenAPI DailyMarketReportFut（官方日資料，非逐筆即時）',timestamp:now()};
+      return {data:{last:near.last,changePct:near.changePct,openInterestChange:null,openInterest:near.openInterest,volume:near.volume,contractDate:near.month,asOf:near.date,frequency:'daily',nightSession:null,nightSessionError:nightSessionError||'此資料來源僅提供日報，非夜盤即時報價'},source:'TAIFEX OpenAPI DailyMarketReportFut（官方日資料，非逐筆即時）',timestamp:now()};
     },e=>({data:null,source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
   }
