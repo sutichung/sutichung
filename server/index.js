@@ -524,7 +524,7 @@ async function route(req,res){
       if(FUGLE_API_KEY){
         const base=(process.env.FUGLE_FUTOPT_BASE_URL||'https://api.fugle.tw/marketdata/v1.0/futopt').replace(/\/$/,'');
         const headers={'X-API-KEY':FUGLE_API_KEY};
-        const toIso=value=>{const n=Number(value);return Number.isFinite(n)&&n>0?new Date(n>1e14?n/1000:n>1e11?n:n*1000).toISOString():null;};
+        const toIso=value=>{const n=Number(value);if(Number.isFinite(n)&&n>0)return new Date(n>1e14?n/1000:n>1e11?n:n*1000).toISOString();const parsed=Date.parse(String(value||''));return Number.isFinite(parsed)?new Date(parsed).toISOString():null;};
         const normalize=(q,session)=>{
           if(!q||typeof q!=='object')return null;
           const timestamp=toIso(q.lastUpdated||q.lastTrade?.time||q.closeTime);
