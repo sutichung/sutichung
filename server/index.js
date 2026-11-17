@@ -352,10 +352,93 @@ async function loadStockHistory(symbol){
   return {data,source,timestamp:now(),asOf:data.at(-1).time,indicators:indicators(data)};
 }
 
+
+const SUPABASE_URL=String(process.env.SUPABASE_URL||'').replace(/\/+$/,'');
+const SUPABASE_ANON_KEY=process.env.SUPABASE_ANON_KEY||'';
+const SUPABASE_SERVICE_ROLE_KEY=process.env.SUPABASE_SERVICE_ROLE_KEY||'';
+const SUPABASE_ADMIN_EMAIL=String(process.env.SUPABASE_ADMIN_EMAIL||'').trim().toLowerCase();
+const SUPABASE_CONFIGURED=!!(SUPABASE_URL&&SUPABASE_ANON_KEY);
+async function readRequestJson(req){
+  let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>16384)throw new Error('request_body_too_large');}
+  try{return raw?JSON.parse(raw):{};}catch(_){throw new Error('invalid_json');}
+}
+function bearerToken(req){const h=String(req.headers.authorization||'');return /^Bearer\s+\S+$/i.test(h)?h.replace(/^Bearer\s+/i,''):'';}
+async function supabaseRequest(path,{method='GET',body,token,admin=false}={}){
+  if(!SUPABASE_CONFIGURED)throw new Error('Supabase 尚未設定');
+  if(admin&&!SUPABASE_SERVICE_ROLE_KEY)throw new Error('管理員服務金鑰尚未在 Render 設定；會員登入不受影響');
+  const key=admin?SUPABASE_SERVICE_ROLE_KEY:SUPABASE_ANON_KEY;
+  const headers={'apikey':key,'Authorization':'Bearer '+(token||(admin?SUPABASE_SERVICE_ROLE_KEY:key)),'Accept':'application/json'};
+  if(body!==undefined)headers['Content-Type']='application/json';
+  const response=await fetch(SUPABASE_URL+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(12000)});
+  const text=await response.text();let data={};try{data=text?JSON.parse(text):{};}catch(_){data={message:text};}
+  if(!response.ok){const error=new Error(data.msg||data.message||data.error_description||data.error||'Supabase request failed');error.status=response.status;throw error;}
+  return data;
+}
+async function authenticatedUser(req){
+  const token=bearerToken(req);if(!token)return null;
+  try{return await supabaseRequest('/auth/v1/user',{token});}catch(_){return null;}
+}
+function isAdminUser(user){return !!(user&&user.email&&SUPABASE_ADMIN_EMAIL&&String(user.email).toLowerCase()===SUPABASE_ADMIN_EMAIL);}
+
 async function route(req,res){
   const u=new URL(req.url,'http://localhost');
+  if(u.pathname==='/api/auth/config'&&req.method==='GET')return json(res,200,{configured:SUPABASE_CONFIGURED,registrationEnabled:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY});
+  if(u.pathname==='/api/auth/signup'&&req.method==='POST'){
+    if(!SUPABASE_CONFIGURED)return json(res,503,{error:'會員系統尚未設定'});
+    try{const body=await readRequestJson(req);if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(body.email||''))||String(body.password||'').length<10)return json(res,400,{error:'請輸入有效 Email，密碼至少 10 個字元'});
+      const data=await supabaseRequest('/auth/v1/signup',{method:'POST',body:{email:String(body.email).trim(),password:String(body.password)}});
+      return json(res,200,{user:data.user||null,session:data.session||null,confirmationRequired:!data.session});
+    }catch(e){return json(res,e.status||502,{error:e.message});}
+  }
+  if(u.pathname==='/api/auth/login'&&req.method==='POST'){
+    if(!SUPABASE_CONFIGURED)return json(res,503,{error:'會員系統尚未設定'});
+    try{const body=await readRequestJson(req);const data=await supabaseRequest('/auth/v1/token?grant_type=password',{method:'POST',body:{email:String(body.email||'').trim(),password:String(body.password||'')}});
+      return json(res,200,{access_token:data.access_token,refresh_token:data.refresh_token,expires_in:data.expires_in,user:data.user});
+    }catch(e){return json(res,e.status||401,{error:e.message});}
+  }
+  if(u.pathname==='/api/auth/refresh'&&req.method==='POST'){
+    try{const body=await readRequestJson(req);const data=await supabaseRequest('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:{refresh_token:String(body.refresh_token||'')}});
+      return json(res,200,{access_token:data.access_token,refresh_token:data.refresh_token,expires_in:data.expires_in,user:data.user});
+    }catch(e){return json(res,e.status||401,{error:e.message});}
+  }
+  if(u.pathname==='/api/auth/me'&&req.method==='GET'){
+    const user=await authenticatedUser(req);if(!user)return json(res,401,{error:'authentication_required'});
+    return json(res,200,{user:{id:user.id,email:user.email},isAdmin:isAdminUser(user),adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY});
+  }
+  if(u.pathname==='/api/auth/logout'&&req.method==='POST'){
+    const token=bearerToken(req);if(token)try{await supabaseRequest('/auth/v1/logout',{method:'POST',token});}catch(_){}
+    return json(res,200,{ok:true});
+  }
+  if(u.pathname.startsWith('/api/admin/members')){
+    const user=await authenticatedUser(req);if(!user)return json(res,401,{error:'authentication_required'});
+    if(!isAdminUser(user))return json(res,403,{error:'administrator_required'});
+    if(!SUPABASE_SERVICE_ROLE_KEY)return json(res,503,{error:'請先在 Render 設定 SUPABASE_SERVICE_ROLE_KEY 才能管理會員'});
+    try{
+      if(u.pathname==='/api/admin/members'&&req.method==='GET'){
+        const page=Math.max(1,Number(u.searchParams.get('page')||1)),perPage=100;
+        const data=await supabaseRequest('/auth/v1/admin/users?page='+page+'&per_page='+perPage,{admin:true});
+        return json(res,200,{users:(data.users||[]).map(x=>({id:x.id,email:x.email,created_at:x.created_at,last_sign_in_at:x.last_sign_in_at,banned_until:x.banned_until})),nextPage:(data.users||[]).length===perPage?page+1:null});
+      }
+      if(u.pathname==='/api/admin/members'&&req.method==='POST'){
+        const body=await readRequestJson(req);const email=String(body.email||'').trim(),password=String(body.password||'');
+        if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)||password.length<10)return json(res,400,{error:'Email 格式錯誤或密碼少於 10 個字元'});
+        const created=await supabaseRequest('/auth/v1/admin/users',{method:'POST',admin:true,body:{email,password,email_confirm:true}});
+        return json(res,201,{user:{id:created.id,email:created.email,created_at:created.created_at}});
+      }
+      const match=u.pathname.match(/^\/api\/admin\/members\/([0-9a-f-]{36})\/(disable|enable)$/i);
+      if(match&&req.method==='POST'){
+        const disabled=match[2]==='disable';
+        const updated=await supabaseRequest('/auth/v1/admin/users/'+match[1],{method:'PUT',admin:true,body:{ban_duration:disabled?'876000h':'none'}});
+        return json(res,200,{user:{id:updated.id,email:updated.email,banned_until:updated.banned_until}});
+      }
+      return json(res,404,{error:'not_found'});
+    }catch(e){return json(res,e.status||502,{error:e.message});}
+  }
   if(req.method!=='GET'){return json(res,405,{error:'method_not_allowed'});}
-  if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),providers:{finmind:!!FINMIND_TOKEN,fugle:!!FUGLE_API_KEY,youtubeApiKeyConfigured:!!process.env.YOUTUBE_API_KEY,youtubeLiveResolver:!!process.env.YOUTUBE_API_KEY,gemini:!!process.env.GEMINI_API_KEY,grok:!!process.env.XAI_API_KEY,deepseek:!!process.env.DEEPSEEK_API_KEY,realtime:null,realtimeProviderConfigured:!!(FUGLE_API_KEY||process.env.MARKET_REALTIME_URL),twseMisFallback:true,tpexRealtimeConfigured:!!FUGLE_API_KEY,tpexHistoricalFallback:true,scan:true,flows:true,futures:true,sentiment:true,news:true,openDataArchive:true},mode:process.env.NODE_ENV==='production'?'production':'development'});
+  if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,auth:{configured:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY},provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),providers:{finmind:!!FINMIND_TOKEN,fugle:!!FUGLE_API_KEY,youtubeApiKeyConfigured:!!process.env.YOUTUBE_API_KEY,youtubeLiveResolver:!!process.env.YOUTUBE_API_KEY,gemini:!!process.env.GEMINI_API_KEY,grok:!!process.env.XAI_API_KEY,deepseek:!!process.env.DEEPSEEK_API_KEY,realtime:null,realtimeProviderConfigured:!!(FUGLE_API_KEY||process.env.MARKET_REALTIME_URL),twseMisFallback:true,tpexRealtimeConfigured:!!FUGLE_API_KEY,tpexHistoricalFallback:true,scan:true,flows:true,futures:true,sentiment:true,news:true,openDataArchive:true},mode:process.env.NODE_ENV==='production'?'production':'development'});
+  if(SUPABASE_CONFIGURED&&u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/api/auth/')){
+    const user=await authenticatedUser(req);if(!user)return json(res,401,{error:'authentication_required'});
+  }
   if(u.pathname==='/api/live/resolve'){
     const channelId=String(u.searchParams.get('channelId')||'');
     if(!/^[A-Za-z0-9_-]{20,40}$/.test(channelId))return json(res,400,{error:'invalid_channel_id'});
