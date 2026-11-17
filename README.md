@@ -58,7 +58,7 @@ Fugle 全市場快照上游每五秒更新一次；前端每秒輪詢只代表�
 6. 大戶持股、法人買賣超及融資融券多為日資料或延遲資料，不應標成逐秒更新。
 
 ## 自動排程與收盤研究
-`.github/workflows/market-automation.yml` 會在台灣交易時段每 5 分鐘呼叫全市場掃描，並於 13:40 產生收盤研究報告；報告會以 GitHub Actions Artifact 保存 90 天。請在 GitHub repository 的 Settings → Secrets and variables → Actions 新增 `MARKET_APP_URL`，值為部署後的 Render 網址（不要加 `/api`）。這是掃描與報告存檔，不代表模型已自動再訓練。
+`.github/workflows/market-automation.yml` 會在台灣交易時段每 5 分鐘呼叫全市場掃描，並於台灣時間 13:40 先產生收盤快照、21:10 再於法人資料通常公布後補做一次收盤研究；報告會以 GitHub Actions Artifact 保存 90 天。FinMind 法人資料官方更新時間約為交易日 20:00，系統僅在 20:30 後才把當日法人數據納入近五日籌碼比例。請在 GitHub repository 的 Settings → Secrets and variables → Actions 新增 `MARKET_APP_URL`，值為部署後的 Render 網址（不要加 `/api`）。這是掃描與報告存檔，不代表模型已自動再訓練。
 
 目前尚未配置持久化資料庫與模型訓練流程；真正的自我學習必須保存歷史訊號、隔日／隔週實際報酬、成本與滑價，再做 walk-forward 樣本外驗證，不能只把當日排名稱為學習。即時網路研究／LLM 自動推理也需額外的搜尋與模型 API 服務金鑰；本系統目前只接新聞資料來源，不會假裝 ChatGPT 在雲端服務內持續思考。
 
