@@ -200,7 +200,7 @@ function rateLimit(req){const ip=req.socket.remoteAddress||'unknown';const t=Dat
 async function route(req,res){
   const u=new URL(req.url,'http://localhost');
   if(req.method!=='GET'){return json(res,405,{error:'method_not_allowed'});}
-  if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),providers:{finmind:!!FINMIND_TOKEN,fugle:!!FUGLE_API_KEY,realtime:true,twseMisFallback:true,scan:true,flows:true,futures:!!FINMIND_TOKEN||!!process.env.MARKET_FUTURES_URL,sentiment:!!FINMIND_TOKEN||!!process.env.MARKET_SENTIMENT_URL,news:!!FINMIND_TOKEN||!!process.env.MARKET_NEWS_URL},mode:process.env.NODE_ENV==='production'?'production':'development'});
+  if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),providers:{finmind:!!FINMIND_TOKEN,fugle:!!FUGLE_API_KEY,realtime:true,twseMisFallback:true,scan:true,flows:true,futures:true,sentiment:true,news:true,openDataArchive:true},mode:process.env.NODE_ENV==='production'?'production':'development'});
   if(u.pathname==='/api/trading/readiness')return json(res,200,getTradingReadiness());
   if(u.pathname==='/api/market/universe'){
     const result=await safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],source:'unavailable',timestamp:now(),error:e.message}));
@@ -232,6 +232,15 @@ async function route(req,res){
       return await twseMisSnapshot();
     },e=>({data:{},source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
+  }
+  if(u.pathname==='/api/diagnostics/analysis'){
+    const [history,flows,listed]=await Promise.all([
+      safeLoad('open-source-market-history',12*60*60*1000,openSourceMarketHistory,e=>({data:{},error:e.message,historyDateCount:0,historyCount:0})),
+      safeLoad('flows',TTL.flows,()=>twseInstitutionalFlows(),e=>({data:{},error:e.message})),
+      safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],error:e.message}))
+    ]);
+    const flowRows=Object.values(flows.data||{});
+    return json(res,200,{ok:!history.error&&history.historyCount>0,source:history.source||'open data archive',historyAsOf:history.historyAsOf,historyDays:history.historyDateCount||0,historyStocks:history.historyCount||0,listedCount:listed.data?.length||0,institutionalStocks:flowRows.filter(x=>x.institutionalNet!=null).length,marginStocks:flowRows.filter(x=>x.marginChange!=null||x.shortChange!=null).length,institutionalAsOf:flows.asOf||null,marginAsOf:flows.marginAsOf||null,errors:[history.error,flows.error,listed.error].filter(Boolean),serverTime:now()});
   }
   if(u.pathname==='/api/market/scan'){
     const result=await safeLoad('scan',TTL.scan,async()=>{
