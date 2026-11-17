@@ -25,10 +25,10 @@
 - `GET /api/market/snapshot`：優先使用 Fugle TSE/OTC 全市場快照（`FUGLE_API_KEY`），否則使用 `MARKET_REALTIME_URL`。
 - `GET /api/market/scan`：優先使用 FinMind 全市場日 K + Fugle 即時快照計算所有股票分數；FinMind 方案不足時可改接 `MARKET_SCAN_URL`。回傳每檔 `scorecard`。
 - `GET /api/market/history/:symbol?interval=1d&limit=120`：FinMind TaiwanStockPrice 日 K 歷史資料（需 FINMIND_TOKEN）。
-- `GET /api/market/institutional-flows`：法人、大戶級距、融資融券；需 MARKET_FLOWS_URL。
-- `GET /api/market/futures`：台指期行情與未平倉；需 MARKET_FUTURES_URL。
-- `GET /api/market/sentiment`：市場恐懼貪婪與市場廣度；需 MARKET_SENTIMENT_URL。
-- `GET /api/market/news`：授權新聞標題、摘要與連結；需 MARKET_NEWS_URL。
+- `GET /api/market/institutional-flows`：優先使用 FinMind 全市場三大法人與融資融券日資料（需 Backer 以上權限），否則使用 `MARKET_FLOWS_URL`。
+- `GET /api/market/futures`：優先使用 FinMind TX 期貨日資料（非即時），若要即時期貨需 `MARKET_FUTURES_URL` 或另接有授權的即時供應商。
+- `GET /api/market/sentiment`：優先使用 FinMind CNN Fear & Greed（日資料，需 Backer 以上），否則使用 `MARKET_SENTIMENT_URL`。
+- `GET /api/market/news`：優先使用 FinMind TaiwanStockNews，否則使用 `MARKET_NEWS_URL`。
 
 全市場掃描資料每檔可提供 `trend, macd, signal, rsi, volumeRatio, institutionalNet, foreignNet, trustNet, dealerNet, marginChange, shortChange`；亦可提供全市場 `fearGreed, advanceDecline, futuresChangePct`。後端會回傳 `scorecard`（0–100 多空方向分數、信心覆蓋率、方向與原因）。分數是透明規則式研究排序，不是勝率；時間戳過期或覆蓋率不足時只顯示觀望。
 
@@ -46,7 +46,7 @@
 - TAIFEX OpenAPI：<https://openapi.taifex.com.tw/>
 - 非凡新聞官方直播：<https://news.ustv.com.tw/livevideo>
 
-Fugle 全市場快照上游每五秒更新一次；前端每秒輪詢只代表每秒向本系統詢問一次，不代表上游每秒有新成交。FinMind 日 K 資料不是逐筆即時行情。前端每秒輪詢只代表每秒向本系統詢問一次，不代表供應商每秒有新成交。正式逐秒／逐筆報價、即時期貨、全市場逐股掃描與法人籌碼需要有相應授權及 API 配額。新聞 iframe 可能受官方網站 CSP/X-Frame-Options 限制，系統保留官方頁面連結作為備援。
+Fugle 全市場快照上游每五秒更新一次；前端每秒輪詢只代表每秒向本系統詢問一次，不代表上游每秒有新成交。FinMind 日 K、法人、融資融券與恐懼貪婪資料屬日資料，不應標成逐秒更新。全市場日 K、法人與融資融券批次查詢需 FinMind Backer 以上；FinMind 方案及資料授權請見官方 [方案價格](https://finmind.github.io/Pricing/) 與 [商業使用規範](https://finmind.github.io/CommercialUse/)。Fugle 全市場快照需 Developer 或 Advanced 方案，官方快照更新頻率為五秒，方案與價格請見 [Fugle 方案](https://developer.fugle.tw/docs/pricing/)。即時期貨與主力分點資料仍需另有相應授權。新聞 iframe 可能受官方網站 CSP/X-Frame-Options 限制，系統保留官方頁面連結作為備援。
 
 ## 降低預測錯誤率的防呆原則
 1. 資料時間戳過期、欄位缺漏、OHLC 不合理、歷史不足 60 根時，不產生有效訊號。
@@ -55,6 +55,11 @@ Fugle 全市場快照上游每五秒更新一次；前端每秒輪詢只代表�
 4. 正式發布預測前，必須做 walk-forward 樣本外回測、計入手續費／稅／滑價，至少 100 筆樣本外交易，並檢查最大回撤；不足門檻一律觀望。
 5. 追蹤命中率、Precision、Recall、Brier score、最大回撤及不同市場 regime 的表現；定期重新校準，不能用訓練集準確率宣稱預測能力。
 6. 大戶持股、法人買賣超及融資融券多為日資料或延遲資料，不應標成逐秒更新。
+
+## 自動排程與收盤研究
+`.github/workflows/market-automation.yml` 會在台灣交易時段每 5 分鐘呼叫全市場掃描，並於 13:40 產生收盤研究報告；報告會以 GitHub Actions Artifact 保存 90 天。請在 GitHub repository 的 Settings → Secrets and variables → Actions 新增 `MARKET_APP_URL`，值為部署後的 Render 網址（不要加 `/api`）。這是掃描與報告存檔，不代表模型已自動再訓練。
+
+目前尚未配置持久化資料庫與模型訓練流程；真正的自我學習必須保存歷史訊號、隔日／隔週實際報酬、成本與滑價，再做 walk-forward 樣本外驗證，不能只把當日排名稱為學習。即時網路研究／LLM 自動推理也需額外的搜尋與模型 API 服務金鑰；本系統目前只接新聞資料來源，不會假裝 ChatGPT 在雲端服務內持續思考。
 
 ## 安全提醒
 API Key 僅放後端環境變數；不要提交 .env、Token、券商帳密或個人憑證。此專案不會自動下單，也不是投資建議。
