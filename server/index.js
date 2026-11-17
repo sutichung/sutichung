@@ -64,7 +64,7 @@ function rateLimit(req){const ip=req.socket.remoteAddress||'unknown';const t=Dat
 async function route(req,res){
   const u=new URL(req.url,'http://localhost');
   if(req.method!=='GET'){return json(res,405,{error:'method_not_allowed'});}
-  if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',providers:{fugle:!!FUGLE_API_KEY,realtime:!!process.env.MARKET_REALTIME_URL,scan:!!process.env.MARKET_SCAN_URL,flows:!!process.env.MARKET_FLOWS_URL,futures:!!process.env.MARKET_FUTURES_URL,sentiment:!!process.env.MARKET_SENTIMENT_URL,news:!!process.env.MARKET_NEWS_URL},mode:process.env.NODE_ENV==='production'?'production':'development'});
+  if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',providers:{finmind:!!FINMIND_TOKEN,fugle:!!FUGLE_API_KEY,realtime:!!FUGLE_API_KEY||!!process.env.MARKET_REALTIME_URL,scan:!!FINMIND_TOKEN||!!process.env.MARKET_SCAN_URL,flows:!!FINMIND_TOKEN||!!process.env.MARKET_FLOWS_URL,futures:!!FINMIND_TOKEN||!!process.env.MARKET_FUTURES_URL,sentiment:!!FINMIND_TOKEN||!!process.env.MARKET_SENTIMENT_URL,news:!!FINMIND_TOKEN||!!process.env.MARKET_NEWS_URL},mode:process.env.NODE_ENV==='production'?'production':'development'});
   if(u.pathname==='/api/market/universe'){
     const result=await safeLoad('universe',TTL.universe,async()=>{
       const rows=await finmind('TaiwanStockInfo');
