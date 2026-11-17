@@ -13,7 +13,7 @@ const finite = value => Number.isFinite(Number(value)) && value !== null && valu
  */
 function scoreStock(input={}) {
   const reasons=[];
-  let score=50, covered=0, total=122;
+  let score=50, covered=0, total=123;
   const add=(weight, direction, positive, negative)=>{
     if(direction===null)return;
     score += weight*direction;
