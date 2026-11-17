@@ -484,6 +484,11 @@ async function route(req,res){
           const issuerRows=await safeLoad('twse-issuer-basic',TTL.universe,()=>fetchJson('https://openapi.twse.com.tw/v1/opendata/t187ap03_L',12000),()=>[]);
           issuerProfile=(issuerRows||[]).find(row=>String(row['公司代號']||row.Code||'').trim()===symbol)||null;
         }catch(_){}
+      }else if(company.exchange==='TPEx'){
+        try{
+          const issuerRows=await safeLoad('tpex-issuer-basic',TTL.universe,()=>fetchJson('https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O',12000),()=>[]);
+          issuerProfile=(issuerRows||[]).find(row=>String(row.SecuritiesCompanyCode||row['公司代號']||'').trim()===symbol)||null;
+        }catch(_){}
       }
       const officialCompany={
         ...company,
@@ -497,13 +502,10 @@ async function route(req,res){
       };
       if(!FINMIND_TOKEN)return {company:officialCompany,profile:{description:officialCompany.businessDescription,descriptionNote:'尚未設定 FinMind Token；財務報表、月營收與股利資料暫不可用。',mopsUrl:officialCompany.mopsUrl},financials:null,error:'未設定 FINMIND_TOKEN；財報資料暫不可用',source:'TWSE／TPEx 官方公司基本資料',timestamp:now()};
       const startDate='2018-01-01';
-      const [income,balance,cash,revenue,dividends]=await Promise.all([
-        finmind('TaiwanStockFinancialStatements',{data_id:symbol,start_date:startDate},20000),
-        finmind('TaiwanStockBalanceSheet',{data_id:symbol,start_date:startDate},20000),
-        finmind('TaiwanStockCashFlowsStatement',{data_id:symbol,start_date:startDate},20000),
-        finmind('TaiwanStockMonthRevenue',{data_id:symbol,start_date:startDate},20000),
-        finmind('TaiwanStockDividend',{data_id:symbol,start_date:'2018-01-01'},20000)
-      ]);
+      const datasets=['TaiwanStockFinancialStatements','TaiwanStockBalanceSheet','TaiwanStockCashFlowsStatement','TaiwanStockMonthRevenue','TaiwanStockDividend'];
+      const datasetErrors={};
+      const loadDataset=async name=>{try{return await finmind(name,{data_id:symbol,start_date:name==='TaiwanStockDividend'?'2018-01-01':startDate},20000);}catch(error){datasetErrors[name]=String(error.message||error);return [];}};
+      const [income,balance,cash,revenue,dividends]=await Promise.all(datasets.map(loadDataset));
       const latestByDate=rows=>{const dates=[...new Set((rows||[]).map(x=>String(x.date||'')))].filter(Boolean).sort();return dates;};
       const latestIncome=latestByDate(income).at(-1)||null,latestBalance=latestByDate(balance).at(-1)||null,latestCash=latestByDate(cash).at(-1)||null;
       const pick=(rows,date,keys)=>{const found=(rows||[]).filter(x=>String(x.date||'')===date);for(const key of keys){const row=found.find(x=>String(x.type||'').toLowerCase()===key.toLowerCase()||String(x.origin_name||'').toLowerCase()===key.toLowerCase());if(row&&Number.isFinite(Number(row.value)))return Number(row.value);}return null;};
@@ -532,7 +534,7 @@ async function route(req,res){
       const debtRatio=balanceSummary?.totalAssets>0&&balanceSummary?.totalLiabilities!=null?balanceSummary.totalLiabilities/balanceSummary.totalAssets*100:null;
       const currentRatio=balanceSummary?.currentLiabilities>0&&balanceSummary?.currentAssets!=null?balanceSummary.currentAssets/balanceSummary.currentLiabilities:null;
       const dividendHistory=(dividends||[]).slice(-12);
-      return {company:officialCompany,profile:{description:officialCompany.businessDescription,descriptionNote:officialCompany.businessDescription?'公司業務簡介取自證交所公開公司基本資料。':'官方公司基本資料未提供可用的營業項目欄位；請以公開資訊觀測站公司基本資料／年報為準。',mopsUrl:officialCompany.mopsUrl},financials:{incomeAsOf:latestIncome,balanceAsOf:latestBalance,cashAsOf:latestCash,income:incomeSummary,balance:balanceSummary,cash:cashSummary,debtRatio,currentRatio,monthlyRevenue,dividends:dividendHistory},source:'FinMind 財報／月營收／股利資料；公司清單 TWSE／TPEx',timestamp:now(),periodType:'財報為季資料；月營收為月資料'};
+      return {company:officialCompany,profile:{description:officialCompany.businessDescription,descriptionNote:officialCompany.businessDescription?'公司業務簡介取自證交所公開公司基本資料。':'官方公司基本資料未提供可用的營業項目欄位；請以公開資訊觀測站公司基本資料／年報為準。',mopsUrl:officialCompany.mopsUrl},financials:{incomeAsOf:latestIncome,balanceAsOf:latestBalance,cashAsOf:latestCash,income:incomeSummary,balance:balanceSummary,cash:cashSummary,debtRatio,currentRatio,monthlyRevenue,dividends:dividendHistory},datasetErrors,source:'FinMind 財報／月營收／股利資料；公司清單 TWSE／TPEx',timestamp:now(),periodType:'財報為季資料；月營收為月資料'};
     },e=>({error:e.message,company:null,financials:null,source:'unavailable',timestamp:now()}));
     return json(res,result.error?503:200,result);
   }
