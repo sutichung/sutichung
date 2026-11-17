@@ -81,7 +81,7 @@
 
 1. 到 https://openrouter.ai/keys 建立 API Key。
 2. 在 Render Environment 設定 `OPENROUTER_API_KEY`。
-3. `OPENROUTER_MODEL` 預設 `openrouter/free`，由路由器挑選當下可用的免費模型；也可改成 OpenRouter 目錄中以 `:free` 結尾的特定模型 ID。
+3. `OPENROUTER_MODEL` 預設 `openrouter/free`，由路由器挑選當下可用的免費模型。若要固定三個 Agent 使用不同模型，可分別設定 `OPENROUTER_GEMINI_MODEL`、`OPENROUTER_GROK_MODEL`、`OPENROUTER_DEEPSEEK_MODEL` 為 OpenRouter 目錄中的免費模型 ID（通常以 `:free` 結尾）。
 4. 免費模型的可用性、速度與品質會變動；免費變體目前有每日 50 次、每分鐘 20 次限制，失敗請求也可能計入每日額度。免費模型不保證金融研究等級或服務可用性。
 
 官方說明：https://openrouter.ai/collections/free-models/
