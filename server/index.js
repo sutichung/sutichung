@@ -14,7 +14,7 @@ const FUGLE_BASE = process.env.FUGLE_BASE_URL || 'https://api.fugle.tw/marketdat
 const CACHE = new Map();
 const PENDING = new Map();
 const RATE = new Map();
-const TTL = { universe: 6*60*60*1000, snapshot: 5000, scan: 15000, history: 5*60*1000, flows: 60*1000, futures: 1000, sentiment: 15000, news: 60000 };
+const TTL = { universe: 6*60*60*1000, snapshot: 5000, scan: 15000, history: 5*60*1000, flows: 30*60*1000, futures: 5*60*1000, sentiment: 30*60*1000, news: 5*60*1000 };
 const now = () => new Date().toISOString();
 const json = (res, status, body) => { res.writeHead(status, {'content-type':'application/json; charset=utf-8','cache-control':'no-store'}); res.end(JSON.stringify(body)); };
 function cached(key, ttl) { const x=CACHE.get(key); return x && Date.now()-x.time<ttl ? x.value : null; }
@@ -27,10 +27,17 @@ async function fetchJson(url, timeoutMs=8000, extraHeaders={}) {
 async function finmind(dataset, extra={}, timeoutMs=8000) {
   if(!FINMIND_TOKEN) throw new Error('未設定 FINMIND_TOKEN');
   const u=new URL(FINMIND_BASE); u.searchParams.set('dataset',dataset);
-  u.searchParams.set('token',FINMIND_TOKEN);
   for(const [k,v] of Object.entries(extra)) if(v!==undefined&&v!==null&&v!=='')u.searchParams.set(k,String(v));
-  const payload=await fetchJson(u.toString(),timeoutMs);
+  const payload=await fetchJson(u.toString(),timeoutMs,{Authorization:'Bearer '+FINMIND_TOKEN});
   if(payload.status!==200 && payload.status!==undefined) throw new Error('FinMind status '+payload.status);
+  return Array.isArray(payload.data)?payload.data:[];
+}
+async function finmindEndpoint(endpoint, extra={}, timeoutMs=8000) {
+  if(!FINMIND_TOKEN) throw new Error('未設定 FINMIND_TOKEN');
+  const u=new URL(FINMIND_BASE);u.pathname=u.pathname.replace(/\\/data\\/?$/,'/'+endpoint);
+  for(const [k,v] of Object.entries(extra))if(v!==undefined&&v!==null&&v!=='')u.searchParams.set(k,String(v));
+  const payload=await fetchJson(u.toString(),timeoutMs,{Authorization:'Bearer '+FINMIND_TOKEN});
+  if(payload.status!==200&&payload.status!==undefined)throw new Error('FinMind status '+payload.status);
   return Array.isArray(payload.data)?payload.data:[];
 }
 async function external(urlEnv, fallbackMessage) {
@@ -136,7 +143,18 @@ async function route(req,res){
     return json(res,200,result);
   }
   if(u.pathname==='/api/market/institutional-flows'){
-    const result=await safeLoad('flows',TTL.flows,async()=>{const x=await external('MARKET_FLOWS_URL','未設定法人／大戶／融資融券資料供應商 MARKET_FLOWS_URL');return {data:x.data||{},source:x.source||'Configured flow provider',timestamp:x.timestamp||now()};},e=>({data:{},source:'unavailable',timestamp:now(),error:e.message}));
+    const result=await safeLoad('flows',TTL.flows,async()=>{
+      if(process.env.MARKET_FLOWS_URL){const x=await external('MARKET_FLOWS_URL','');return {data:x.data||{},source:x.source||'Configured flow provider',timestamp:x.timestamp||now()};}
+      if(!FINMIND_TOKEN)throw new Error('未設定 FINMIND_TOKEN 或 MARKET_FLOWS_URL');
+      const d=new Date();d.setDate(d.getDate()-10);const start=d.toISOString().slice(0,10);
+      const [inst,margin]=await Promise.all([finmind('TaiwanStockInstitutionalInvestorsBuySell',{start_date:start},30000),finmind('TaiwanStockMarginPurchaseShortSale',{start_date:start},30000)]);
+      const data={},latestInst=new Map();
+      for(const r of inst){const symbol=String(r.stock_id||'');if(!validateSymbol(symbol))continue;const prev=latestInst.get(symbol);if(!prev||String(r.date)>String(prev.date))latestInst.set(symbol,{date:r.date,rows:[r]});else if(String(r.date)===String(prev.date))prev.rows.push(r);}
+      for(const [symbol,group] of latestInst){const x={asOf:group.date,foreignNet:0,trustNet:0,dealerNet:0,institutionalNet:0};for(const r of group.rows){const net=Number(r.buy||0)-Number(r.sell||0);x.institutionalNet+=net;const name=String(r.name||'').toLowerCase();if(name.includes('foreign'))x.foreignNet+=net;else if(name.includes('trust')||name.includes('investment'))x.trustNet+=net;else if(name.includes('dealer'))x.dealerNet+=net;}data[symbol]=x;}
+      const grouped=new Map();for(const r of margin){const symbol=String(r.stock_id||'');if(!validateSymbol(symbol))continue;if(!grouped.has(symbol))grouped.set(symbol,[]);grouped.get(symbol).push(r);}
+      for(const [symbol,rows] of grouped){rows.sort((a,b)=>String(a.date).localeCompare(String(b.date)));const last=rows.at(-1),prev=rows.at(-2);const x=data[symbol]||{asOf:last.date};if(prev){x.marginChange=Number(last.MarginPurchaseTodayBalance||0)-Number(prev.MarginPurchaseTodayBalance||0);x.shortChange=Number(last.ShortSaleTodayBalance||0)-Number(prev.ShortSaleTodayBalance||0);}x.asOf=x.asOf||last.date;data[symbol]=x;}
+      return {data,source:'FinMind all-market institutional investors + margin/short-sale daily data',timestamp:now(),asOf:[...latestInst.values()].map(x=>x.date).sort().at(-1)||null};
+    },e=>({data:{},source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
   }
   if(u.pathname==='/api/market/futures'){
