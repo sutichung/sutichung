@@ -490,9 +490,26 @@ async function route(req,res){
           issuerProfile=(issuerRows||[]).find(row=>String(row.SecuritiesCompanyCode||row['公司代號']||'').trim()===symbol)||null;
         }catch(_){}
       }
+      const taxId=String(issuerProfile?.['營利事業統一編號']||issuerProfile?.BusinessAccountingNo||issuerProfile?.Business_Accounting_NO||issuerProfile?.UnifiedBusinessNo||'').trim();
+      let registeredBusinessItems=[];
+      if(/^\\d{8}$/.test(taxId)){
+        try{
+          const businessUrl=new URL('https://data.gcis.nat.gov.tw/od/data/api/236EE382-4942-41A9-BD03-CA0709025E7C');
+          businessUrl.searchParams.set('$format','json');
+          businessUrl.searchParams.set('$filter','Business_Accounting_NO eq '+taxId);
+          businessUrl.searchParams.set('$skip','0');
+          businessUrl.searchParams.set('$top','50');
+          const businessRows=await safeLoad('gcis-business:'+taxId,24*60*60*1000,()=>fetchJson(businessUrl.toString(),12000),()=>[]);
+          registeredBusinessItems=[...new Set((businessRows||[]).flatMap(row=>[row.Business_Item_Desc,row.Cmp_Business]).map(x=>String(x||'').trim()).filter(Boolean))].slice(0,40);
+        }catch(_){}
+      }
       const officialCompany={
         ...company,
-        businessDescription:issuerProfile?.['主要經營業務']||issuerProfile?.['營業項目']||issuerProfile?.['公司簡介']||null,
+        taxId:taxId||null,
+        businessItems:registeredBusinessItems,
+        businessDescription:registeredBusinessItems.length?registeredBusinessItems.join('、'):issuerProfile?.['主要經營業務']||issuerProfile?.['營業項目']||issuerProfile?.['公司簡介']||null,
+        businessDescriptionSource:registeredBusinessItems.length?'經濟部商業發展署商工登記資料':'證交所／櫃買中心公司基本資料',
+        businessDescriptionNote:registeredBusinessItems.length?'以上為公司登記營業項目，代表登記範圍，不等於實際營收產品組合。':'官方公司基本資料未提供營業項目文字，請參閱公司年報。',
         address:issuerProfile?.['住址']||null,
         website:(()=>{const raw=String(issuerProfile?.['網址']||issuerProfile?.['公司網址']||'').trim();return raw?(raw.startsWith('http://')||raw.startsWith('https://')?raw:'https://'+raw):null;})(),
         chairman:issuerProfile?.['董事長']||null,
