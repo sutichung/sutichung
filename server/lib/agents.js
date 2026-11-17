@@ -68,7 +68,14 @@ async function buildAiCommittee(symbol, options) {
   const last = history.data[history.data.length - 1];
   const facts = {
     symbol, name: technical.name || quote.name || symbol,
-    quote: { price: quote.price != null ? quote.price : (technical.price != null ? technical.price : last.close), changePct: quote.changePct != null ? quote.changePct : (technical.changePct != null ? technical.changePct : null), time: quote.timestamp || null, source: options.quoteSource || '未取得報價來源' },
+    quote: {
+      price: quote.price != null ? quote.price : (technical.price != null ? technical.price : last.close),
+      changePct: quote.changePct != null ? quote.changePct : (technical.changePct != null ? technical.changePct : null),
+      time: quote.timestamp || technical.technicalAsOf || history.asOf || null,
+      source: quote.source || (quote.timestamp ? (options.quoteSource || '已取得來源時間戳') : history.source || '歷史日K資料'),
+      freshness: quote.delayed ? (quote.quoteType === 'daily-close' ? 'historical-daily-close' : 'delayed-snapshot') : quote.timestamp ? 'timestamped-source-quote' : 'historical-daily-close',
+      exchange: quote.market === 'OTC' ? 'TPEx' : technical.exchange || null
+    },
     dailyKlineAsOf: history.asOf || last.time, historySource: history.source,
     latestCandles: history.data.slice(-30),
     technical: {
