@@ -79,15 +79,26 @@ async function buildAiCommittee(symbol, options) {
     dailyKlineAsOf: history.asOf || last.time, historySource: history.source,
     latestCandles: history.data.slice(-30),
     technical: {
-      trend: technical.trend || (history.indicators && history.indicators.trend) || null,
-      rsi: technical.rsi != null ? technical.rsi : history.indicators && history.indicators.rsi,
-      macd: technical.macd != null ? technical.macd : history.indicators && history.indicators.macd,
-      signal: technical.signal != null ? technical.signal : history.indicators && history.indicators.signal,
-      ema20: technical.ema20 != null ? technical.ema20 : history.indicators && history.indicators.e20,
-      ema60: technical.ema60 != null ? technical.ema60 : history.indicators && history.indicators.e60,
-      volumeRatio: technical.volumeRatio != null ? technical.volumeRatio : history.indicators && history.indicators.volumeRatio,
-      support: technical.support != null ? technical.support : history.indicators && history.indicators.support,
-      resistance: technical.resistance != null ? technical.resistance : history.indicators && history.indicators.resistance
+      trend:technical.trend|| (history.indicators&&history.indicators.trend)||null,
+      rsi:technical.rsi??(history.indicators&&history.indicators.rsi),
+      macd:technical.macd??(history.indicators&&history.indicators.macd),
+      signal:technical.macdSignal??technical.signal??(history.indicators&&history.indicators.signal),
+      macdHistogram:technical.macdHistogram??null,
+      sma5:technical.sma5??null,sma20:technical.sma20??null,sma60:technical.sma60??null,
+      ema5:technical.ema5??null,ema10:technical.ema10??null,
+      ema20:technical.ema20??(history.indicators&&history.indicators.e20),
+      ema60:technical.ema60??(history.indicators&&history.indicators.e60),
+      bollingerUpper:technical.bollingerUpper??null,bollingerMiddle:technical.bollingerMiddle??null,bollingerLower:technical.bollingerLower??null,
+      adx:technical.adx??null,plusDi:technical.plusDi??null,minusDi:technical.minusDi??null,
+      cci:technical.cci??null,mfi:technical.mfi??null,k:technical.k??null,d:technical.d??null,williamsR:technical.williamsR??null,
+      atr:technical.atr??null,atrPercent:technical.atrPercent??null,
+      obv:technical.obv??null,roc20:technical.roc20??null,vwap20:technical.vwap20??null,
+      volumeRatio:technical.volumeRatio??(history.indicators&&history.indicators.volumeRatio),
+      support:technical.support??(history.indicators&&history.indicators.support),
+      resistance:technical.resistance??(history.indicators&&history.indicators.resistance),
+      pe:technical.pe??null,pb:technical.pb??null,dividendYield:technical.dividendYield??null,
+      priceVsEma20Pct:technical.priceVsEma20Pct??null,priceVsEma60Pct:technical.priceVsEma60Pct??null,
+      priceVsVwap20Pct:technical.priceVsVwap20Pct??null
     },
     chips: {
       foreignNet: chip.foreignNet == null ? null : chip.foreignNet,
@@ -101,9 +112,9 @@ async function buildAiCommittee(symbol, options) {
     }
   };
   const roles = {
-    gemini: '技術分析專家，重點研判K線型態、均線、MACD、RSI、支撐壓力與量價結構。',
+    gemini: '技術分析專家，重點研判K線型態、SMA/EMA、MACD、RSI、KD、布林通道、ADX、CCI、MFI、ATR、VWAP、支撐壓力與量價結構。',
     grok: '市場事件與多空情境分析師，重點評估市場環境、波動風險、可能催化因素；未提供新聞時明確說明沒有新聞資料。',
-    deepseek: '籌碼與風險報酬分析師，重點研判外資投信自營商、融資融券、集保大戶散戶比例、量價與風險界線。'
+    deepseek: '籌碼與風險報酬分析師，重點研判外資投信自營商、融資融券、集保大戶散戶比例、估值 PER/PBR、波動度與風險界線。'
   };
   const providers = ['gemini', 'grok', 'deepseek'];
   const agents = await Promise.all(providers.map(async provider => {
