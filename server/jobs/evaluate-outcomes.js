@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('node:fs');
 const path=require('node:path');
-const base=String(process.env.MARKET_APP_URL||'').replace(/\\/$/,'');
+const base=String(process.env.MARKET_APP_URL||'').replace(/\/$/,'');
 const reportPath=process.argv[2];
 if(!base)throw new Error('MARKET_APP_URL secret is required');
 if(!reportPath||!fs.existsSync(reportPath))throw new Error('Previous close-review JSON file is required');
@@ -49,6 +49,6 @@ async function get(endpoint){
  const lines=['# 前一日訊號結果檢查 '+date,'',`訊號數：${signals.length}；有效比較數：${results.length}；排除：${report.excludedCount}`,`假設來回成本：${costPct}%`,`方向命中率：${report.directionalHitRatePct==null?'樣本不足':report.directionalHitRatePct.toFixed(1)+'%'}`,`平均方向報酬：${report.averageDirectionalReturnPct==null?'—':report.averageDirectionalReturnPct.toFixed(3)+'%'}`,`平均扣除假設成本後報酬：${report.averageNetReturnPct==null?'—':report.averageNetReturnPct.toFixed(3)+'%'}`,'','## 個別訊號'];
  for(const x of results)lines.push(`- ${x.symbol} ${x.side==='long'?'多方':'空方'}：方向報酬 ${x.directionalReturnPct.toFixed(2)}%；淨報酬假設 ${x.netReturnPct.toFixed(2)}%`);
  lines.push('','> '+report.caveat,'');
- fs.writeFileSync(path.join('reports','outcome-review-'+date+'.md'),lines.join('\\n'));
+ fs.writeFileSync(path.join('reports','outcome-review-'+date+'.md'),lines.join('\n'));
  process.stdout.write(JSON.stringify({evaluatedCount:results.length,hitRatePct:report.directionalHitRatePct}));
 })().catch(error=>{process.stderr.write(error.stack||String(error));process.exit(1);});
