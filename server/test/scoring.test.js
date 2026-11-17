@@ -12,6 +12,9 @@ test('score is deterministic and distinguishes bullish and bearish inputs',()=>{
  const bull=scoreStock({trend:'bullish',macd:2,signal:1,rsi:60,volumeRatio:2,institutionalNet:100,marginChange:-10,shortChange:10,fearGreed:15,advanceDecline:1.5,futuresChangePct:1,adx:30,plusDi:30,minusDi:10,mfi:70,cci:120,priceVsVwap20Pct:1,asOf:fresh});
  const bear=scoreStock({trend:'bearish',macd:1,signal:2,rsi:40,volumeRatio:2,institutionalNet:-100,marginChange:10,shortChange:-10,fearGreed:90,advanceDecline:.5,futuresChangePct:-1,adx:30,plusDi:10,minusDi:30,mfi:30,cci:-120,priceVsVwap20Pct:-1,asOf:fresh});
  assert.ok(bull.score>bear.score);
+ assert.ok(bull.confidence<=100,'confidence must never exceed 100%');
+ const fullyCovered=scoreStock({trend:'bullish',macd:2,signal:1,rsi:60,volumeRatio:2,institutionalNet:1,trustFlowPct5d:4,foreignFlowPct5d:6,pe:10,pb:1,dividendYield:5,marginChange:-1,shortChange:1,fearGreed:10,largeHolderChangePct:1,retailBias:10,advanceDecline:2,futuresChangePct:1,adx:30,plusDi:30,minusDi:10,mfi:70,cci:120,priceVsVwap20Pct:1,k:60,priceVsEma20Pct:1,priceVsEma60Pct:1,return5dPct:1,return20dPct:1,asOf:fresh});
+ assert.equal(fullyCovered.confidence,100,'all available factors must total exactly 100% coverage');
  assert.equal(bull.direction,'偏向買進');
  assert.equal(bear.direction,'偏向賣出／避險');
 });
