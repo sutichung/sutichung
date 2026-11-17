@@ -40,6 +40,18 @@
 - 台指期：`{source, timestamp, data: {last, changePct, openInterestChange, asOf}}`
 - 情緒：`{source, timestamp, data: {fearGreed, label, retailBias, advanceDecline, asOf}}`
 
+## 三 AI 多空分析與互動 K 線圖
+
+- 個股頁新增 Gemini（技術面）、Grok（市場情境）、DeepSeek（籌碼與風險）三個獨立 Agent；每個模型各自回傳方向、0–100 評分、信心分數、看多／看空依據、可公開的分析邏輯、風險與失效條件。
+- API：`GET /api/market/agents/:symbol`；加上 `?refresh=1` 可略過 10 分鐘結果快取重新分析。
+- 為避免未經同意產生 API 費用，三 AI 不會背景自動呼叫；使用者按下「啟動三 AI 分析」才送出三個模型請求。未設定金鑰時顯示未設定，不產生假評分。
+- Render 後端環境變數：`GEMINI_API_KEY`、`XAI_API_KEY`、`DEEPSEEK_API_KEY`；可選擇設定 `GEMINI_MODEL`、`XAI_MODEL`、`DEEPSEEK_MODEL`。金鑰不得放在 React 前端或提交到 Git。
+- 預設模型：Gemini `gemini-3.8-flash`、Grok `grok-4.7`、DeepSeek `deepseek-flash`。模型供應商依 token 用量計費與免費額度政策不同；啟用前請先確認帳戶額度。
+- 個股頁新增 TradingView Lightweight Charts：日／週／月 K、60／120／240 根、成交量、EMA5／20／60、布林通道切換、十字游標 OHLC、縮放與平移。資料仍以 TWSE／FinMind 歷史日線為準，日／週／月 K 不等於盤中分鐘 K。
+- 報價時間與行情來源分開顯示；歷史 K 線來源、最後 K 線日期及載入時間另外標示，避免把 API 接收時間誤認為成交時間。
+
+設定與操作詳見 [三 AI Agent 設定說明](./docs/AI_AGENTS_SETUP.md)。
+
 ## 資料來源與限制
 - FinMind API 文件：<https://finmind.github.io/>
 - TWSE OpenAPI：<https://openapi.twse.com.tw/>
