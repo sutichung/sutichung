@@ -118,7 +118,7 @@ function parseCsvLine(line){
 }
 async function tdccShareholdingDistribution(){
   const csv=await fetchText('https://smart.tdcc.com.tw/opendata/getOD.ashx?id=1-5',20000,{'Accept':'text/csv,text/plain,*/*'});
-  const lines=csv.replace(/^\\uFEFF/,'').split(/\\r?\\n/).filter(x=>x.trim());
+  const lines=csv.replace(/^\uFEFF/,'').split(/\\r?\\n/).filter(x=>x.trim());
   if(lines.length<2)throw new Error('TDCC 集保戶股權分散資料為空');
   const head=parseCsvLine(lines[0]).map(x=>x.trim());
   const idx={date:head.findIndex(x=>/日期|date/i.test(x)),symbol:head.findIndex(x=>/代號|code/i.test(x)),level:head.findIndex(x=>/分級|級距|level/i.test(x)),proportion:head.findIndex(x=>/比例|占比|proportion/i.test(x))};
@@ -137,7 +137,7 @@ async function tdccShareholdingDistribution(){
   const latest={};
   for(const x of Object.values(byDate))if(!latest[x.symbol]||x.date>latest[x.symbol].date)latest[x.symbol]=x;
   if(!Object.keys(latest).length)throw new Error('TDCC 集保股權分散 CSV 欄位無法解析');
-  return {data:latest,asOf:Object.values(latest)[0].date,source:'TDCC 集保戶股權分散開放資料（每週更新）'};
+  const asOf=Object.values(latest).map(x=>x.date).sort().at(-1);return {data:latest,asOf,source:'TDCC 集保戶股權分散開放資料（每週更新）'};
 }
 async function fetchOpenArchive(kind,date){
   const base=process.env.OPEN_DATA_ARCHIVE_URL||'https://raw.githubusercontent.com/88jiayu/tw-chip-open-data/main/data/official';
