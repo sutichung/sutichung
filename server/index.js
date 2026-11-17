@@ -526,7 +526,7 @@ async function route(req,res){
       const cashKeys={operatingCashFlow:['CashFlowsFromOperatingActivities','CashProvidedByOperatingActivities','營業活動之淨現金流入（流出）'],investingCashFlow:['CashFlowsFromInvestingActivities','CashProvidedByInvestingActivities','投資活動之淨現金流入(流出)'],financingCashFlow:['CashFlowsFromFinancingActivities','CashProvidedByFinancingActivities','籌資活動之淨現金流入（流出）']};
       const cashYtd=latestCash?Object.fromEntries(Object.entries(cashKeys).map(([key,keys])=>[key,pick(cash,latestCash,keys)])):{};
       const cashDate=latestCash?new Date(latestCash+'T00:00:00Z'):null,cashMonth=cashDate?cashDate.getUTCMonth()+1:0;
-      const priorCashDate=cashDate&&cashMonth>3?new Date(Date.UTC(cashDate.getUTCFullYear(),cashDate.getUTCMonth()-3,0)).toISOString().slice(0,10):null;
+      const priorCashDate=cashDate&&cashMonth>3?new Date(Date.UTC(cashDate.getUTCFullYear(),cashDate.getUTCMonth()-2,0)).toISOString().slice(0,10):null;
       const hasPriorCash=!!priorCashDate&&datesOf(cash).includes(priorCashDate);
       const cashQuarter=latestCash?Object.fromEntries(Object.entries(cashKeys).map(([key,keys])=>{const current=cashYtd[key],prior=hasPriorCash?pick(cash,priorCashDate,keys):cashMonth===3?0:null;return [key,current==null||prior==null?null:current-prior];})):{};
       const cashSummary=latestCash?{...cashQuarter,operatingCashFlowYtd:cashYtd.operatingCashFlow,investingCashFlowYtd:cashYtd.investingCashFlow,financingCashFlowYtd:cashYtd.financingCashFlow,periodBasis:cashMonth===3||hasPriorCash?'single-quarter':'year-to-date',periodDate:latestCash}:null;
