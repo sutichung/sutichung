@@ -58,6 +58,7 @@ async function safeLoad(key, ttl, loader, fallback) {
   PENDING.set(key,job);
   return job;
 }
+async function mapLimit(items,limit,worker){const out=new Array(items.length);let next=0;await Promise.all(Array.from({length:Math.min(limit,items.length)},async()=>{while(true){const i=next++;if(i>=items.length)return;out[i]=await worker(items[i],i);}}));return out;}
 function validateSymbol(s){return /^[0-9A-Z]{2,10}$/.test(s||'');}
 function rateLimit(req){const ip=req.socket.remoteAddress||'unknown';const t=Date.now();let a=RATE.get(ip)||[];a=a.filter(x=>t-x<60000);if(a.length>=480)return false;a.push(t);RATE.set(ip,a);return true;}
 async function route(req,res){
@@ -98,14 +99,18 @@ async function route(req,res){
       }
       if(!FINMIND_TOKEN)throw new Error('請設定 MARKET_SCAN_URL，或提供具備全市場查詢權限的 FINMIND_TOKEN');
       const base=await safeLoad('all-market-history',6*60*60*1000,async()=>{
-        const d=new Date();d.setDate(d.getDate()-180);const start=d.toISOString().slice(0,10);
-        const rows=await finmind('TaiwanStockPrice',{start_date:start},45000);
-        if(!rows.length)throw new Error('FinMind 全市場日資料為空；此功能需要支援省略 data_id 的全市場方案');
+        const tradingDates=await finmind('TaiwanStockTradingDate',{},15000);
+        const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date());
+        const localTime=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Taipei',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date());
+        const cutoff=localTime>='17:30'?today:'9999-12-31';
+        const dates=tradingDates.map(x=>String(x.date||'')).filter(x=>x&&x<=cutoff).sort().slice(-100);
+        if(dates.length<60)throw new Error('可用交易日少於 60 日，無法建立全市場技術指標');
+        const dailyRows=await mapLimit(dates,8,date=>finmind('TaiwanStockPrice',{start_date:date},45000));
         const grouped=new Map();
-        for(const r of rows){
+        for(const dayRows of dailyRows)for(const r of dayRows){
           const symbol=String(r.stock_id||r.data_id||'');if(!validateSymbol(symbol))continue;
           const candle={time:r.date,open:Number(r.open),high:Number(r.max),low:Number(r.min),close:Number(r.close),volume:Number(r.Trading_Volume)};
-          if(![candle.open,candle.high,candle.low,candle.close,candle.volume].every(Number.isFinite))continue;
+          if(![candle.open,candle.high,candle.low,candle.close,candle.volume].every(Number.isFinite)||candle.close<=0||candle.high<=0||candle.low<=0)continue;
           if(!grouped.has(symbol))grouped.set(symbol,[]);grouped.get(symbol).push(candle);
         }
         const data={};
@@ -116,7 +121,7 @@ async function route(req,res){
           const last=candles.at(-1),close5=candles.at(-6)?.close,close20=candles.at(-21)?.close;
           data[symbol]={...ind,technicalAsOf:last.time,return5dPct:close5?((last.close/close5)-1)*100:null,return20dPct:close20?((last.close/close20)-1)*100:null};
         }
-        return {data,historyAsOf:rows.at(-1)?.date||null,historyCount:Object.keys(data).length};
+        return {data,historyAsOf:dates.at(-1),historyDateCount:dates.length,historyCount:Object.keys(data).length};
       },e=>({data:{},error:e.message,historyCount:0}));
       if(base.error)throw new Error(base.error);
       const quotes=stale('snapshot')?.data||{},data={};
