@@ -25,6 +25,24 @@ async function fetchJson(url, timeoutMs=8000, extraHeaders={}) {
   try { const r=await fetch(url,{signal:controller.signal,headers:{accept:'application/json',...extraHeaders}}); if(!r.ok) throw new Error('upstream_http_'+r.status); return await r.json(); }
   finally { clearTimeout(timer); }
 }
+async function twseMisSnapshot(){
+  const listed=await safeLoad('universe',TTL.universe,async()=>({data:currentTwseRows(await finmind('TaiwanStockInfo')),source:'FinMind TaiwanStockInfo',timestamp:now()}));
+  const symbols=(listed.data||[]).map(x=>x.symbol).filter(x=>/^[0-9]{4,6}$/.test(x));
+  if(!symbols.length)throw new Error('無上市股票清單，無法連接證交所行情');
+  const chunks=[];for(let i=0;i<symbols.length;i+=80)chunks.push(symbols.slice(i,i+80));
+  const payloads=await mapLimit(chunks,3,async chunk=>{
+    const params=new URLSearchParams({ex_ch:chunk.map(x=>'tse_'+x+'.tw').join('|'),json:'1',delay:'0',_:String(Date.now())});
+    return fetchJson('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?'+params.toString(),10000,{'User-Agent':'Mozilla/5.0','Referer':'https://mis.twse.com.tw/stock/index.jsp'});
+  });
+  const data={};
+  for(const payload of payloads)for(const q of (payload.msgArray||[])){
+    const symbol=String(q.c||'');if(!symbol)continue;
+    const price=Number(q.z),prev=Number(q.y),volume=Number(q.tv);
+    data[symbol]={symbol,name:q.n||symbol,price:Number.isFinite(price)&&price>0?price:null,changePct:Number.isFinite(price)&&Number.isFinite(prev)&&prev>0?((price/prev)-1)*100:null,volume:Number.isFinite(volume)?volume:null,timestamp:q.t?new Date(String(q.d||'').replace(/\//g,'-')+'T'+q.t+'+08:00').toISOString():null,market:'TSE',source:'TWSE MIS'};
+  }
+  if(!Object.keys(data).length)throw new Error('證交所 MIS 未回傳有效報價');
+  return {data,source:'證交所 TWSE MIS 官方行情（即時報價）',timestamp:now(),delayed:false,scannedCount:Object.keys(data).length};
+}
 async function finmind(dataset, extra={}, timeoutMs=8000) {
   if(!FINMIND_TOKEN) throw new Error('未設定 FINMIND_TOKEN');
   const u=new URL(FINMIND_BASE); u.searchParams.set('dataset',dataset);
@@ -86,8 +104,11 @@ async function route(req,res){
         const data={};for(const payload of payloads){for(const row of (payload.data||[])){if(!row.symbol)continue;const stamp=Number(row.lastUpdated);data[String(row.symbol)]={symbol:String(row.symbol),name:row.name||String(row.symbol),price:Number.isFinite(Number(row.lastPrice??row.closePrice))&&Number(row.lastPrice??row.closePrice)>0?Number(row.lastPrice??row.closePrice):null,changePct:Number.isFinite(Number(row.changePercent))?Number(row.changePercent):null,volume:Number(row.tradeVolume),timestamp:Number.isFinite(stamp)&&stamp>0?new Date(stamp/1000).toISOString():now(),market:payload.market};}}
         return {data,source:'Fugle market-wide snapshot quotes (TSE + OTC; upstream refresh every 5 seconds)',timestamp:now(),delayed:false};
       }
-      const x=await external('MARKET_REALTIME_URL','未設定授權即時行情供應商；可設定 FUGLE_API_KEY 或 MARKET_REALTIME_URL');
-      return {data:x.data||{},source:x.source||'Configured realtime provider',timestamp:x.timestamp||now(),delayed:!!x.delayed};
+      if(process.env.MARKET_REALTIME_URL){
+        const x=await external('MARKET_REALTIME_URL','');
+        return {data:x.data||{},source:x.source||'Configured realtime provider',timestamp:x.timestamp||now(),delayed:!!x.delayed};
+      }
+      return await twseMisSnapshot();
     },e=>({data:{},source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
   }
