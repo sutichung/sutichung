@@ -10,7 +10,8 @@ async function get(endpoint){
 }
 (async()=>{
  await get('/api/market/snapshot');
- const [scan,news]=await Promise.all([get('/api/market/scan'),get('/api/market/news')]);
+ const [flows,futures,sentiment,news]=await Promise.all([get('/api/market/institutional-flows'),get('/api/market/futures'),get('/api/market/sentiment'),get('/api/market/news')]);
+ const scan=await get('/api/market/scan');
  const rows=Object.entries(scan.data||{}).map(([symbol,row])=>({symbol,...row,scorecard:row.scorecard||null}));
  const usable=rows.filter(x=>x.scorecard&&x.scorecard.status==='research-ready');
  const byScore=[...usable].sort((a,b)=>b.scorecard.score-a.scorecard.score);
