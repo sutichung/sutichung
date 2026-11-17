@@ -27,7 +27,10 @@ test('technical engine returns trend, momentum, volatility, volume and price-lev
 
 test('technical engine rejects malformed OHLCV rather than manufacturing values',()=>{
  const candles=Array.from({length:60},(_,i)=>({open:10,high:11,low:9,close:10+i*.01,volume:100}));
+ assert.ok(indicators(candles));
+ candles[10].high=8;
  assert.equal(indicators(candles),null);
+ candles[10].high=11;
  candles[10].volume=-1;
  assert.equal(indicators(candles),null);
 });
