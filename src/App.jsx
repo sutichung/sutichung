@@ -3,7 +3,7 @@ import CandleChart from './CandleChart';
 import LiveMarketTV from './LiveMarketTV';
 
 const API = (process.env.REACT_APP_MARKET_API || '/api/market').replace(/\/$/, '');
-const APP_VERSION = '2026.11.17.27';
+const APP_VERSION = '2026.11.17.28';
 
 const C = { bg:'#080d18', panel:'#111a2b', panel2:'#172338', border:'#293951', text:'#e8eef8', muted:'#91a1b8', blue:'#60a5fa', green:'#34d399', red:'#fb7185', yellow:'#fbbf24' };
 const fmt = (v,d=2) => Number.isFinite(Number(v)) ? Number(v).toLocaleString('zh-TW',{minimumFractionDigits:d,maximumFractionDigits:d}) : '—';
@@ -34,7 +34,7 @@ export default function App(){
  useEffect(()=>{const c=new AbortController();refresh(c.signal);const t=setInterval(()=>refresh(c.signal),60000);return()=>{c.abort();clearInterval(t);};},[refresh]);
  useEffect(()=>{const c=new AbortController();const t=setInterval(()=>fastRefresh(c.signal),5000);return()=>{c.abort();clearInterval(t);};},[fastRefresh]);
  const runAgents=useCallback(async(signal,force=false)=>{setAgentsLoading(true);try{const result=await getJSON('/agents/'+encodeURIComponent(selected)+(force?'?refresh=1':''),signal);setAgents(result.agents||[]);setAgentConsensus(result.consensus||null);setAgentsUpdatedAt(result.analysisTime||new Date().toISOString());}catch(e){if(e.name!=='AbortError')setAgents([{provider:'gemini',status:'error',message:e.message},{provider:'grok',status:'error',message:e.message},{provider:'deepseek',status:'error',message:e.message}]);setAgentConsensus(null);}finally{setAgentsLoading(false);}},[selected]);
- useEffect(()=>{if(!autoAiEnabled||!selected)return;const controller=new AbortController();runAgents(controller.signal,false);const timer=setInterval(()=>runAgents(controller.signal,false),15*60*1000);return()=>{controller.abort();clearInterval(timer);};},[autoAiEnabled,selected,runAgents]);
+ useEffect(()=>{if(!autoAiEnabled||!selected)return;const controller=new AbortController();runAgents(controller.signal,false);const timer=setInterval(()=>runAgents(controller.signal,false),15*60*1000);return()=>{controller.abort();clearInterval(timer);};},[autoAiEnabled,selected,runAgents,fundamentals?.timestamp]);
  useEffect(()=>{setAgents([]);setAgentConsensus(null);setAgentsUpdatedAt(null);},[selected]);
 
  useEffect(()=>{if(!selected)return;let alive=true;setFundamentals(null);setFundamentalsLoading(true);const c=new AbortController();getJSON('/fundamentals/'+encodeURIComponent(selected),c.signal).then(x=>{if(alive)setFundamentals(x);}).catch(e=>{if(alive&&e.name!=='AbortError')setFundamentals({error:e.message});}).finally(()=>{if(alive)setFundamentalsLoading(false);});return()=>{alive=false;c.abort();};},[selected]);
