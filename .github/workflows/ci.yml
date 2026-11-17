@@ -10,6 +10,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - run: node --check server/index.js
+      - run: node --check server/lib/indicators.js
+      - run: node --check server/lib/scoring.js
       - run: npm run test:server
       - run: npm install
       - run: npm run build
