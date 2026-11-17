@@ -42,7 +42,7 @@ function setSessionCookie(res,token,maxAge){
 }
 function originAllowed(req){
   const origin=req.headers.origin;
-  if(!origin)return true;
+  if(!origin)return false;
   try{return new URL(origin).host===req.headers.host;}catch(_){return false;}
 }
 function loginAllowed(ip){
@@ -393,7 +393,7 @@ async function loadStockHistory(symbol){
 
 async function route(req,res){
   const u=new URL(req.url,'http://localhost');
-  if(u.pathname==='/api/auth/status'&&req.method==='GET')return json(res,200,{authenticated:sessionValid(req),configured:AUTH_CONFIGURED,username:AUTH_CONFIGURED?ADMIN_USERNAME:null});
+  if(u.pathname==='/api/auth/status'&&req.method==='GET')return json(res,200,{authenticated:sessionValid(req),configured:AUTH_CONFIGURED});
   if(u.pathname==='/api/auth/login'&&req.method==='POST'){
     if(!originAllowed(req))return json(res,403,{error:'origin_not_allowed'});
     if(!AUTH_CONFIGURED)return json(res,503,{error:'登入尚未啟用：請在 Render 設定 ADMIN_USERNAME、ADMIN_PASSWORD（至少 12 字元）及 SESSION_SECRET（至少 32 字元）。'});
@@ -404,6 +404,7 @@ async function route(req,res){
     const userBuffer=Buffer.from(username),adminBuffer=Buffer.from(ADMIN_USERNAME);const validUser=userBuffer.length===adminBuffer.length&&crypto.timingSafeEqual(userBuffer,adminBuffer);
     const validPassword=crypto.timingSafeEqual(supplied,ADMIN_PASSWORD_DIGEST);
     if(!validUser||!validPassword)return json(res,401,{error:'帳號或密碼錯誤'});
+    for(const [key,session] of AUTH_SESSIONS)if(session.expiresAt<Date.now())AUTH_SESSIONS.delete(key);
     const token=crypto.randomBytes(32).toString('base64url'),expiresAt=Date.now()+SESSION_TTL_MS;
     AUTH_SESSIONS.set(token,{expiresAt,username:ADMIN_USERNAME});
     setSessionCookie(res,token,Math.floor(SESSION_TTL_MS/1000));
