@@ -82,10 +82,11 @@ async function route(req,res){
     const result=await safeLoad('scan',TTL.scan,async()=>{
       if(process.env.MARKET_SCAN_URL){
         const x=await external('MARKET_SCAN_URL','');
-        const timestamp=x.timestamp||null,raw=x.data||{},data={};
+        const timestamp=x.timestamp||null,raw=x.data||{},data={},flows=stale('flows')?.data||{},sentiment=stale('sentiment')?.data||{},futures=stale('futures')?.data||{};
         for(const [symbol,row] of Object.entries(raw)){
           if(!row||typeof row!=='object')continue;
-          data[symbol]={...row,scorecard:scoreStock({...row,asOf:row.asOf||timestamp,fearGreed:row.fearGreed??x.fearGreed,advanceDecline:row.advanceDecline??x.advanceDecline,futuresChangePct:row.futuresChangePct??x.futuresChangePct})};
+          const flow=flows[symbol]||{},merged={...row,...flow};
+          data[symbol]={...merged,scorecard:scoreStock({...merged,asOf:row.asOf||timestamp,fearGreed:row.fearGreed??x.fearGreed??sentiment.fearGreed,advanceDecline:row.advanceDecline??x.advanceDecline??sentiment.advanceDecline,futuresChangePct:row.futuresChangePct??x.futuresChangePct??futures.changePct})};
         }
         return {data,source:x.source||'Configured full-market scanner',timestamp:timestamp||now(),scannedCount:Object.keys(data).length};
       }
@@ -116,11 +117,11 @@ async function route(req,res){
         return {data,historyAsOf:dates.at(-1),historyDateCount:dates.length,historyCount:Object.keys(data).length};
       },e=>({data:{},error:e.message,historyCount:0}));
       if(base.error)throw new Error(base.error);
-      const quotes=stale('snapshot')?.data||{},data={};
+      const quotes=stale('snapshot')?.data||{},flows=stale('flows')?.data||{},sentiment=stale('sentiment')?.data||{},futures=stale('futures')?.data||{},data={};
       for(const [symbol,technical] of Object.entries(base.data||{})){
-        const quote=quotes[symbol]||{},price=quote.price!=null&&Number.isFinite(Number(quote.price))&&Number(quote.price)>0?Number(quote.price):null;
-        const row={...technical,signal:technical.macdSignal,price,changePct:quote.changePct,volume:quote.volume,asOf:quote.timestamp||null,priceVsEma20Pct:price!==null&&technical.ema20?((price/technical.ema20)-1)*100:null,priceVsEma60Pct:price!==null&&technical.ema60?((price/technical.ema60)-1)*100:null};
-        row.scorecard=scoreStock({...row,asOf:row.asOf,maxAgeMs:180000});
+        const quote=quotes[symbol]||{},flow=flows[symbol]||{},price=quote.price!=null&&Number.isFinite(Number(quote.price))&&Number(quote.price)>0?Number(quote.price):null;
+        const row={...technical,...flow,signal:technical.macdSignal,price,changePct:quote.changePct,volume:quote.volume,asOf:quote.timestamp||null,priceVsEma20Pct:price!==null&&technical.ema20?((price/technical.ema20)-1)*100:null,priceVsEma60Pct:price!==null&&technical.ema60?((price/technical.ema60)-1)*100:null};
+        row.scorecard=scoreStock({...row,asOf:row.asOf,maxAgeMs:180000,fearGreed:sentiment.fearGreed,advanceDecline:sentiment.advanceDecline,futuresChangePct:futures.changePct});
         data[symbol]=row;
       }
       return {data,source:'FinMind all-market daily history + live quote overlay',timestamp:now(),scannedCount:Object.keys(data).length,historyAsOf:base.historyAsOf};
