@@ -492,7 +492,7 @@ async function route(req,res){
       }
       const taxId=String(issuerProfile?.['營利事業統一編號']||issuerProfile?.BusinessAccountingNo||issuerProfile?.Business_Accounting_NO||issuerProfile?.UnifiedBusinessNo||'').trim();
       let registeredBusinessItems=[];
-      if(/^\\d{8}$/.test(taxId)){
+      if(/^\d{8}$/.test(taxId)){
         try{
           const businessUrl=new URL('https://data.gcis.nat.gov.tw/od/data/api/236EE382-4942-41A9-BD03-CA0709025E7C');
           businessUrl.searchParams.set('$format','json');
