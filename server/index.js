@@ -19,9 +19,9 @@ const now = () => new Date().toISOString();
 const json = (res, status, body) => { res.writeHead(status, {'content-type':'application/json; charset=utf-8','cache-control':'no-store'}); res.end(JSON.stringify(body)); };
 function cached(key, ttl) { const x=CACHE.get(key); return x && Date.now()-x.time<ttl ? x.value : null; }
 function put(key,value){ CACHE.set(key,{time:Date.now(),value}); return value; }
-async function fetchJson(url, timeoutMs=8000) {
+async function fetchJson(url, timeoutMs=8000, extraHeaders={}) {
   const controller=new AbortController(); const timer=setTimeout(()=>controller.abort(),timeoutMs);
-  try { const r=await fetch(url,{signal:controller.signal,headers:{accept:'application/json'}}); if(!r.ok) throw new Error('upstream_http_'+r.status); return await r.json(); }
+  try { const r=await fetch(url,{signal:controller.signal,headers:{accept:'application/json',...extraHeaders}}); if(!r.ok) throw new Error('upstream_http_'+r.status); return await r.json(); }
   finally { clearTimeout(timer); }
 }
 async function finmind(dataset, extra={}) {
@@ -69,7 +69,7 @@ async function route(req,res){
     const result=await safeLoad('snapshot',TTL.snapshot,async()=>{
       if(FUGLE_API_KEY){
         const markets=['TSE','OTC'];
-        const payloads=await Promise.all(markets.map(async market=>{const u=new URL(FUGLE_BASE+'/snapshot/quotes/'+market);u.searchParams.set('type','COMMONSTOCK');return fetchJson(u.toString(),{timeoutMs:8000,headers:{'X-API-KEY':FUGLE_API_KEY}});}));
+        const payloads=await Promise.all(markets.map(async market=>{const u=new URL(FUGLE_BASE+'/snapshot/quotes/'+market);u.searchParams.set('type','COMMONSTOCK');return fetchJson(u.toString(),8000,{'X-API-KEY':FUGLE_API_KEY});}));
         const data={};for(const payload of payloads){for(const row of (payload.data||[])){if(!row.symbol)continue;const stamp=Number(row.lastUpdated);data[String(row.symbol)]={symbol:String(row.symbol),name:row.name||String(row.symbol),price:Number(row.closePrice),changePct:Number(row.changePercent),volume:Number(row.tradeVolume),timestamp:Number.isFinite(stamp)&&stamp>0?new Date(stamp/1000).toISOString():now(),market:payload.market};}}
         return {data,source:'Fugle market-wide snapshot quotes (TSE + OTC; upstream refresh every 5 seconds)',timestamp:now(),delayed:false};
       }
