@@ -52,6 +52,16 @@
 
 設定與操作詳見 [三 AI Agent 設定說明](./docs/AI_AGENTS_SETUP.md)。
 
+## 財經直播中心與自動 AI 分析（2026.11.17.12）
+
+- 官方 YouTube 直播嵌入：57 東森財經、SBN 全球財經台、非凡商業台、寰宇財經新聞、TVBS 財經。
+- 官方外開直播：三立財經 iNEWS、非凡新聞台。若來源網站禁止 iframe，系統保留官方連結，不繞過限制。
+- 有聲播放由官方播放器控制；瀏覽器通常要求使用者點播放／解除靜音。
+- HLS 播放器採 hls.js 開源方案，支援加入已授權的 HLS `.m3u8` 來源；需串流伺服器允許 CORS。設定方式見 `docs/AI_AGENTS_SETUP.md`。
+- 三 AI 目前選取個股自動分析，首次載入及每 15 分鐘更新；全市場其他股票仍由規則掃描篩選。保持網站頁面開啟才會持續觸發；Render Free 不是全天候背景 worker。
+- 每個 AI 提供偏多、盤整、偏空三種風險劇本、觸發條件、應對、可推導目標／停損與失效條件。未設定 API Key 不會回傳假分數。
+- API Key 必須放在 Render 後端 Environment。模型使用量可能產生費用。
+
 ## 資料來源與限制
 - FinMind API 文件：<https://finmind.github.io/>
 - TWSE OpenAPI：<https://openapi.twse.com.tw/>
