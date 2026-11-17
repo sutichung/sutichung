@@ -401,6 +401,13 @@ async function route(req,res){
       return json(res,200,{access_token:data.access_token,refresh_token:data.refresh_token,expires_in:data.expires_in,user:data.user});
     }catch(e){return json(res,e.status||401,{error:e.message});}
   }
+  if(u.pathname==='/api/auth/password'&&req.method==='POST'){
+    const user=await authenticatedUser(req);if(!user)return json(res,401,{error:'authentication_required'});
+    try{const body=await readRequestJson(req),password=String(body.password||'');if(password.length<10)return json(res,400,{error:'新密碼至少 10 個字元'});
+      await supabaseRequest('/auth/v1/user',{method:'PUT',token:bearerToken(req),body:{password}});
+      return json(res,200,{ok:true});
+    }catch(e){return json(res,e.status||502,{error:e.message});}
+  }
   if(u.pathname==='/api/auth/me'&&req.method==='GET'){
     const user=await authenticatedUser(req);if(!user)return json(res,401,{error:'authentication_required'});
     return json(res,200,{user:{id:user.id,email:user.email},isAdmin:isAdminUser(user),adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY});
