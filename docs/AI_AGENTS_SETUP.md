@@ -73,3 +73,30 @@
 - K 線來源、最後一根 K 線日期及後端載入時間分開顯示。
 - 目前 K 線來源為 TWSE 官方 STOCK_DAY 日線或 FinMind 日線；週 K、月 K 是從日 K 聚合，並非即時分鐘線。
 - AI 的評分是模型對方向強度的主觀意見，不是統計勝率或未來報酬機率，也不構成下單指令。
+
+
+## 免付費 AI 備援（OpenRouter Free）
+
+若 Gemini、Grok、DeepSeek 原廠 API 未設定或呼叫失敗，可設定一組 OpenRouter API Key 作為備援。三個 Agent 仍會各自使用技術面、市場情境、籌碼風險的獨立提示詞；回覆會明確標示「OpenRouter 免費模型備援」及實際回傳模型，不會冒稱為 Gemini、Grok 或 DeepSeek 原廠模型。
+
+1. 到 https://openrouter.ai/keys 建立 API Key。
+2. 在 Render Environment 設定 `OPENROUTER_API_KEY`。
+3. `OPENROUTER_MODEL` 預設 `openrouter/free`，由路由器挑選當下可用的免費模型；也可改成 OpenRouter 目錄中以 `:free` 結尾的特定模型 ID。
+4. 免費模型的可用性、速度與品質會變動；免費變體目前有每日 50 次、每分鐘 20 次限制，失敗請求也可能計入每日額度。免費模型不保證金融研究等級或服務可用性。
+
+官方說明：https://openrouter.ai/collections/free-models/
+
+## YouTube 免 API Key 播放備援
+
+財經直播中心已改用已知官方頻道 ID 建立頻道直播播放器，不再呼叫 YouTube Data API 搜尋直播影片，因此不需要 `YOUTUBE_API_KEY`。頻道未開播、直播不允許嵌入或 YouTube 調整播放器規則時，仍需點「開啟官方直播」在 YouTube 官方頁觀看。這是降低 API 依賴的備援，不保證所有頻道每個時段都可內嵌。
+
+YouTube 官方播放器文件：https://developers.google.com/youtube/player_parameters
+
+## 台指期夜盤資料來源分級
+
+- 富果 FutOpt REST：可提供期權日內行情，但需具備期權即時行情權限；免費基本用戶不含期權即時行情。
+- TAIFEX OpenAPI：提供官方日報等資料，可做歷史／日資料核對，不等同盤中夜盤即時行情。
+- TAIFEX 官網盤後交易報表：可供人工查看交易時段資料；交易所明確表示網站行情頁是瀏覽用途，並未提供可任意介接的即時資料庫 API。正式即時串接應使用有授權的期貨行情商／期貨商 API。
+- FinMind TaiwanFuturesDaily：只作期貨日資料備援，不得標示為夜盤即時。
+
+參考： https://openapi.taifex.com.tw/ 、https://www.taifex.com.tw/cht/9/tradersQAIS 、https://developer.fugle.tw/docs/pricing/
