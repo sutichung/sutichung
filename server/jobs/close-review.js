@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('node:fs');
 const path=require('node:path');
-const base=String(process.env.MARKET_APP_URL||'').replace(/\\/$/,'');
+const base=String(process.env.MARKET_APP_URL||'').replace(/\/$/,'');
 if(!base) throw new Error('MARKET_APP_URL secret is required');
 async function get(endpoint){
  const response=await fetch(base+endpoint,{headers:{accept:'application/json'},signal:AbortSignal.timeout(20000)});
@@ -36,6 +36,6 @@ async function get(endpoint){
  lines.push('','## 新聞');
  for(const n of report.news) lines.push(`- [${n.title||n.headline||'新聞'}](${n.url||'#'}) — ${n.source||''}`);
  lines.push('','> '+report.caveat,'');
- fs.writeFileSync(path.join('reports','close-review-'+date+'.md'),lines.join('\\n'));
+ fs.writeFileSync(path.join('reports','close-review-'+date+'.md'),lines.join('\n'));
  process.stdout.write(JSON.stringify({scannedCount:rows.length,researchReadyCount:usable.length,report:date}));
 })().catch(error=>{process.stderr.write(error.stack||String(error));process.exit(1);});
