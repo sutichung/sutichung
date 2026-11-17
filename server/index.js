@@ -50,10 +50,12 @@ async function twseMisSnapshot(){
     const symbol=String(q.c||'');if(!symbol)continue;
     const price=Number(q.z),preClose=Number(q.y),volume=Number(q.v??q.tv);
     const quoteTime=q.tlong?new Date(Number(q.tlong)).toISOString():(q.t&&q.d?new Date(String(q.d).replace(/\//g,'-')+'T'+q.t+'+08:00').toISOString():null);
-    data[symbol]={symbol,name:q.n||symbol,price:Number.isFinite(price)&&price>0?price:(Number(q.pz)>0?Number(q.pz):null),changePct:Number.isFinite(price)&&Number.isFinite(preClose)&&preClose>0?((price/preClose)-1)*100:null,volume:Number.isFinite(volume)?volume:null,timestamp:quoteTime,market:'TSE',source:'TWSE MIS'};
+    const delayed=!quoteTime||!Number.isFinite(Date.parse(quoteTime))||Date.now()-Date.parse(quoteTime)>5*60*1000;
+    data[symbol]={symbol,name:q.n||symbol,price:Number.isFinite(price)&&price>0?price:(Number(q.pz)>0?Number(q.pz):null),changePct:Number.isFinite(price)&&Number.isFinite(preClose)&&preClose>0?((price/preClose)-1)*100:null,volume:Number.isFinite(volume)?volume:null,timestamp:quoteTime,market:'TSE',source:'TWSE MIS',delayed,quoteType:delayed?'stale-snapshot':'realtime'};
   }
   if(!Object.keys(data).length)throw new Error('證交所 MIS 已連線但未回傳股票報價；回應 '+(payloads[0]?.rtmessage||'無有效 msgArray'));
-  return {data,source:'證交所 TWSE MIS 官方行情',timestamp:now(),delayed:false,scannedCount:Object.keys(data).length,listedCount:symbols.length};
+  const delayedCount=Object.values(data).filter(x=>x.delayed).length;
+  return {data,source:'證交所 TWSE MIS 官方行情（逐檔依來源時間戳判定新鮮度）',timestamp:now(),delayed:delayedCount===Object.keys(data).length,mixedFreshness:delayedCount>0&&delayedCount<Object.keys(data).length,delayedCount,scannedCount:Object.keys(data).length,listedCount:symbols.length};
 }
 async function finmind(dataset, extra={}, timeoutMs=8000) {
   if(!FINMIND_TOKEN) throw new Error('未設定 FINMIND_TOKEN');
@@ -342,7 +344,9 @@ async function route(req,res){
         const settled=await Promise.allSettled(markets.map(async market=>{const u=new URL(FUGLE_BASE+'/snapshot/quotes/'+market);return fetchJson(u.toString(),8000,{'X-API-KEY':FUGLE_API_KEY});}));
         const payloads=settled.filter(x=>x.status==='fulfilled').map(x=>x.value);
         if(!payloads.length)throw new Error('Fugle 上市與上櫃快照均無法取得：'+settled.map(x=>x.reason?.message||'unknown').join('；'));
-        const data={};for(const payload of payloads){for(const row of (payload.data||[])){if(!row.symbol)continue;const stamp=Number(row.lastUpdated);data[String(row.symbol)]={symbol:String(row.symbol),name:row.name||String(row.symbol),price:Number.isFinite(Number(row.lastPrice??row.closePrice))&&Number(row.lastPrice??row.closePrice)>0?Number(row.lastPrice??row.closePrice):null,changePct:Number.isFinite(Number(row.changePercent))?Number(row.changePercent):null,volume:Number(row.tradeVolume),timestamp:Number.isFinite(stamp)&&stamp>0?new Date(stamp/1000).toISOString():now(),market:payload.market,source:'Fugle snapshot quotes',delayed:false,quoteType:'realtime'};}}
+        const data={};for(const payload of payloads){for(const row of (payload.data||[])){if(!row.symbol)continue;const stamp=Number(row.lastUpdated);const quoteTime=Number.isFinite(stamp)&&stamp>0?new Date(stamp/1000).toISOString():null;
+        const delayed=!quoteTime||Date.now()-Date.parse(quoteTime)>5*60*1000;
+        data[String(row.symbol)]={symbol:String(row.symbol),name:row.name||String(row.symbol),price:Number.isFinite(Number(row.lastPrice??row.closePrice))&&Number(row.lastPrice??row.closePrice)>0?Number(row.lastPrice??row.closePrice):null,changePct:Number.isFinite(Number(row.changePercent))?Number(row.changePercent):null,volume:Number(row.tradeVolume),timestamp:quoteTime,market:payload.market,source:'Fugle snapshot quotes',delayed,quoteType:delayed?'stale-snapshot':'realtime'};}}
         return {data,source:'Fugle 上市 TSE + 上櫃 OTC 行情快照（各市場獨立回報；約每 5 秒更新）',timestamp:now(),delayed:false,markets:payloads.map(x=>x.market)};
       }
       if(process.env.MARKET_REALTIME_URL){
@@ -513,13 +517,15 @@ async function route(req,res){
         const toIso=value=>{const n=Number(value);return Number.isFinite(n)&&n>0?new Date(n>1e14?n/1000:n>1e11?n:n*1000).toISOString():null;};
         const normalize=(q,session)=>{
           if(!q||typeof q!=='object')return null;
-          const last=q.isTrial?null:(Number(q.lastPrice??q.closePrice)>0?Number(q.lastPrice??q.closePrice):null);
-          return {symbol:q.symbol||'TXF1!',name:q.name||'臺股期貨近月',last,change:Number.isFinite(Number(q.change))?Number(q.change):null,changePct:Number.isFinite(Number(q.changePercent))?Number(q.changePercent):null,previousClose:Number(q.previousClose)>0?Number(q.previousClose):null,open:Number(q.openPrice)>0?Number(q.openPrice):null,high:Number(q.highPrice)>0?Number(q.highPrice):null,low:Number(q.lowPrice)>0?Number(q.lowPrice):null,volume:Number(q.total?.tradeVolume??0),timestamp:toIso(q.lastUpdated||q.lastTrade?.time||q.closeTime),date:q.date||null,isTrial:!!q.isTrial,session};
+          const timestamp=toIso(q.lastUpdated||q.lastTrade?.time||q.closeTime);
+          const staleQuote=!timestamp||!Number.isFinite(Date.parse(timestamp))||Date.now()-Date.parse(timestamp)>5*60*1000;
+          const last=q.isTrial||staleQuote?null:(Number(q.lastPrice??q.closePrice)>0?Number(q.lastPrice??q.closePrice):null);
+          return {symbol:q.symbol||'TXF1!',name:q.name||'臺股期貨近月',last,change:Number.isFinite(Number(q.change))?Number(q.change):null,changePct:Number.isFinite(Number(q.changePercent))?Number(q.changePercent):null,previousClose:Number(q.previousClose)>0?Number(q.previousClose):null,open:Number(q.openPrice)>0?Number(q.openPrice):null,high:Number(q.highPrice)>0?Number(q.highPrice):null,low:Number(q.lowPrice)>0?Number(q.lowPrice):null,volume:Number(q.total?.tradeVolume??0),timestamp,date:q.date||null,isTrial:!!q.isTrial,stale:staleQuote,quoteType:staleQuote?'stale':'realtime',session};
         };
         try{
           const q=await fetchJson(base+'/intraday/quote/TXF1!?session=afterhours',8000,headers);
           nightSession=normalize(q,'afterhours');
-          if(!nightSession||nightSession.last==null)nightSessionError='富果已回應，但目前沒有可用的正式夜盤成交價（可能尚未開盤或只有試撮）';
+          if(!nightSession||nightSession.last==null)nightSessionError=nightSession?.stale?'富果回傳的夜盤最後成交時間已超過 5 分鐘或缺少時間戳；不顯示為即時成交價。':'富果已回應，但目前沒有可用的正式夜盤成交價（可能尚未開盤或只有試撮）';
         }catch(e){
           const message=String(e.message||e);
           if(message.includes('upstream_http_403'))nightSessionError='富果拒絕期權即時行情（HTTP 403）：目前 API 方案未開通期權即時行情權限。請在 Fugle 會員中心升級至支援期權行情的「開發者」或「進階用戶」方案，並確認期權即時行情已啟用；一般股票 API Key 不代表具備期權權限。';
