@@ -112,8 +112,8 @@ async function route(req,res){
           candles.sort((a,b)=>String(a.time).localeCompare(String(b.time)));
           if(candles.length<60)continue;
           const ind=indicators(candles);if(!ind)continue;
-          const last=candles.at(-1),close5=candles.at(-6)?.close,close20=candles.at(-21)?.close,volume5d=candles.slice(-5).reduce((sum,row)=>sum+row.volume,0);
-          data[symbol]={...ind,technicalAsOf:last.time,volume5d,return5dPct:close5?((last.close/close5)-1)*100:null,return20dPct:close20?((last.close/close20)-1)*100:null};
+          const last=candles.at(-1),priorClose=candles.at(-2)?.close,close5=candles.at(-6)?.close,close20=candles.at(-21)?.close,volume5d=candles.slice(-5).reduce((sum,row)=>sum+row.volume,0);
+          data[symbol]={...ind,technicalAsOf:last.time,volume5d,dailyChangePct:priorClose?((last.close/priorClose)-1)*100:null,return5dPct:close5?((last.close/close5)-1)*100:null,return20dPct:close20?((last.close/close20)-1)*100:null};
         }
         return {data,historyAsOf:dates.at(-1),historyDateCount:dates.length,historyCount:Object.keys(data).length};
       },e=>({data:{},error:e.message,historyCount:0}));
