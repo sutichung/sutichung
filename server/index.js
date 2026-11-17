@@ -94,10 +94,33 @@ function currentTwseRows(rows){
   return [...latest.values()];
 }
 async function twseListedUniverse(){
-  const rows=await fetchJson('https://openapi.twse.com.tw/v1/opendata/t187ap03_L',10000);
-  const data=currentTwseRows(rows);
-  if(!data.length)throw new Error('證交所上市公司清單沒有回傳有效資料');
-  return {data,source:'TWSE OpenAPI 上市公司清單',timestamp:now()};
+  const listedPromise=(async()=>{
+    const rows=await fetchJson('https://openapi.twse.com.tw/v1/opendata/t187ap03_L',10000);
+    const data=currentTwseRows(rows).map(x=>({...x,exchange:'TWSE'}));
+    if(!data.length)throw new Error('證交所上市公司清單沒有回傳有效資料');
+    return data;
+  })();
+  const otcPromise=(async()=>{
+    try{
+      const rows=await fetchJson('https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O',12000);
+      const data=(rows||[]).map(row=>({
+        symbol:String(row.SecuritiesCompanyCode||row['公司代號']||'').trim(),
+        name:String(row.CompanyAbbreviation||row['公司簡稱']||row.CompanyName||'').trim(),
+        sector:String(row.SecuritiesIndustryCode||row['產業別']||'未分類'),
+        exchange:'TPEx'
+      })).filter(x=>/^[0-9A-Z]{2,10}$/.test(x.symbol));
+      if(data.length)return data;
+      throw new Error('TPEx 公司清單沒有有效資料');
+    }catch(error){
+      const archive=await recentOpenArchive('price_tpex',1);
+      if(!archive.length)throw new Error('TPEx 公司清單與官方日行情備援皆不可用：'+error.message);
+      return Object.keys(archive[0].rows||{}).filter(validateSymbol).map(symbol=>({symbol,name:symbol,sector:'未分類',exchange:'TPEx',namePending:true}));
+    }
+  })();
+  const [listed,otc]=await Promise.all([listedPromise,otcPromise]);
+  const merged=new Map();
+  for(const row of [...listed,...otc])if(!merged.has(row.symbol))merged.set(row.symbol,row);
+  return {data:[...merged.values()],source:'TWSE + TPEx 官方上市櫃公司清單（TPEx 清單失效時以官方日行情代碼備援）',timestamp:now(),markets:{TWSE:listed.length,TPEx:otc.length}};
 }
 
 function twseNumber(value){const n=Number(String(value??'').replace(/,/g,'').trim());return Number.isFinite(n)?n:0;}
@@ -212,16 +235,18 @@ async function twseInstitutionalFlows(){
 }
 async function openSourceMarketHistory(){
   const dates=archiveDates(120);
-  const docs=await mapLimit(dates,8,async date=>{try{return await fetchOpenArchive('price_twse',date);}catch(_){return null;}});
-  const valid=docs.filter(Boolean).sort((a,b)=>a.trade_date.localeCompare(b.trade_date));
-  if(valid.length<60)throw new Error('開放資料歷史庫目前只有 '+valid.length+' 個有效交易日，至少需要 60 日才能計算完整技術指標');
+  const kinds=['price_twse','price_tpex'];
+  const batches=await Promise.all(kinds.map(kind=>mapLimit(dates,8,async date=>{try{return await fetchOpenArchive(kind,date);}catch(_){return null;}})));
+  const valid=batches.flat().filter(Boolean).sort((a,b)=>a.trade_date.localeCompare(b.trade_date));
+  const tradingDates=[...new Set(valid.map(x=>x.trade_date))].sort();
+  if(tradingDates.length<60)throw new Error('上市櫃開放資料歷史庫目前只有 '+tradingDates.length+' 個有效交易日，至少需要 60 日才能計算完整技術指標');
   const grouped=new Map();
   for(const doc of valid){
     const fields=doc.fields||[],idx={open:fields.indexOf('open'),high:fields.indexOf('high'),low:fields.indexOf('low'),close:fields.indexOf('close'),volume:fields.indexOf('volume_shares')};
     if(Object.values(idx).some(i=>i<0))continue;
     for(const [symbol,values] of Object.entries(doc.rows||{})){
       if(!/^[0-9A-Z]{4,10}$/.test(symbol)||!Array.isArray(values))continue;
-      const candle={time:doc.trade_date,open:Number(values[idx.open]),high:Number(values[idx.high]),low:Number(values[idx.low]),close:Number(values[idx.close]),volume:Number(values[idx.volume])};
+      const candle={time:doc.trade_date,open:Number(values[idx.open]),high:Number(values[idx.high]),low:Number(values[idx.low]),close:Number(values[idx.close]),volume:Number(values[idx.volume]),exchange:doc.kind==='price_tpex'?'TPEx':'TWSE'};
       if(![candle.open,candle.high,candle.low,candle.close,candle.volume].every(Number.isFinite)||candle.close<=0||candle.high<=0||candle.low<=0)continue;
       if(!grouped.has(symbol))grouped.set(symbol,[]);grouped.get(symbol).push(candle);
     }
@@ -232,9 +257,9 @@ async function openSourceMarketHistory(){
     if(candles.length<60)continue;
     const ind=indicators(candles);if(!ind)continue;
     const last=candles.at(-1),prior=candles.at(-2)?.close,close5=candles.at(-6)?.close,close20=candles.at(-21)?.close,volume5d=candles.slice(-5).reduce((sum,row)=>sum+row.volume,0);
-    data[symbol]={...ind,technicalAsOf:last.time,asOf:valid.at(-1).fetched_at||now(),close:last.close,latestVolume:last.volume,volume5d,dailyChangePct:prior?((last.close/prior)-1)*100:null,return5dPct:close5?((last.close/close5)-1)*100:null,return20dPct:close20?((last.close/close20)-1)*100:null};
+    data[symbol]={...ind,exchange:last.exchange,technicalAsOf:last.time,asOf:valid.filter(x=>x.trade_date===last.time&&x.kind===(last.exchange==='TPEx'?'price_tpex':'price_twse')).at(-1)?.fetched_at||now(),close:last.close,latestVolume:last.volume,volume5d,dailyChangePct:prior?((last.close/prior)-1)*100:null,return5dPct:close5?((last.close/close5)-1)*100:null,return20dPct:close20?((last.close/close20)-1)*100:null};
   }
-  return {data,historyAsOf:valid.at(-1).trade_date,historyDateCount:valid.length,historyCount:Object.keys(data).length,source:'88jiayu/tw-chip-open-data（TWSE 官方開放資料歸檔；OGDL）'};
+  return {data,historyAsOf:tradingDates.at(-1),historyDateCount:tradingDates.length,historyCount:Object.keys(data).length,markets:{TWSE:Object.values(data).filter(x=>x.exchange==='TWSE').length,TPEx:Object.values(data).filter(x=>x.exchange==='TPEx').length},source:'88jiayu/tw-chip-open-data（TWSE + TPEx 官方開放資料歸檔；OGDL）'};
 }
 
 function validateSymbol(s){return /^[0-9A-Z]{2,10}$/.test(s||'');}
@@ -294,16 +319,33 @@ async function route(req,res){
   if(u.pathname==='/api/market/snapshot'){
     const result=await safeLoad('snapshot',TTL.snapshot,async()=>{
       if(FUGLE_API_KEY){
-        const markets=['TSE'];
-        const payloads=await Promise.all(markets.map(async market=>{const u=new URL(FUGLE_BASE+'/snapshot/quotes/'+market);return fetchJson(u.toString(),8000,{'X-API-KEY':FUGLE_API_KEY});}));
-        const data={};for(const payload of payloads){for(const row of (payload.data||[])){if(!row.symbol)continue;const stamp=Number(row.lastUpdated);data[String(row.symbol)]={symbol:String(row.symbol),name:row.name||String(row.symbol),price:Number.isFinite(Number(row.lastPrice??row.closePrice))&&Number(row.lastPrice??row.closePrice)>0?Number(row.lastPrice??row.closePrice):null,changePct:Number.isFinite(Number(row.changePercent))?Number(row.changePercent):null,volume:Number(row.tradeVolume),timestamp:Number.isFinite(stamp)&&stamp>0?new Date(stamp/1000).toISOString():now(),market:payload.market};}}
-        return {data,source:'Fugle market-wide snapshot quotes (TSE; upstream refresh every 5 seconds)',timestamp:now(),delayed:false};
+        const markets=['TSE','OTC'];
+        const settled=await Promise.allSettled(markets.map(async market=>{const u=new URL(FUGLE_BASE+'/snapshot/quotes/'+market);return fetchJson(u.toString(),8000,{'X-API-KEY':FUGLE_API_KEY});}));
+        const payloads=settled.filter(x=>x.status==='fulfilled').map(x=>x.value);
+        if(!payloads.length)throw new Error('Fugle 上市與上櫃快照均無法取得：'+settled.map(x=>x.reason?.message||'unknown').join('；'));
+        const data={};for(const payload of payloads){for(const row of (payload.data||[])){if(!row.symbol)continue;const stamp=Number(row.lastUpdated);data[String(row.symbol)]={symbol:String(row.symbol),name:row.name||String(row.symbol),price:Number.isFinite(Number(row.lastPrice??row.closePrice))&&Number(row.lastPrice??row.closePrice)>0?Number(row.lastPrice??row.closePrice):null,changePct:Number.isFinite(Number(row.changePercent))?Number(row.changePercent):null,volume:Number(row.tradeVolume),timestamp:Number.isFinite(stamp)&&stamp>0?new Date(stamp/1000).toISOString():now(),market:payload.market,source:'Fugle snapshot quotes',delayed:false,quoteType:'realtime'};}}
+        return {data,source:'Fugle 上市 TSE + 上櫃 OTC 行情快照（各市場獨立回報；約每 5 秒更新）',timestamp:now(),delayed:false,markets:payloads.map(x=>x.market)};
       }
       if(process.env.MARKET_REALTIME_URL){
         const x=await external('MARKET_REALTIME_URL','');
         return {data:x.data||{},source:x.source||'Configured realtime provider',timestamp:x.timestamp||now(),delayed:!!x.delayed};
       }
-      return await twseMisSnapshot();
+      const listed=await twseMisSnapshot();
+      let otcData={},otcAsOf=null,otcError=null;
+      try{
+        const otc=await recentOpenArchive('price_tpex',1);
+        const doc=otc.at(-1);
+        if(doc){
+          otcAsOf=doc.trade_date;
+          const fields=doc.fields||[],closeIndex=fields.indexOf('close'),volumeIndex=fields.indexOf('volume_shares');
+          for(const [symbol,values] of Object.entries(doc.rows||{})){
+            const price=Number(values?.[closeIndex]);
+            if(!validateSymbol(symbol)||!Number.isFinite(price)||price<=0)continue;
+            otcData[symbol]={symbol,name:symbol,price,changePct:null,volume:Number(values?.[volumeIndex])||null,timestamp:doc.fetched_at||null,market:'OTC',source:'TPEx 官方日收盤歸檔',delayed:true,quoteType:'daily-close',asOf:doc.trade_date};
+          }
+        }
+      }catch(error){otcError=error.message;}
+      return {...listed,data:{...listed.data,...otcData},source:'TWSE MIS 官方即時行情 + TPEx 官方日收盤歸檔（上櫃報價明確標示為歷史日收盤）',timestamp:now(),mixedFreshness:Object.keys(otcData).length>0,markets:{TWSE:Object.keys(listed.data||{}).length,TPEx:Object.keys(otcData).length},otcAsOf,otcError};
     },e=>({data:{},source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
   }
@@ -358,7 +400,7 @@ async function route(req,res){
       if(base.error)throw new Error(base.error);
       const listed=await safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],error:e.message}));
       if(listed.error||!listed.data?.length)throw new Error(listed.error||'無法取得證交所上市股票清單');
-      const twseSymbols=new Set(listed.data.map(x=>x.symbol));
+      const marketSymbols=new Set(listed.data.map(x=>x.symbol));
       const perResult=await safeLoad('all-market-per',6*60*60*1000,async()=>{
         const data={};
         if(FINMIND_TOKEN){
@@ -379,15 +421,15 @@ async function route(req,res){
       const quotes=stale('snapshot')?.data||{},flows=flowResult.data||stale('flows')?.data||{},sentiment=stale('sentiment')?.data||{},futures=stale('futures')?.data||{},data={};
       const fiveDay=Object.values(base.data||{}).map(x=>Number(x.return5dPct)).filter(Number.isFinite),adv=fiveDay.filter(v=>v>0).length,dec=fiveDay.filter(v=>v<0).length,advanceDecline=adv/Math.max(1,dec);
       for(const [symbol,technical] of Object.entries(base.data||{})){
-        if(!twseSymbols.has(symbol))continue;
+        if(!marketSymbols.has(symbol))continue;
         const quote=quotes[symbol]||{},flow=flows[symbol]||{},valuation=perResult.data?.[symbol]||{},livePrice=quote.price!=null&&Number.isFinite(Number(quote.price))&&Number(quote.price)>0?Number(quote.price):null,price=livePrice??Number(technical.close);
         const trustFlowPct5d=Number.isFinite(Number(flow.trustNet5d))&&technical.volume5d>0?(Number(flow.trustNet5d)/technical.volume5d)*100:null;
         const foreignFlowPct5d=Number.isFinite(Number(flow.foreignNet5d))&&technical.volume5d>0?(Number(flow.foreignNet5d)/technical.volume5d)*100:null;
-        const row={...technical,...flow,...valuation,pe:valuation.pe,pb:valuation.pb,dividendYield:valuation.dividendYield,trustFlowPct5d,foreignFlowPct5d,signal:technical.macdSignal,price,quoteIsLive:livePrice!==null,changePct:quote.changePct??technical.dailyChangePct,volume:quote.volume??technical.latestVolume,asOf:quote.timestamp||(technical.technicalAsOf?new Date(technical.technicalAsOf+'T13:30:00+08:00').toISOString():technical.asOf||null),priceVsEma20Pct:price!==null&&technical.ema20?((price/technical.ema20)-1)*100:null,priceVsEma60Pct:price!==null&&technical.ema60?((price/technical.ema60)-1)*100:null};
+        const row={...technical,...flow,...valuation,pe:valuation.pe,pb:valuation.pb,dividendYield:valuation.dividendYield,trustFlowPct5d,foreignFlowPct5d,signal:technical.macdSignal,price,quoteIsLive:livePrice!==null&&!quote.delayed,quoteDelayed:!!quote.delayed,quoteSource:quote.source||null,exchange:quote.market==='OTC'?'TPEx':technical.exchange||'TWSE',changePct:quote.changePct??technical.dailyChangePct,volume:quote.volume??technical.latestVolume,asOf:(!quote.delayed&&quote.timestamp)|| (technical.technicalAsOf?new Date(technical.technicalAsOf+'T13:30:00+08:00').toISOString():technical.asOf||null),priceVsEma20Pct:price!==null&&technical.ema20?((price/technical.ema20)-1)*100:null,priceVsEma60Pct:price!==null&&technical.ema60?((price/technical.ema60)-1)*100:null};
         row.scorecard=scoreStock({...row,asOf:row.asOf,maxAgeMs:36*60*60*1000,fearGreed:sentiment.fearGreed,advanceDecline:sentiment.advanceDecline??advanceDecline,futuresChangePct:futures.changePct});
         data[symbol]=row;
       }
-      return {data,source:(base.source||'FinMind')+' + TWSE 即時行情／公開估值／籌碼',timestamp:now(),scannedCount:Object.keys(data).length,historyAsOf:base.historyAsOf,historyCount:base.historyCount||Object.keys(base.data||{}).length,advanceDecline};
+      return {data,source:(base.source||'FinMind')+' + 上市櫃行情／公開估值／籌碼',timestamp:now(),scannedCount:Object.keys(data).length,historyAsOf:base.historyAsOf,historyCount:base.historyCount||Object.keys(base.data||{}).length,markets:base.markets||null,advanceDecline};
     },e=>({data:{},source:'unavailable',timestamp:now(),scannedCount:0,error:e.message}));
     if(result.stale&&result.data){const safeData={};for(const [symbol,row] of Object.entries(result.data)){const card=row?.scorecard||{};safeData[symbol]={...row,scorecard:{...card,direction:'觀望',status:'insufficient-data',fresh:false,reasons:[...(card.reasons||[]),'全市場掃描快取已過期，暫停方向判斷']}};}return json(res,200,{...result,data:safeData});}
     return json(res,200,result);
