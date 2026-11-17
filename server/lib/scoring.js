@@ -13,7 +13,7 @@ const finite = value => Number.isFinite(Number(value)) && value !== null && valu
  */
 function scoreStock(input={}) {
   const reasons=[];
-  let score=50, covered=0, total=105;
+  let score=50, covered=0, total=122;
   const add=(weight, direction, positive, negative)=>{
     if(direction===null)return;
     score += weight*direction;
@@ -80,6 +80,27 @@ function scoreStock(input={}) {
     const f=Number(input.futuresChangePct);
     add(5,f>0?1:f<0?-1:0,'台指期方向偏多','台指期方向偏空');
   }
+  if(finite(input.adx)&&finite(input.plusDi)&&finite(input.minusDi)){
+    const strength=Number(input.adx),direction=Math.sign(Number(input.plusDi)-Number(input.minusDi));
+    if(strength>=20)add(5,direction,'ADX 顯示趨勢強度足夠且方向偏多','ADX 顯示趨勢強度足夠且方向偏空');
+    else {covered+=5;reasons.push('ADX 趨勢強度偏弱，避免過度解讀方向');}
+  }
+  if(finite(input.mfi)){
+    const m=Number(input.mfi);
+    if(m>=60&&m<=80)add(4,1,'MFI 資金流量動能偏多','');
+    else if(m>=90)add(4,-0.5,'','MFI 資金流量過熱');
+    else if(m<=20)add(4,-0.25,'','MFI 位於低檔，等待反轉確認');
+    else covered+=4;
+  }
+  if(finite(input.cci)){
+    const c=Number(input.cci);
+    if(c>=100&&c<200)add(4,1,'CCI 動能轉強','');
+    else if(c>=200)add(4,-0.5,'','CCI 動能過熱');
+    else if(c<=-100)add(4,-1,'','CCI 動能偏弱');
+    else covered+=4;
+  }
+  if(finite(input.priceVsVwap20Pct))add(4,Number(input.priceVsVwap20Pct)>=0?1:-1,'價格位於 20 日成交量加權均價之上','價格位於 20 日成交量加權均價之下');
+
   if(finite(input.k)) {
     const k=Number(input.k);
     if(k>=50&&k<=80)add(5,1,'KD 動能偏多','');
