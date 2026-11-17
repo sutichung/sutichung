@@ -46,7 +46,7 @@ async function runAgent(provider, prompt, env) {
       if (provider === 'gemini') {
         const result = await postJson('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(config.model) + ':generateContent', {
           systemInstruction: { parts: [{ text: system }] },
-          contents: [{ role: 'user', parts: [{ text: prompt }] },
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
           generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 1200 }
         }, { 'x-goog-api-key': config.key });
         raw = (result.candidates && result.candidates[0] && result.candidates[0].content && result.candidates[0].content.parts || []).map(part => part.text || '').join('');
