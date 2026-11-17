@@ -86,6 +86,15 @@ async function safeLoad(key, ttl, loader, fallback) {
   return job;
 }
 async function mapLimit(items,limit,worker){const out=new Array(items.length);let next=0;await Promise.all(Array.from({length:Math.min(limit,items.length)},async()=>{while(true){const i=next++;if(i>=items.length)return;out[i]=await worker(items[i],i);}}));return out;}
+const INDUSTRY_NAMES={
+  '01':'水泥工業','02':'食品工業','03':'塑膠工業','04':'紡織纖維','05':'電機機械','06':'電器電纜',
+  '08':'玻璃陶瓷','09':'造紙工業','10':'鋼鐵工業','11':'橡膠工業','12':'汽車工業','14':'建材營造',
+  '15':'航運業','16':'觀光餐旅','17':'金融保險','18':'貿易百貨','19':'綜合','20':'其他',
+  '21':'化學工業','22':'生技醫療業','23':'油電燃氣業','24':'半導體業','25':'電腦及週邊設備業',
+  '26':'光電業','27':'通信網路業','28':'電子零組件業','29':'電子通路業','30':'資訊服務業',
+  '31':'其他電子業','32':'綠能環保','33':'數位雲端','34':'運動休閒','35':'居家生活'
+};
+function industryName(code){const key=String(code||'').trim().padStart(2,'0');return INDUSTRY_NAMES[key]||String(code||'未分類');}
 function currentTwseRows(rows){
   const latest=new Map();
   for(const row of rows||[]){
@@ -93,7 +102,7 @@ function currentTwseRows(rows){
     if(!/^[0-9]{4,6}$/.test(symbol))continue;
     if(String(row.type||'').toLowerCase() && String(row.type).toLowerCase()!=='twse')continue;
     const name=row.stock_name||row['公司簡稱']||row['有價證券名稱']||row['公司名稱']||symbol;
-    latest.set(symbol,{symbol,name,sector:row.industry_category||row['產業別']||'未分類',exchange:'TWSE'});
+    latest.set(symbol,{symbol,name,sector:industryName(row.industry_category||row['產業別']),exchange:'TWSE'});
   }
   return [...latest.values()];
 }
@@ -110,7 +119,7 @@ async function twseListedUniverse(){
       const data=(rows||[]).map(row=>({
         symbol:String(row.SecuritiesCompanyCode||row['公司代號']||'').trim(),
         name:String(row.CompanyAbbreviation||row['公司簡稱']||row.CompanyName||'').trim(),
-        sector:String(row.SecuritiesIndustryCode||row['產業別']||'未分類'),
+        sector:industryName(row.SecuritiesIndustryCode||row['產業別']),
         exchange:'TPEx'
       })).filter(x=>/^[0-9A-Z]{2,10}$/.test(x.symbol));
       if(data.length)return data;
@@ -499,7 +508,8 @@ async function route(req,res){
         chairman:issuerProfile?.['董事長']||null,
         establishedDate:issuerProfile?.['成立日期']||null,
         capital:issuerProfile?.['實收資本額']||null,
-        mopsUrl:'https://mops.twse.com.tw/mops/web/t05st03'
+        mopsUrl:'https://mops.twse.com.tw/mops/web/t05st03',
+        twseProfileUrl:company.exchange==='TWSE'?'https://www.twse.com.tw/pdf/ch/'+symbol+'_ch.pdf':null
       };
       if(!FINMIND_TOKEN)return {company:officialCompany,profile:{description:officialCompany.businessDescription,descriptionNote:'尚未設定 FinMind Token；財務報表、月營收與股利資料暫不可用。',mopsUrl:officialCompany.mopsUrl},financials:null,error:'未設定 FINMIND_TOKEN；財報資料暫不可用',source:'TWSE／TPEx 官方公司基本資料',timestamp:now()};
       const startDate='2018-01-01';
