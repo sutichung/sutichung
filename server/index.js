@@ -559,12 +559,14 @@ async function route(req,res){
   if(u.pathname.startsWith('/api/market/agents/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop());
     if(!validateSymbol(symbol))return json(res,400,{error:'invalid_symbol'});
+    const fundamentals=stale('fundamentals:'+symbol)||null;
+    const agentCacheKey='agents:'+symbol+':'+(fundamentals?.timestamp||'fundamentals-pending');
     const load=()=>buildAiCommittee(symbol,{
       getHistory:s=>safeLoad('history:'+s,TTL.history,()=>loadStockHistory(s),e=>({data:[],error:e.message})),
-      quotes:stale('snapshot')?.data||{},scan:stale('scan')?.data||{},flows:stale('flows')?.data||{},fundamentals:stale('fundamentals:'+symbol)||null,
+      quotes:stale('snapshot')?.data||{},scan:stale('scan')?.data||{},flows:stale('flows')?.data||{},fundamentals,
       quoteSource:stale('snapshot')?.source||'未取得報價來源',env:process.env
     });
-    const result=u.searchParams.get('refresh')==='1'?await load():await safeLoad('agents:'+symbol,10*60*1000,load,e=>({symbol,agents:['gemini','grok','deepseek'].map(provider=>({provider,status:'error',message:e.message})),consensus:null,analysisTime:now()}));
+    const result=u.searchParams.get('refresh')==='1'?await load():await safeLoad(agentCacheKey,10*60*1000,load,e=>({symbol,agents:['gemini','grok','deepseek'].map(provider=>({provider,status:'error',message:e.message})),consensus:null,analysisTime:now()}));
     return json(res,200,result);
   }
   if(u.pathname.startsWith('/api/market/history/')){
