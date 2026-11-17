@@ -11,5 +11,7 @@ jobs:
         with:
           node-version: 20
       - run: npm run test:server
-      - run: npm ci
+      - run: npm install
       - run: npm run build
+        env:
+          NODE_OPTIONS: --openssl-legacy-provider
