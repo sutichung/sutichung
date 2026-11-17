@@ -28,7 +28,7 @@ async function fetchJson(url, timeoutMs=8000, extraHeaders={}) {
 }
 async function twseMisSnapshot(){
   const listed=await safeLoad('universe',TTL.universe,twseListedUniverse);
-  const symbols=(listed.data||[]).map(x=>x.symbol).filter(x=>/^[0-9]{4,6}$/.test(x));
+  const symbols=(listed.data||[]).filter(x=>(x.exchange||'TWSE')==='TWSE').map(x=>x.symbol).filter(x=>/^[0-9]{4,6}$/.test(x));
   if(!symbols.length)throw new Error('無上市股票清單，無法連接證交所行情');
   const headers={'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36','Referer':'https://mis.twse.com.tw/stock/index.jsp','Origin':'https://mis.twse.com.tw','Accept':'application/json, text/plain, */*'};
   const warmUrl='https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_2330.tw&json=1&delay=0&_='+Date.now();
@@ -48,10 +48,12 @@ async function twseMisSnapshot(){
   const data={};
   for(const payload of payloads)for(const q of (payload.msgArray||[])){
     const symbol=String(q.c||'');if(!symbol)continue;
-    const price=Number(q.z),preClose=Number(q.y),volume=Number(q.v??q.tv);
+    const lastTradePrice=Number(q.z),referencePrice=Number(q.pz),preClose=Number(q.y),volume=Number(q.v??q.tv);
+    const hasLastTrade=Number.isFinite(lastTradePrice)&&lastTradePrice>0;
+    const displayPrice=hasLastTrade?lastTradePrice:(Number.isFinite(referencePrice)&&referencePrice>0?referencePrice:null);
     const quoteTime=q.tlong?new Date(Number(q.tlong)).toISOString():(q.t&&q.d?new Date(String(q.d).replace(/\//g,'-')+'T'+q.t+'+08:00').toISOString():null);
-    const delayed=!quoteTime||!Number.isFinite(Date.parse(quoteTime))||Date.now()-Date.parse(quoteTime)>5*60*1000;
-    data[symbol]={symbol,name:q.n||symbol,price:Number.isFinite(price)&&price>0?price:(Number(q.pz)>0?Number(q.pz):null),changePct:Number.isFinite(price)&&Number.isFinite(preClose)&&preClose>0?((price/preClose)-1)*100:null,volume:Number.isFinite(volume)?volume:null,timestamp:quoteTime,market:'TSE',source:'TWSE MIS',delayed,quoteType:delayed?'stale-snapshot':'realtime'};
+    const delayed=!hasLastTrade||!quoteTime||!Number.isFinite(Date.parse(quoteTime))||Date.now()-Date.parse(quoteTime)>5*60*1000;
+    data[symbol]={symbol,name:q.n||symbol,price:displayPrice,changePct:hasLastTrade&&Number.isFinite(preClose)&&preClose>0?((lastTradePrice/preClose)-1)*100:null,volume:Number.isFinite(volume)?volume:null,timestamp:quoteTime,market:'TSE',source:'TWSE MIS',delayed,quoteType:!hasLastTrade?'previous-close':delayed?'stale-snapshot':'realtime'};
   }
   if(!Object.keys(data).length)throw new Error('證交所 MIS 已連線但未回傳股票報價；回應 '+(payloads[0]?.rtmessage||'無有效 msgArray'));
   const delayedCount=Object.values(data).filter(x=>x.delayed).length;
