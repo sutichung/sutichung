@@ -7,7 +7,7 @@ const finite = value => Number.isFinite(Number(value)) && value !== null && valu
  * Transparent, deterministic research score. It is a directional ranking,
  * not a calibrated probability or a trade instruction.
  * Expected optional fields: trend, macd, signal, rsi, volumeRatio,
- * institutionalNet, foreignNet, trustNet, dealerNet, marginChange,
+ * institutionalNet, foreignNet, trustNet, dealerNet, trustFlowPct5d, foreignFlowPct5d, pe, pb, dividendYield, marginChange,
  * shortChange, retailBias, fearGreed, advanceDecline, futuresChangePct,
  * asOf (ISO timestamp).
  */
@@ -42,7 +42,18 @@ function scoreStock(input={}) {
   }
 
   const inst=finite(input.institutionalNet)?[Number(input.institutionalNet)]:['foreignNet','trustNet','dealerNet'].filter(k=>finite(input[k])).map(k=>Number(input[k]));
-  if(inst.length) add(11,Math.sign(inst.reduce((a,b)=>a+b,0)),'法人合計買超','法人合計賣超');
+  if(inst.length) add(6,Math.sign(inst.reduce((a,b)=>a+b,0)),'法人合計買超','法人合計賣超');
+
+  const whaleSignals=[];
+  if(finite(input.trustFlowPct5d)){const v=Number(input.trustFlowPct5d);whaleSignals.push(v>=3?1:v<=-3?-1:0);}
+  if(finite(input.foreignFlowPct5d)){const v=Number(input.foreignFlowPct5d);whaleSignals.push(v>=5?1:v<=-5?-1:0);}
+  if(whaleSignals.length)add(5,whaleSignals.reduce((a,b)=>a+b,0)/whaleSignals.length,'近五日法人籌碼流向偏多','近五日法人籌碼流向偏空');
+
+  const valuation=[];
+  if(finite(input.pe)&&Number(input.pe)>0){const v=Number(input.pe);valuation.push(v<=15?1:v>35?-1:0);}
+  if(finite(input.pb)&&Number(input.pb)>0){const v=Number(input.pb);valuation.push(v<=1.5?0.5:v>=5?-0.5:0);}
+  if(finite(input.dividendYield)&&Number(input.dividendYield)>=0){valuation.push(Number(input.dividendYield)>=4?0.5:0);}
+  if(valuation.length)add(10,valuation.reduce((a,b)=>a+b,0)/valuation.length,'估值因子相對有利','估值因子偏高，留意安全邊際');
 
   if(finite(input.marginChange)) {
     const m=Number(input.marginChange);
