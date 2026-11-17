@@ -88,3 +88,8 @@ Fugle 全市場快照上游每五秒更新一次；前端每秒輪詢只代表�
 
 ## 安全提醒
 API Key 僅放後端環境變數；不要提交 .env、Token、券商帳密或個人憑證。此專案目前是非模擬報價的市場研究／監控介面，不是可直接下單的正式交易終端。實盤委託功能預設鎖定；在券商正式 API、委託與成交對帳、持久化稽核、成本後樣本外驗證及硬性風控全部完成前，不得解除鎖定。不得將研究評分當成交易指令。
+
+
+## Supabase 會員系統
+
+網站已加入 Supabase Auth 會員登入／註冊、會員密碼修改與管理員會員管理介面。請依照 [Supabase 會員系統設定](./docs/SUPABASE_MEMBERSHIP_SETUP.md) 設定 Render 後端環境變數；其中 `SUPABASE_SERVICE_ROLE_KEY` 必須只放在 Render，不可提交到 Git 或前端。管理員 Email 由伺服器端 `SUPABASE_ADMIN_EMAIL` 驗證。未登入的使用者不能讀取市場 API。
