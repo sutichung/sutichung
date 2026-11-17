@@ -16,8 +16,21 @@ CHANNELS.push(...HLS_CHANNELS);
 
 export default function LiveMarketTV(){
  const [active,setActive]=useState('ebc57');
+ const [video,setVideo]=useState(null),[videoError,setVideoError]=useState(''),[videoLoading,setVideoLoading]=useState(false);
  const channel=CHANNELS.find(x=>x.id===active)||CHANNELS[0];
  const openUrl=channel.url;
+ useEffect(()=>{
+  let alive=true;setVideo(null);setVideoError('');
+  if(channel.kind!=='youtube')return()=>{alive=false;};
+  (async()=>{setVideoLoading(true);try{
+    const token=localStorage.getItem('ts_access_token')||'';
+    const response=await fetch('/api/live/resolve?channelId='+encodeURIComponent(channel.channel),{headers:token?{Authorization:'Bearer '+token}:{}});
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(data.error||'目前無法解析公開直播');
+    if(alive)setVideo(data);
+   }catch(error){if(alive)setVideoError(error.message);}finally{if(alive)setVideoLoading(false);}})();
+  return()=>{alive=false;};
+ },[channel.id,channel.channel,channel.kind]);
  return <section style={{background:'#111a2b',border:'1px solid #293951',borderRadius:12,padding:14,color:'#e8eef8'}}>
   <div style={{display:'flex',justifyContent:'space-between',gap:10,alignItems:'center',flexWrap:'wrap',marginBottom:10}}>
    <div><b style={{fontSize:16}}>📺 台灣財經直播中心</b><small style={{display:'block',color:'#91a1b8',marginTop:4}}>官方頻道入口｜免 YouTube API Key｜HLS.js 有聲播放器</small></div>
@@ -29,11 +42,12 @@ export default function LiveMarketTV(){
    </button>)}
   </div>
   {channel.kind==='hls'?<HlsLivePlayer key={channel.id} src={channel.src} title={channel.name}/>:
+   channel.kind==='youtube'&&video?<div><div style={{position:'relative',width:'100%',aspectRatio:'16/9',background:'#000',borderRadius:8,overflow:'hidden'}}><iframe title={video.title||channel.name} src={'https://www.youtube-nocookie.com/embed/'+encodeURIComponent(video.videoId)+'?playsinline=1&rel=0'} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen style={{position:'absolute',inset:0,width:'100%',height:'100%',border:0}}/></div><small style={{display:'block',color:'#91a1b8',marginTop:6}}>{video.title||channel.name}｜來源：YouTube 公開直播</small></div>:
    <div style={{background:'#080d18',borderRadius:8,padding:20,textAlign:'center',minHeight:170,display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',gap:10}}>
     <div style={{fontSize:15,fontWeight:700}}>{channel.name}</div>
-    <div style={{fontSize:12,color:'#cbd5e1',lineHeight:1.7}}>{channel.kind==='youtube'?'免 YouTube API Key：直接開啟頻道官方 /live 頁面播放。YouTube 官方嵌入播放器需要具體影片 ID；不使用未文件化、可能失效的頻道直播 iframe。':'此頻道提供官方直播頁，來源不開放穩定的第三方嵌入，請從官方頁播放。'}</div>
-    <a href={openUrl} target="_blank" rel="noreferrer" style={{display:'inline-block',background:'#2563eb',color:'#fff',borderRadius:8,padding:'10px 16px',textDecoration:'none'}}>直接觀看官方直播（含聲音）↗</a>
+    <div style={{fontSize:12,color:'#cbd5e1',lineHeight:1.7}}>{channel.kind==='youtube'?(videoLoading?'正在尋找此頻道目前公開直播…':videoError||'目前沒有可嵌入的公開直播；可由官方頻道觀看。'):'此頻道提供官方直播頁，來源不開放穩定的第三方嵌入，請從官方頁播放。'}</div>
+    <a href={openUrl} target="_blank" rel="noreferrer" style={{display:'inline-block',background:'#2563eb',color:'#fff',borderRadius:8,padding:'10px 16px',textDecoration:'none'}}>開啟官方直播（含聲音）↗</a>
    </div>}
-  <div style={{fontSize:11,color:'#91a1b8',lineHeight:1.7,marginTop:8}}>{channel.note}。YouTube 頻道官方 /live 連結不需 Data API Key；站內嵌入播放需要具體影片 ID，需 API 查詢或人工更新影片 ID。為避免使用未文件化且可能失效的頻道 iframe，預設改為官方頁外開。瀏覽器需由使用者按播放才能發出聲音。系統不擷取或轉播未授權影音。</div>
+  <div style={{fontSize:11,color:'#91a1b8',lineHeight:1.7,marginTop:8}}>{channel.note}。YouTube 站內播放會透過官方 Data API 尋找目前公開直播；若 Render 尚未設定 YOUTUBE_API_KEY、頻道沒有公開直播或 API 額度不足，會保留官方直播入口。瀏覽器需由使用者按播放才能發出聲音。系統不擷取或轉播未授權影音。</div>
  </section>;
 }
