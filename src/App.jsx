@@ -3,7 +3,7 @@ import CandleChart from './CandleChart';
 import LiveMarketTV from './LiveMarketTV';
 
 const API = (process.env.REACT_APP_MARKET_API || '/api/market').replace(/\/$/, '');
-const APP_VERSION = '2026.11.17.14';
+const APP_VERSION = '2026.11.17.15';
 
 const C = { bg:'#080d18', panel:'#111a2b', panel2:'#172338', border:'#293951', text:'#e8eef8', muted:'#91a1b8', blue:'#60a5fa', green:'#34d399', red:'#fb7185', yellow:'#fbbf24' };
 const fmt = (v,d=2) => Number.isFinite(Number(v)) ? Number(v).toLocaleString('zh-TW',{minimumFractionDigits:d,maximumFractionDigits:d}) : '—';
@@ -12,7 +12,7 @@ async function getJSON(path, signal) { const r=await fetch(`${API}${path}`,{sign
 function ema(a,p){ if(a.length<p)return null; const k=2/(p+1); let x=a.slice(0,p).reduce((s,v)=>s+v,0)/p; for(let i=p;i<a.length;i++)x=a[i]*k+x*(1-k); return x; }
 function rsi(a,p=14){ if(a.length<=p)return null; let g=0,l=0; for(let i=1;i<=p;i++){const d=a[i]-a[i-1];g+=Math.max(d,0);l+=Math.max(-d,0);} g/=p;l/=p; for(let i=p+1;i<a.length;i++){const d=a[i]-a[i-1];g=(g*(p-1)+Math.max(d,0))/p;l=(l*(p-1)+Math.max(-d,0))/p;} return l===0?100:100-100/(1+g/l); }
 function indicators(c=[]){const close=c.map(x=>+x.close),high=c.map(x=>+x.high),low=c.map(x=>+x.low),vol=c.map(x=>+x.volume);if(close.length<60||[...close,...high,...low].some(x=>!Number.isFinite(x)))return null;const e5=ema(close,5),e20=ema(close,20),e60=ema(close,60),m=ema(close,12)-ema(close,26),ms=[];for(let i=26;i<=close.length;i++)ms.push(ema(close.slice(0,i),12)-ema(close.slice(0,i),26));const tr=[];for(let i=1;i<c.length;i++)tr.push(Math.max(high[i]-low[i],Math.abs(high[i]-close[i-1]),Math.abs(low[i]-close[i-1])));const av=vol.slice(-20).reduce((s,v)=>s+v,0)/20,kh=Math.max(...high.slice(-9)),kl=Math.min(...low.slice(-9));return {rsi:rsi(close),e5,e20,e60,macd:m,signal:ema(ms,9),atr:tr.slice(-14).reduce((s,v)=>s+v,0)/14,support:Math.min(...low.slice(-20)),resistance:Math.max(...high.slice(-20)),volumeRatio:av?vol.at(-1)/av:null,k:kh===kl?null:(close.at(-1)-kl)/(kh-kl)*100,trend:close.at(-1)>e5&&e5>e20&&e20>e60?'多頭排列':close.at(-1)<e5&&e5<e20&&e20<e60?'空頭排列':'均線糾結'};}
-function score(ind,flow,scorecard){if(scorecard)return {score:scorecard.score,label:scorecard.direction,reasons:scorecard.reasons||[],confidence:scorecard.confidence};return {score:null,label:'等待有效全市場評分',reasons:['尚未取得完整且新鮮的全市場評分資料']};}
+function score(ind,flow,scorecard){if(scorecard){const valid=scorecard.status==='research-ready'&&scorecard.fresh;const direction=valid?(scorecard.direction==='偏向買進'?'買進觀察':String(scorecard.direction).includes('賣出')?'賣出／避險': '中立觀望'):'資料不足・暫不判讀';return {score:scorecard.score,label:direction,reasons:scorecard.reasons||[],confidence:scorecard.confidence};}return {score:null,label:'資料不足・暫不判讀',reasons:['缺少足夠且新鮮的行情／技術資料，暫不輸出買賣方向']};}
 const btn=(bg)=>({background:bg,color:'#fff',border:`1px solid ${C.border}`,borderRadius:7,padding:'7px 10px',cursor:'pointer',fontSize:11});
 function Panel({title,children,right}){return <section style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:12,padding:14,minWidth:0}}><div style={{display:'flex',justifyContent:'space-between',gap:8,marginBottom:12}}><b>{title}</b>{right}</div>{children}</section>}
 function Metric({label,value,note,color=C.text}){return <div style={{background:C.panel2,borderRadius:8,padding:10,minWidth:0}}><small style={{color:C.muted}}>{label}</small><div style={{fontSize:18,fontWeight:750,color,marginTop:4,overflowWrap:'anywhere'}}>{value}</div>{note&&<small style={{color:C.muted}}>{note}</small>}</div>}
