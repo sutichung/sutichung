@@ -552,7 +552,22 @@ async function route(req,res){
       const monthMap=new Map(months.map(x=>[x.year+'-'+x.month,x.revenue]));
       const monthlyRevenue=months.slice(-24).map(x=>({date:x.date,revenue:x.revenue,yoy:monthMap.has((x.year-1)+'-'+x.month)&&monthMap.get((x.year-1)+'-'+x.month)!==0?(x.revenue/monthMap.get((x.year-1)+'-'+x.month)-1)*100:null}));
       const dividendHistory=(dividends||[]).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).slice(0,12);
-      return {company:officialCompany,profile:{description:officialCompany.businessDescription,descriptionNote:officialCompany.businessDescription?'公司業務簡介取自證交所公開公司基本資料。':'官方公司基本資料未提供可用的營業項目欄位；請以公開資訊觀測站公司基本資料／年報為準。',mopsUrl:officialCompany.mopsUrl},financials:{incomeAsOf:latestIncome,balanceAsOf:latestBalance,cashAsOf:latestCash,income:incomeSummary,balance:balanceSummary,cash:cashSummary,debtRatio,currentRatio,grossMargin,operatingMargin,netMargin,valuation,monthlyRevenue,dividends:dividendHistory},datasetErrors,source:'FinMind 財報／月營收／股利資料；公司清單 TWSE／TPEx',timestamp:now(),periodType:'財報為季資料；月營收為月資料'};
+      const isFinancialIndustry=/金融|保險/.test(String(company.sector||''));
+      const healthCandidates=[
+        ['EPS',incomeSummary?.eps,v=>v>0?1:-1],
+        ['毛利率',grossMargin,v=>v>=30?1:v<10?-1:0],
+        ['營業利益率',operatingMargin,v=>v>=10?1:v<0?-1:0],
+        ['稅後淨利率',netMargin,v=>v>=5?1:v<0?-1:0],
+        ['負債比',debtRatio,v=>v<=40?1:v>=70?-1:0],
+        ['流動比率',currentRatio,v=>v>=1.5?1:v<1?-1:0],
+        ['營業現金流',cashSummary?.operatingCashFlow??cashSummary?.operatingCashFlowYtd,v=>v>0?1:-1],
+        ['月營收年增率',monthlyRevenue.at(-1)?.yoy,v=>v>5?1:v< -5?-1:0]
+      ];
+      const applicableHealthCandidates=isFinancialIndustry?healthCandidates.filter(x=>['EPS','稅後淨利率','月營收年增率'].includes(x[0])):healthCandidates;
+      const availableHealth=applicableHealthCandidates.filter(x=>x[1]!=null&&Number.isFinite(Number(x[1])));
+      const healthScore=availableHealth.length?Math.round(50+availableHealth.reduce((sum,x)=>sum+x[2](Number(x[1])),0)/availableHealth.length*50):null;
+      const financialHealth={score:availableHealth.length>=4?healthScore:null,coverage:availableHealth.length,total:applicableHealthCandidates.length,status:availableHealth.length<4?'資料不足':healthScore>=65?'偏強':healthScore<=35?'偏弱':'中性',note:isFinancialIndustry?'金融保險業不套用一般產業負債比、流動比及現金流門檻。':'一般產業簡易財務檢查，未作同業標準化；需搭配產業特性與多年趨勢判讀。'};
+      return {company:officialCompany,profile:{description:officialCompany.businessDescription,descriptionNote:officialCompany.businessDescription?'公司業務簡介取自證交所公開公司基本資料。':'官方公司基本資料未提供可用的營業項目欄位；請以公開資訊觀測站公司基本資料／年報為準。',mopsUrl:officialCompany.mopsUrl},financials:{incomeAsOf:latestIncome,balanceAsOf:latestBalance,cashAsOf:latestCash,income:incomeSummary,balance:balanceSummary,cash:cashSummary,debtRatio,currentRatio,grossMargin,operatingMargin,netMargin,financialHealth,valuation,monthlyRevenue,dividends:dividendHistory},datasetErrors,source:'FinMind 財報／月營收／股利資料；公司清單 TWSE／TPEx',timestamp:now(),periodType:'財報為季資料；月營收為月資料'};
     },e=>({error:e.message,company:null,financials:null,source:'unavailable',timestamp:now()}));
     return json(res,result.error?503:200,result);
   }
