@@ -102,8 +102,8 @@ async function route(req,res){
         const tradingDates=await finmind('TaiwanStockTradingDate',{},15000);
         const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date());
         const localTime=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Taipei',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date());
-        const cutoff=localTime>='17:30'?today:'9999-12-31';
-        const dates=tradingDates.map(x=>String(x.date||'')).filter(x=>x&&x<=cutoff).sort().slice(-100);
+        const includeToday=localTime>='17:30';
+        const dates=tradingDates.map(x=>String(x.date||'')).filter(x=>x&&x<=today&&(includeToday||x<today)).sort().slice(-100);
         if(dates.length<60)throw new Error('可用交易日少於 60 日，無法建立全市場技術指標');
         const dailyRows=await mapLimit(dates,8,date=>finmind('TaiwanStockPrice',{start_date:date},45000));
         const grouped=new Map();
