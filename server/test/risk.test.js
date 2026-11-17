@@ -1,0 +1,10 @@
+'use strict';
+const test=require('node:test');const assert=require('node:assert/strict');
+const {ema,rsi,indicators}=require('../lib/indicators');
+const {isFresh,validateCandle,shouldAbstain}=require('../lib/risk');
+test('EMA requires enough history and returns mean for first window',()=>{assert.equal(ema([1,2,3],3),2);assert.equal(ema([1,2],3),null);});
+test('RSI returns 100 for uninterrupted gains',()=>{assert.equal(rsi(Array.from({length:20},(_,i)=>i+1)),100);});
+test('indicator engine refuses insufficient candles',()=>{assert.equal(indicators([]),null);});
+test('candle validation rejects impossible OHLC',()=>{assert.equal(validateCandle({open:10,high:9,low:8,close:10,volume:2}),false);assert.equal(validateCandle({open:9,high:11,low:8,close:10,volume:2}),true);});
+test('stale data fails closed',()=>{assert.equal(isFresh(new Date(Date.now()-999999).toISOString(),1000),false);});
+test('signals abstain without verified out-of-sample evidence',()=>{const x=shouldAbstain({fresh:true,historyCount:120,score:80,confidence:.8,backtestTrades:20,maxDrawdownPct:10});assert.equal(x.abstain,true);assert.ok(x.reasons.some(v=>v.includes('100')));});
