@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: taiwan-stock-hunter
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "8787"
+      - key: FINMIND_TOKEN
+        sync: false
+      - key: MARKET_REALTIME_URL
+        sync: false
+      - key: MARKET_SCAN_URL
+        sync: false
+      - key: MARKET_FLOWS_URL
+        sync: false
+      - key: MARKET_FUTURES_URL
+        sync: false
+      - key: MARKET_SENTIMENT_URL
+        sync: false
