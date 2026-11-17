@@ -6,6 +6,8 @@ on:
     - cron: "0-30/5 5 * * 1-5"
     # Close review after the cash session: 13:40 Taiwan time.
     - cron: "40 5 * * 1-5"
+    # Re-run close research after FinMind institutional flows are normally published.
+    - cron: "10 13 * * 1-5"
   workflow_dispatch:
 permissions:
   contents: read
@@ -30,7 +32,7 @@ jobs:
           curl --fail --silent --show-error --max-time 180 "$MARKET_APP_URL/api/market/scan" -o /tmp/scan.json
           node -e "const x=require('/tmp/scan.json'); console.log('Scanned symbols:', x.scannedCount ?? Object.keys(x.data||{}).length, 'source:', x.source||'unknown')"
   close-review:
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '40 5 * * 1-5'
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '40 5 * * 1-5' || github.event.schedule == '10 13 * * 1-5'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
