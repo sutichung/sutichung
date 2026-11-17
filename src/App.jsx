@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 const API = (process.env.REACT_APP_MARKET_API || '/api/market').replace(/\/$/, '');
-const APP_VERSION = '2026.11.17.4';
+const APP_VERSION = '2026.11.17.5';
 const LIVE_STREAMS = [
   {id:'business',label:'非凡商業台｜財經 24 小時直播',src:'https://biz.ustv.com.tw/livevideo'},
   {id:'news',label:'非凡新聞台｜財經新聞直播',src:'https://news.ustv.com.tw/livevideo'}
