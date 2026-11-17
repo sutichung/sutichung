@@ -60,6 +60,10 @@ async function route(req,res){
     },e=>({data:{},source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
   }
+  if(u.pathname==='/api/market/scan'){
+    const result=await safeLoad('scan',TTL.history,async()=>{const x=await external('MARKET_SCAN_URL','未設定全市場掃描供應商 MARKET_SCAN_URL');return {data:x.data||{},source:x.source||'Configured full-market scanner',timestamp:x.timestamp||now()};},e=>({data:{},source:'unavailable',timestamp:now(),error:e.message}));
+    return json(res,200,result);
+  }
   if(u.pathname.startsWith('/api/market/history/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop());
     if(!validateSymbol(symbol))return json(res,400,{error:'invalid_symbol'});
