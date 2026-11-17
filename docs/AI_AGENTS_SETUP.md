@@ -50,9 +50,17 @@
 
 預設模型 ID 已依官方模型文件設定為 `gemini-3.8-flash`、`grok-4.7`、`deepseek-flash`。可用環境變數覆寫模型名稱。
 
+## 開源／免 API Key 的本機 AI 選項
+
+若要避免每次呼叫雲端模型產生 Token 費用，可在自己的電腦或自有伺服器安裝 Ollama，使用 Qwen、Gemma、DeepSeek 開放權重等模型。Ollama 本機 API 預設 `http://localhost:11434`，本機呼叫不需要 API Key；Ollama 雲端 API 則需要自己的 API Key。
+
+重要限制：目前網站部署在 Render，Render 裡的 `localhost` 是 Render 容器，不是使用者的 Windows 電腦。要讓 Render 呼叫本機 Ollama，必須自行架設安全、可連線的 HTTPS 端點或把整套網站與模型部署在同一台主機；不要直接把本機 11434 連接埠裸露到公網。本專案目前已整合 Gemini／Grok／DeepSeek 雲端 Agent，Ollama 是可選的開源部署路線，尚未接入目前三個 Agent 卡片。
+
+參考：`https://ollama.com/`、`https://github.com/ollama/ollama`。
+
 ## 費用與呼叫方式
 
-個股三 AI 自動分析預設開啟：首次載入選股時執行，之後每 15 分鐘更新一次；可在三 AI 區關閉。按「立即重跑」會略過快取並額外發出請求。自動分析只針對目前選取的個股，必須保持網站分頁開啟；全市場其餘股票仍由低成本規則掃描篩選。Grok API 明確按 token 用量收費；Gemini 是否有免費額度依模型、帳戶與專案配額；DeepSeek 依官方 API 當期價格及尖峰／離峰規則計費。先確認供應商帳戶用量及額度，未設定金鑰不會發出請求。
+個股三 AI 自動分析預設開啟：首次載入選股時執行，之後每 15 分鐘更新一次；可在三 AI 區關閉。按「立即重跑」會略過快取並額外發出請求。自動分析只針對目前選取的個股，必須保持網站分頁開啟；全市場其餘股票仍由低成本規則掃描篩選。Grok API 按 Token 用量計費；Gemini 依模型與帳戶提供有限免費層或付費額度；DeepSeek API 依官方 Token 價格計費，並有尖峰／離峰價差。先確認供應商帳戶用量及額度，未設定金鑰不會發出請求。
 
 ## 端點
 
