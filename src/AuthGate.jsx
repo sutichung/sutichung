@@ -20,7 +20,7 @@ export default function AuthGate({children}){
   const [mode,setMode]=useState('login'),[email,setEmail]=useState(''),[password,setPassword]=useState('');
   const [busy,setBusy]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState('');
   const [adminOpen,setAdminOpen]=useState(false),[members,setMembers]=useState([]),[newEmail,setNewEmail]=useState(''),[newPassword,setNewPassword]=useState('');
-  const [memberBusy,setMemberBusy]=useState(false);
+  const [memberBusy,setMemberBusy]=useState(false),[passwordOpen,setPasswordOpen]=useState(false),[nextPassword,setNextPassword]=useState('');
   const loadMe=useCallback(async()=>{
     const data=await request('/auth/me');setUser(data.user);setIsAdmin(!!data.isAdmin);
   },[]);
@@ -57,6 +57,7 @@ export default function AuthGate({children}){
     }catch(err){setError(err.message);}finally{setBusy(false);}
   };
   const logout=async()=>{try{await request('/auth/logout',{method:'POST'});}catch(_){}clearSession();setUser(null);setIsAdmin(false);setAdminOpen(false);};
+  const changePassword=async(e)=>{e.preventDefault();setMemberBusy(true);setError('');try{await request('/auth/password',{method:'POST',body:JSON.stringify({password:nextPassword})});setNextPassword('');setPasswordOpen(false);setNotice('密碼已更新。');}catch(err){setError(err.message);}finally{setMemberBusy(false);}};
   const loadMembers=async()=>{setMemberBusy(true);try{const data=await request('/admin/members');setMembers(data.users||[]);}catch(e){setError(e.message);}finally{setMemberBusy(false);}};
   const createMember=async(e)=>{e.preventDefault();setMemberBusy(true);setError('');try{await request('/admin/members',{method:'POST',body:JSON.stringify({email:newEmail,password:newPassword})});setNewEmail('');setNewPassword('');await loadMembers();}catch(err){setError(err.message);}finally{setMemberBusy(false);}};
   const toggleMember=async(member)=>{setMemberBusy(true);setError('');try{await request('/admin/members/'+member.id+'/'+(member.banned_until?'enable':'disable'),{method:'POST'});await loadMembers();}catch(err){setError(err.message);}finally{setMemberBusy(false);}};
@@ -73,7 +74,7 @@ export default function AuthGate({children}){
     {error&&<div style={styles.error}>{error}</div>}{notice&&<div style={styles.notice}>{notice}</div>}
     <div style={styles.foot}>會員資料由 Supabase Auth 管理；未登入無法讀取市場 API。管理員可建立及停用會員。</div>
   </div></div>;
-  return <><div style={styles.userbar}><span>{user.email}{isAdmin?' · 管理員':''}</span>{isAdmin&&<button style={styles.smallBtn} onClick={()=>{setAdminOpen(true);setError('');loadMembers();}}>會員管理</button>}<button style={styles.smallBtn} onClick={logout}>登出</button></div>{adminOpen&&<div style={styles.overlay}><div style={styles.modal}>
+  return <><div style={styles.userbar}><span>{user.email}{isAdmin?' · 管理員':''}</span><button style={styles.smallBtn} onClick={()=>{setPasswordOpen(true);setError('');setNotice('');}}>修改密碼</button>{isAdmin&&<button style={styles.smallBtn} onClick={()=>{setAdminOpen(true);setError('');loadMembers();}}>會員管理</button>}<button style={styles.smallBtn} onClick={logout}>登出</button></div>{adminOpen&&<div style={styles.overlay}><div style={styles.modal}>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}><h2 style={{margin:0}}>會員管理</h2><button style={styles.smallBtn} onClick={()=>setAdminOpen(false)}>關閉</button></div>
     <form onSubmit={createMember} style={styles.createForm}><input style={styles.input} type="email" placeholder="會員 Email" value={newEmail} onChange={e=>setNewEmail(e.target.value)} required/><input style={styles.input} type="password" minLength={10} placeholder="初始密碼（至少 10 字元）" value={newPassword} onChange={e=>setNewPassword(e.target.value)} required/><button style={styles.submit} disabled={memberBusy}>新增會員</button></form>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'14px 0 8px'}}><b>會員清單</b><button style={styles.smallBtn} onClick={loadMembers}>重新整理</button></div>
@@ -81,6 +82,7 @@ export default function AuthGate({children}){
     {members.length===0&&<p style={{color:'#94a3b8'}}>尚無會員資料，或正在載入。</p>}{error&&<div style={styles.error}>{error}</div>}
     {!config?.adminManagementConfigured&&<div style={styles.notice}>請在 Render 設定 SUPABASE_SERVICE_ROLE_KEY，才能新增／停用會員。</div>}
   </div></div>}
+  {passwordOpen&&<div style={styles.overlay}><form onSubmit={changePassword} style={styles.modal}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><h2 style={{margin:0}}>修改密碼</h2><button type="button" style={styles.smallBtn} onClick={()=>setPasswordOpen(false)}>關閉</button></div><label style={{...styles.label,marginTop:16}}>新密碼<input style={styles.input} type="password" minLength={10} value={nextPassword} onChange={e=>setNextPassword(e.target.value)} required placeholder="至少 10 個字元"/></label><button style={{...styles.submit,marginTop:12}} disabled={memberBusy}>更新密碼</button>{error&&<div style={styles.error}>{error}</div>}</form></div>}
   {children}</>;
 }
 const styles={
