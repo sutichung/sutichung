@@ -540,9 +540,7 @@ async function route(req,res){
       const months=(revenue||[]).map(x=>({date:String(x.date||''),revenue:Number(x.revenue),year:Number(x.revenue_year),month:Number(x.revenue_month)})).filter(x=>x.date&&Number.isFinite(x.revenue)).sort((a,b)=>a.date.localeCompare(b.date));
       const monthMap=new Map(months.map(x=>[x.year+'-'+x.month,x.revenue]));
       const monthlyRevenue=months.slice(-24).map(x=>({date:x.date,revenue:x.revenue,yoy:monthMap.has((x.year-1)+'-'+x.month)&&monthMap.get((x.year-1)+'-'+x.month)!==0?(x.revenue/monthMap.get((x.year-1)+'-'+x.month)-1)*100:null}));
-      const debtRatio=balanceSummary?.totalAssets>0&&balanceSummary?.totalLiabilities!=null?balanceSummary.totalLiabilities/balanceSummary.totalAssets*100:null;
-      const currentRatio=balanceSummary?.currentLiabilities>0&&balanceSummary?.currentAssets!=null?balanceSummary.currentAssets/balanceSummary.currentLiabilities:null;
-      const dividendHistory=(dividends||[]).slice(-12);
+      const dividendHistory=(dividends||[]).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).slice(0,12);
       return {company:officialCompany,profile:{description:officialCompany.businessDescription,descriptionNote:officialCompany.businessDescription?'公司業務簡介取自證交所公開公司基本資料。':'官方公司基本資料未提供可用的營業項目欄位；請以公開資訊觀測站公司基本資料／年報為準。',mopsUrl:officialCompany.mopsUrl},financials:{incomeAsOf:latestIncome,balanceAsOf:latestBalance,cashAsOf:latestCash,income:incomeSummary,balance:balanceSummary,cash:cashSummary,debtRatio,currentRatio,grossMargin,operatingMargin,netMargin,valuation,monthlyRevenue,dividends:dividendHistory},datasetErrors,source:'FinMind 財報／月營收／股利資料；公司清單 TWSE／TPEx',timestamp:now(),periodType:'財報為季資料；月營收為月資料'};
     },e=>({error:e.message,company:null,financials:null,source:'unavailable',timestamp:now()}));
     return json(res,result.error?503:200,result);
