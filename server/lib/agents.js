@@ -27,34 +27,62 @@ async function runAgent(provider, prompt, env) {
     deepseek: { key: env.DEEPSEEK_API_KEY, model: env.DEEPSEEK_MODEL || 'deepseek-flash' }
   };
   const config = configs[provider];
-  if (!config.key) return { provider, model: config.model, status: 'not_configured', message: '尚未設定 ' + provider.toUpperCase() + ' API Key' };
+  if (!config) return { provider, status: 'error', message: '未知 AI Agent' };
   const system = '你是台灣股票市場獨立研究分析員。只能根據提供的行情、K線與籌碼數據判讀；不可捏造新聞、即時報價或未提供的資料。不要輸出隱藏思維鏈，只回傳可公開的結論、可核對依據、看多理由、看空理由、風險與失效條件。若資料不足，direction 必須為「中性」，confidence 降低。score 是方向強度評分，不是勝率或機率。只輸出 JSON，欄位：direction(看多/看空/中性),score(0-100),confidence(0-100),summary,bullReasons(最多4項),bearReasons(最多4項),logic(最多5項),risks(最多3項),invalidation,scenarios。scenarios 必須是 JSON 物件，含 bullish/neutral/bearish 三種劇本；每種包含 trigger(觸發條件)、action(應對)、targetPrice(可由提供資料合理推導才填數字，否則 null)、stopPrice(可合理推導才填數字，否則 null)、risk(主要風險)。不得捏造目標價或停損價，資料不足時填 null 並說明。';
-  let raw = '';
-  if (provider === 'gemini') {
-    const result = await postJson('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(config.model) + ':generateContent', {
-      systemInstruction: { parts: [{ text: system }] },
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 1200 }
-    }, { 'x-goog-api-key': config.key });
-    raw = (result.candidates && result.candidates[0] && result.candidates[0].content && result.candidates[0].content.parts || []).map(part => part.text || '').join('');
-    if (!raw) {
-      const reason = result.promptFeedback && result.promptFeedback.blockReason;
-      const finish = result.candidates && result.candidates[0] && result.candidates[0].finishReason;
-      throw new Error('Gemini 未回傳可用分析內容' + (reason ? '；封鎖原因：' + reason : '') + (finish ? '；結束原因：' + finish : ''));
+  let raw = '', actualModel = config.model, engine = provider.toUpperCase(), primaryError = null;
+  const useOpenRouter = async () => {
+    const model = env.OPENROUTER_MODEL || 'openrouter/free';
+    const result = await postJson('https://openrouter.ai/api/v1/chat/completions', {
+      model,
+      messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }],
+      temperature: 0.2, max_tokens: 1100, response_format: { type: 'json_object' }
+    }, { Authorization: 'Bearer ' + env.OPENROUTER_API_KEY, 'HTTP-Referer': env.OPENROUTER_SITE_URL || 'https://taiwan-stock-hunter-o3tt.onrender.com', 'X-Title': 'Taiwan Stock AI Research' });
+    const content = result.choices && result.choices[0] && result.choices[0].message && result.choices[0].message.content || '';
+    if (!content) throw new Error('OpenRouter 免費模型沒有回傳分析內容');
+    return { raw: content, model: result.model || model, engine: 'OpenRouter 免費模型備援' };
+  };
+  if (config.key) {
+    try {
+      if (provider === 'gemini') {
+        const result = await postJson('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(config.model) + ':generateContent', {
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{ role: 'user', parts: [{ text: prompt }] },
+          generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 1200 }
+        }, { 'x-goog-api-key': config.key });
+        raw = (result.candidates && result.candidates[0] && result.candidates[0].content && result.candidates[0].content.parts || []).map(part => part.text || '').join('');
+        if (!raw) {
+          const reason = result.promptFeedback && result.promptFeedback.blockReason;
+          const finish = result.candidates && result.candidates[0] && result.candidates[0].finishReason;
+          throw new Error('Gemini 未回傳可用分析內容' + (reason ? '；封鎖原因：' + reason : '') + (finish ? '；結束原因：' + finish : ''));
+        }
+      } else {
+        const body = { model: config.model, messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }], temperature: 0.2, max_tokens: 1100, response_format: { type: 'json_object' } };
+        if (provider === 'deepseek') body.thinking = { type: 'disabled' };
+        const url = provider === 'grok' ? 'https://api.x.ai/v1/chat/completions' : 'https://api.deepseek.com/chat/completions';
+        const result = await postJson(url, body, { Authorization: 'Bearer ' + config.key });
+        raw = result.choices && result.choices[0] && result.choices[0].message && result.choices[0].message.content || '';
+        if (!raw) throw new Error(provider + ' 未回傳分析內容');
+      }
+    } catch (error) { primaryError = error; }
+  }
+  if (!raw && env.OPENROUTER_API_KEY) {
+    try {
+      const fallback = await useOpenRouter();
+      raw = fallback.raw; actualModel = fallback.model; engine = fallback.engine;
+    } catch (error) {
+      return { provider, status: 'error', message: '原模型' + (primaryError ? '失敗：' + primaryError.message + '；' : '未設定；') + 'OpenRouter 備援也失敗：' + error.message };
     }
-  } else {
-    const body = { model: config.model, messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }], temperature: 0.2, max_tokens: 1100, response_format: { type: 'json_object' } };
-    if (provider === 'deepseek') body.thinking = { type: 'disabled' };
-    const url = provider === 'grok' ? 'https://api.x.ai/v1/chat/completions' : 'https://api.deepseek.com/chat/completions';
-    const result = await postJson(url, body, { Authorization: 'Bearer ' + config.key });
-    raw = result.choices && result.choices[0] && result.choices[0].message && result.choices[0].message.content || '';
+  }
+  if (!raw) {
+    if (primaryError) return { provider, status: 'error', message: String(primaryError.message || primaryError).slice(0, 220) };
+    return { provider, model: config.model, status: 'not_configured', message: '尚未設定 ' + provider.toUpperCase() + ' API Key；也未設定 OPENROUTER_API_KEY 免費模型備援' };
   }
   const parsed = parseAgentJson(raw);
   const score = Number(parsed.score), confidence = Number(parsed.confidence);
   const directions = ['看多', '看空', '中性'];
   const arr = (v, max) => Array.isArray(v) ? v.slice(0, max).map(String) : [];
   return {
-    provider, status: 'ok', model: config.model,
+    provider, status: 'ok', model: actualModel, engine,
     direction: directions.includes(parsed.direction) ? parsed.direction : '中性',
     score: Number.isFinite(score) ? Math.max(0, Math.min(100, Math.round(score))) : 50,
     confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(100, Math.round(confidence))) : 0,
