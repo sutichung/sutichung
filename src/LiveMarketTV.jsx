@@ -38,6 +38,6 @@ export default function LiveMarketTV(){
    <div style={{background:'#080d18',borderRadius:8,padding:18,textAlign:'center'}}>
     <div style={{fontSize:14,fontWeight:700,marginBottom:6}}>{channel.name}</div><div style={{fontSize:12,color:'#91a1b8',marginBottom:12}}>此來源提供官方直播頁，但未確認允許跨網域內嵌；為避免空白播放器，請從官方頁播放。</div><a href={channel.url} target="_blank" rel="noreferrer" style={{display:'inline-block',background:'#2563eb',color:'#fff',borderRadius:8,padding:'10px 16px',textDecoration:'none'}}>開啟官方直播（可播放聲音）↗</a>
    </div>}
-  <div style={{fontSize:11,color:'#91a1b8',lineHeight:1.7,marginTop:8}}>{channel.note}。首次播放請在播放器按播放並確認音量；瀏覽器會限制未經使用者互動的自動發聲。直播由原頻道提供，系統不轉播、不移除廣告或 DRM。</div>
+  <div style={{fontSize:11,color:'#91a1b8',lineHeight:1.7,marginTop:8}}>{channel.note}。首次播放請在播放器按播放並確認音量；瀏覽器會限制未經使用者互動的自動發聲。直播由原頻道提供，系統不轉播、不移除廣告或 DRM。注意：目前 AI 依行情、K線與籌碼資料分析，不會擅自擷取或自動聆聽第三方直播音訊；要做語音轉錄分析，需取得授權的 HLS／字幕來源。</div>
  </section>;
 }
