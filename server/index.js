@@ -306,6 +306,26 @@ async function openSourceMarketHistory(){
 
 function validateSymbol(s){return /^[0-9A-Z]{2,10}$/.test(s||'');}
 function rateLimit(req){const ip=req.socket.remoteAddress||'unknown';const t=Date.now();let a=RATE.get(ip)||[];a=a.filter(x=>t-x<60000);if(a.length>=480)return false;a.push(t);RATE.set(ip,a);return true;}
+
+async function loadOpenArchiveStockHistory(symbol, kind='price_tpex') {
+  const dates=archiveDates(120);
+  const rows=await mapLimit(dates,8,async date=>{
+    try{
+      const doc=await fetchOpenArchive(kind,date);
+      const fields=doc.fields||[],values=doc.rows?.[symbol];
+      if(!Array.isArray(values))return null;
+      const idx={open:fields.indexOf('open'),high:fields.indexOf('high'),low:fields.indexOf('low'),close:fields.indexOf('close'),volume:fields.indexOf('volume_shares')};
+      if(Object.values(idx).some(i=>i<0))return null;
+      const candle={time:doc.trade_date,open:Number(values[idx.open]),high:Number(values[idx.high]),low:Number(values[idx.low]),close:Number(values[idx.close]),volume:Number(values[idx.volume])};
+      if(![candle.open,candle.high,candle.low,candle.close,candle.volume].every(Number.isFinite)||candle.close<=0||candle.high<=0||candle.low<=0||candle.high<Math.max(candle.low,candle.close)||candle.low>Math.min(candle.high,candle.close)||candle.volume<0)return null;
+      return candle;
+    }catch(_){return null;}
+  });
+  const data=rows.filter(Boolean).sort((a,b)=>a.time.localeCompare(b.time)).slice(-240);
+  if(data.length<60)throw new Error('官方開放資料歷史庫中此上櫃股票不足 60 根有效日K，暫不能計算完整技術指標');
+  return {data,source:'TPEx 官方日行情開放資料歸檔（非即時日K）',timestamp:now(),asOf:data.at(-1).time,indicators:indicators(data)};
+}
+
 async function loadStockHistory(symbol){
   let data=[],source='';
   if(FINMIND_TOKEN){
@@ -314,6 +334,9 @@ async function loadStockHistory(symbol){
     data=rows.map(x=>({time:x.date,open:Number(x.open),high:Number(x.max),low:Number(x.min),close:Number(x.close),volume:Number(x.Trading_Volume)})).filter(x=>[x.open,x.high,x.low,x.close,x.volume].every(Number.isFinite)).slice(-240);
     source='FinMind TaiwanStockPrice（日資料，非逐筆即時）';
   }else{
+    const listed=await safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],error:e.message}));
+    const issuer=(listed.data||[]).find(x=>x.symbol===symbol);
+    if(issuer?.exchange==='TPEx')return loadOpenArchiveStockHistory(symbol,'price_tpex');
     const months=[];for(let i=0;i<8;i++){const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-i);months.push(d.toISOString().slice(0,7)+'-01');}
     const pages=await mapLimit(months,3,async month=>{
       const date=month.replace(/-/g,'').slice(0,6)+'01';
@@ -321,12 +344,14 @@ async function loadStockHistory(symbol){
       const payload=await fetchJson(url,12000,{'User-Agent':'Mozilla/5.0','Referer':'https://www.twse.com.tw/','Accept':'application/json'});
       return (payload.data||[]).map(r=>{const parts=String(r[0]||'').split('/');const day=parts.length===3?String(Number(parts[0])+1911)+'-'+String(parts[1]).padStart(2,'0')+'-'+String(parts[2]).padStart(2,'0'):'';const n=v=>Number(String(v??'').replace(/,/g,'').trim());return {time:day,volume:n(r[1]),open:n(r[3]),high:n(r[4]),low:n(r[5]),close:n(r[6])};}).filter(x=>x.time&&[x.open,x.high,x.low,x.close,x.volume].every(Number.isFinite));
     });
-    data=pages.flat().sort((a,b)=>a.time.localeCompare(b.time)).slice(-240);source='TWSE 官方 STOCK_DAY 月日線（日資料，非逐筆即時）';
-    if(data.length<20)throw new Error('TWSE 個股歷史日線不足 20 根');
+    data=pages.flat().sort((a,b)=>a.time.localeCompare(b.time)).slice(-240);
+    source='TWSE 官方 STOCK_DAY 月日線（日資料，非逐筆即時）';
+    if(data.length<60&&issuer?.exchange!=='TWSE')return loadOpenArchiveStockHistory(symbol,'price_tpex');
   }
-  if(!data.length)throw new Error('沒有可供分析的歷史K線');
+  if(data.length<60)throw new Error('個股官方歷史日線不足 60 根，暫不能計算完整技術指標');
   return {data,source,timestamp:now(),asOf:data.at(-1).time,indicators:indicators(data)};
 }
+
 async function route(req,res){
   const u=new URL(req.url,'http://localhost');
   if(req.method!=='GET'){return json(res,405,{error:'method_not_allowed'});}
@@ -566,7 +591,8 @@ async function route(req,res){
       const applicableHealthCandidates=isFinancialIndustry?healthCandidates.filter(x=>['EPS','稅後淨利率','月營收年增率'].includes(x[0])):healthCandidates;
       const availableHealth=applicableHealthCandidates.filter(x=>x[1]!=null&&Number.isFinite(Number(x[1])));
       const healthScore=availableHealth.length?Math.round(50+availableHealth.reduce((sum,x)=>sum+x[2](Number(x[1])),0)/availableHealth.length*50):null;
-      const financialHealth={score:availableHealth.length>=4?healthScore:null,coverage:availableHealth.length,total:applicableHealthCandidates.length,status:availableHealth.length<4?'資料不足':healthScore>=65?'偏強':healthScore<=35?'偏弱':'中性',note:isFinancialIndustry?'金融保險業不套用一般產業負債比、流動比及現金流門檻。':'一般產業簡易財務檢查，未作同業標準化；需搭配產業特性與多年趨勢判讀。'};
+      const healthMinimumCoverage=Math.min(4,applicableHealthCandidates.length);
+      const financialHealth={score:availableHealth.length>=healthMinimumCoverage?healthScore:null,coverage:availableHealth.length,total:applicableHealthCandidates.length,status:availableHealth.length<healthMinimumCoverage?'資料不足':healthScore>=65?'偏強':healthScore<=35?'偏弱':'中性',note:isFinancialIndustry?'金融保險業不套用一般產業負債比、流動比及現金流門檻。':'一般產業簡易財務檢查，未作同業標準化；需搭配產業特性與多年趨勢判讀。'};
       return {company:officialCompany,profile:{description:officialCompany.businessDescription,descriptionNote:officialCompany.businessDescription?'公司業務簡介取自證交所公開公司基本資料。':'官方公司基本資料未提供可用的營業項目欄位；請以公開資訊觀測站公司基本資料／年報為準。',mopsUrl:officialCompany.mopsUrl},financials:{incomeAsOf:latestIncome,balanceAsOf:latestBalance,cashAsOf:latestCash,income:incomeSummary,balance:balanceSummary,cash:cashSummary,debtRatio,currentRatio,grossMargin,operatingMargin,netMargin,financialHealth,valuation,monthlyRevenue,dividends:dividendHistory},datasetErrors,source:'FinMind 財報／月營收／股利資料；公司清單 TWSE／TPEx',timestamp:now(),periodType:'財報為季資料；月營收為月資料'};
     },e=>({error:e.message,company:null,financials:null,source:'unavailable',timestamp:now()}));
     return json(res,result.error?503:200,result);
@@ -587,34 +613,7 @@ async function route(req,res){
   if(u.pathname.startsWith('/api/market/history/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop());
     if(!validateSymbol(symbol))return json(res,400,{error:'invalid_symbol'});
-    const key='history:'+symbol;
-    const result=await safeLoad(key,TTL.history,async()=>{
-      let data=[],source='';
-      if(FINMIND_TOKEN){
-        const d=new Date();d.setDate(d.getDate()-260);const start=d.toISOString().slice(0,10);
-        const rows=await finmind('TaiwanStockPrice',{data_id:symbol,start_date:start});
-        data=rows.map(x=>({time:x.date,open:Number(x.open),high:Number(x.max),low:Number(x.min),close:Number(x.close),volume:Number(x.Trading_Volume)})).filter(x=>[x.open,x.high,x.low,x.close,x.volume].every(Number.isFinite)).slice(-240);
-        source='FinMind TaiwanStockPrice（日資料，非逐筆即時）';
-      }else{
-        const months=[];
-        for(let i=0;i<8;i++){const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-i);months.push(d.toISOString().slice(0,7)+'-01');}
-        const pages=await mapLimit(months,3,async month=>{
-          const date=month.replace(/-/g,'').slice(0,6)+'01';
-          const url='https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date='+date+'&stockNo='+encodeURIComponent(symbol)+'&response=json';
-          const payload=await fetchJson(url,12000,{'User-Agent':'Mozilla/5.0','Referer':'https://www.twse.com.tw/','Accept':'application/json'});
-          return (payload.data||[]).map(r=>{
-            const parts=String(r[0]||'').split('/');
-            const day=parts.length===3?String(Number(parts[0])+1911)+'-'+String(parts[1]).padStart(2,'0')+'-'+String(parts[2]).padStart(2,'0'):'';
-            const n=v=>Number(String(v??'').replace(/,/g,'').trim());
-            return {time:day,volume:n(r[1]),open:n(r[3]),high:n(r[4]),low:n(r[5]),close:n(r[6])};
-          }).filter(x=>x.time&&[x.open,x.high,x.low,x.close,x.volume].every(Number.isFinite));
-        });
-        data=pages.flat().sort((a,b)=>a.time.localeCompare(b.time)).slice(-240);
-        source='TWSE 官方 STOCK_DAY 月日線（日資料，非逐筆即時）';
-        if(data.length<60)throw new Error('證交所個股歷史日線不足 60 根，暫不能計算完整技術指標');
-      }
-      return {data,indicators:indicators(data),source,timestamp:now()};
-    },e=>({data:[],indicators:null,source:'unavailable',timestamp:now(),error:e.message}));
+    const result=await safeLoad('history:'+symbol,TTL.history,()=>loadStockHistory(symbol),e=>({data:[],indicators:null,source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
   }
   if(u.pathname==='/api/market/institutional-flows'){
@@ -634,9 +633,12 @@ async function route(req,res){
         const normalize=(q,session)=>{
           if(!q||typeof q!=='object')return null;
           const timestamp=toIso(q.lastUpdated||q.lastTrade?.time||q.closeTime);
-          const staleQuote=!timestamp||!Number.isFinite(Date.parse(timestamp))||Date.now()-Date.parse(timestamp)>5*60*1000;
-          const last=q.isTrial||staleQuote?null:(Number(q.lastPrice??q.closePrice)>0?Number(q.lastPrice??q.closePrice):null);
-          return {symbol:q.symbol||'TXF1!',name:q.name||'臺股期貨近月',last,change:Number.isFinite(Number(q.change))?Number(q.change):null,changePct:Number.isFinite(Number(q.changePercent))?Number(q.changePercent):null,previousClose:Number(q.previousClose)>0?Number(q.previousClose):null,open:Number(q.openPrice)>0?Number(q.openPrice):null,high:Number(q.highPrice)>0?Number(q.highPrice):null,low:Number(q.lowPrice)>0?Number(q.lowPrice):null,volume:Number(q.total?.tradeVolume??0),timestamp,date:q.date||null,isTrial:!!q.isTrial,stale:staleQuote,quoteType:staleQuote?'stale':'realtime',session};
+          const quoteAge=timestamp?Date.now()-Date.parse(timestamp):Infinity;
+          const staleQuote=!Number.isFinite(quoteAge)||quoteAge < -30000||quoteAge>5*60*1000;
+          const rawLast=Number(q.lastPrice);
+          const hasLastTrade=Number.isFinite(rawLast)&&rawLast>0;
+          const last=q.isTrial||staleQuote||!hasLastTrade?null:rawLast;
+          return {symbol:q.symbol||'TXF1!',name:q.name||'臺股期貨近月',last,change:Number.isFinite(Number(q.change))?Number(q.change):null,changePct:Number.isFinite(Number(q.changePercent))?Number(q.changePercent):null,previousClose:Number(q.previousClose)>0?Number(q.previousClose):null,open:Number(q.openPrice)>0?Number(q.openPrice):null,high:Number(q.highPrice)>0?Number(q.highPrice):null,low:Number(q.lowPrice)>0?Number(q.lowPrice):null,volume:Number(q.total?.tradeVolume??0),timestamp,date:q.date||null,isTrial:!!q.isTrial,stale:staleQuote,quoteType:staleQuote?'stale':q.isTrial?'trial':!hasLastTrade?'no-trade':'realtime',session};
         };
         try{
           const q=await fetchJson(base+'/intraday/quote/TXF1!?session=afterhours',8000,headers);
