@@ -77,7 +77,18 @@ async function runAgent(provider, prompt, env) {
     if (primaryError) return { provider, status: 'error', message: String(primaryError.message || primaryError).slice(0, 220) };
     return { provider, model: config.model, status: 'not_configured', message: '尚未設定 ' + provider.toUpperCase() + ' API Key；也未設定 OPENROUTER_API_KEY 免費模型備援' };
   }
-  const parsed = parseAgentJson(raw);
+  let parsed;
+  try { parsed = parseAgentJson(raw); }
+  catch (error) {
+    if (!env.OPENROUTER_API_KEY || engine === 'OpenRouter 免費模型備援') return { provider, status: 'error', message: 'AI 回覆格式錯誤：' + error.message };
+    try {
+      const fallback = await useOpenRouter();
+      raw = fallback.raw; actualModel = fallback.model; engine = fallback.engine;
+      parsed = parseAgentJson(raw);
+    } catch (fallbackError) {
+      return { provider, status: 'error', message: '原模型 JSON 格式錯誤；OpenRouter 備援失敗：' + fallbackError.message };
+    }
+  }
   const score = Number(parsed.score), confidence = Number(parsed.confidence);
   const directions = ['看多', '看空', '中性'];
   const arr = (v, max) => Array.isArray(v) ? v.slice(0, max).map(String) : [];
