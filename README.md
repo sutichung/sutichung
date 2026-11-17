@@ -35,7 +35,7 @@
 自訂 URL 必須回傳 JSON，資料契約範例見下方：
 - 行情：`{source, timestamp, data: {"2330": {price, changePct, volume, timestamp}}}`
 - 全市場掃描：`{source, timestamp, data: {"2330": {rsi, trend, macd, signal, volumeRatio}}}`
-- 籌碼：`{source, timestamp, data: {"2330": {foreignNet, trustNet, dealerNet, institutionalNet, largeHolderPct, marginChange, shortChange, asOf}}}`
+- 籌碼：`{source, timestamp, data: {"2330": {foreignNet, trustNet, dealerNet, institutionalNet, largeHolderPct, largeHolderChangePct, retailBias, marginChange, shortChange, asOf}}}`
 - 台指期：`{source, timestamp, data: {last, changePct, openInterestChange, asOf}}`
 - 情緒：`{source, timestamp, data: {fearGreed, label, retailBias, advanceDecline, asOf}}`
 
