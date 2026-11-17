@@ -1,6 +1,6 @@
 {
   "name": "taiwan-stock-hunter",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "dependencies": {
     "lucide-react": "^0.344.0",
@@ -10,6 +10,9 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build"
-  }
+    "build": "react-scripts build",
+    "server": "node server/index.js",
+    "test:server": "node --test server/test/*.test.js"
+  },
+  "proxy": "http://localhost:8787"
 }
