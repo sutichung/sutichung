@@ -14,7 +14,7 @@ const FUGLE_BASE = process.env.FUGLE_BASE_URL || 'https://api.fugle.tw/marketdat
 const CACHE = new Map();
 const PENDING = new Map();
 const RATE = new Map();
-const TTL = { universe: 6*60*60*1000, snapshot: 5000, history: 5*60*1000, flows: 60*1000, futures: 1000, sentiment: 15000, news: 60000 };
+const TTL = { universe: 6*60*60*1000, snapshot: 5000, scan: 15000, history: 5*60*1000, flows: 60*1000, futures: 1000, sentiment: 15000, news: 60000 };
 const now = () => new Date().toISOString();
 const json = (res, status, body) => { res.writeHead(status, {'content-type':'application/json; charset=utf-8','cache-control':'no-store'}); res.end(JSON.stringify(body)); };
 function cached(key, ttl) { const x=CACHE.get(key); return x && Date.now()-x.time<ttl ? x.value : null; }
@@ -24,12 +24,12 @@ async function fetchJson(url, timeoutMs=8000, extraHeaders={}) {
   try { const r=await fetch(url,{signal:controller.signal,headers:{accept:'application/json',...extraHeaders}}); if(!r.ok) throw new Error('upstream_http_'+r.status); return await r.json(); }
   finally { clearTimeout(timer); }
 }
-async function finmind(dataset, extra={}) {
+async function finmind(dataset, extra={}, timeoutMs=8000) {
   if(!FINMIND_TOKEN) throw new Error('未設定 FINMIND_TOKEN');
   const u=new URL(FINMIND_BASE); u.searchParams.set('dataset',dataset);
   u.searchParams.set('token',FINMIND_TOKEN);
   for(const [k,v] of Object.entries(extra)) if(v!==undefined&&v!==null&&v!=='')u.searchParams.set(k,String(v));
-  const payload=await fetchJson(u.toString());
+  const payload=await fetchJson(u.toString(),timeoutMs);
   if(payload.status!==200 && payload.status!==undefined) throw new Error('FinMind status '+payload.status);
   return Array.isArray(payload.data)?payload.data:[];
 }
@@ -79,7 +79,20 @@ async function route(req,res){
     return json(res,200,result);
   }
   if(u.pathname==='/api/market/scan'){
-    const result=await safeLoad('scan',TTL.history,async()=>{const x=await external('MARKET_SCAN_URL','未設定全市場掃描供應商 MARKET_SCAN_URL');const timestamp=x.timestamp||now();const raw=x.data||{};const data={};for(const [symbol,row] of Object.entries(raw)){if(!row||typeof row!=='object')continue;data[symbol]={...row,scorecard:scoreStock({...row,asOf:row.asOf||timestamp,fearGreed:row.fearGreed??x.fearGreed,advanceDecline:row.advanceDecline??x.advanceDecline,futuresChangePct:row.futuresChangePct??x.futuresChangePct})};}return {data,source:x.source||'Configured full-market scanner',timestamp,scannedCount:Object.keys(data).length};},e=>({data:{},source:'unavailable',timestamp:now(),scannedCount:0,error:e.message}));
+    const result=await safeLoad('scan',TTL.scan,async()=>{
+      let x;
+      if(process.env.MARKET_SCAN_URL){x=await external('MARKET_SCAN_URL','');}
+      else if(FINMIND_TOKEN){
+        const d=new Date();d.setDate(d.getDate()-180);const start=d.toISOString().slice(0,10);
+        const rows=await finmind('TaiwanStockPrice',{start_date:start},45000);
+        if(!rows.length)throw new Error('FinMind 全市場日資料為空；此功能需要支援省略 data_id 的全市場方案');
+        const grouped=new Map();for(const r of rows){const symbol=String(r.stock_id||r.data_id||'');if(!validateSymbol(symbol))continue;const candle={time:r.date,open:Number(r.open),high:Number(r.max),low:Number(r.min),close:Number(r.close),volume:Number(r.Trading_Volume)};if(![candle.open,candle.high,candle.low,candle.close,candle.volume].every(Number.isFinite))continue;if(!grouped.has(symbol))grouped.set(symbol,[]);grouped.get(symbol).push(candle);}
+        const quotes=stale('snapshot')?.data||{};const data={};
+        for(const [symbol,candles] of grouped){candles.sort((a,b)=>String(a.time).localeCompare(String(b.time)));if(candles.length<60)continue;const ind=indicators(candles);if(!ind)continue;const last=candles.at(-1),quote=quotes[symbol]||{};const price=Number.isFinite(Number(quote.price))?Number(quote.price):last.close;const close5=candles.at(-6)?.close,close20=candles.at(-21)?.close;const row={...ind,price,changePct:quote.changePct,volume:quote.volume,return5dPct:close5?((last.close/close5)-1)*100:null,return20dPct:close20?((last.close/close20)-1)*100:null,priceVsEma20Pct:ind.ema20?((price/ind.ema20)-1)*100:null,priceVsEma60Pct:ind.ema60?((price/ind.ema60)-1)*100:null,asOf:quote.timestamp||null,technicalAsOf:last.time};row.scorecard=scoreStock({...row,asOf:row.asOf,maxAgeMs:180000});data[symbol]=row;}
+        return {data,source:'FinMind all-market daily history + live quote overlay',timestamp:now(),scannedCount:Object.keys(data).length,historyAsOf:rows.at(-1)?.date||null};
+      } else {throw new Error('請設定 MARKET_SCAN_URL，或提供具備全市場查詢權限的 FINMIND_TOKEN');}
+      const timestamp=x.timestamp||now();const raw=x.data||{};const data={};for(const [symbol,row] of Object.entries(raw)){if(!row||typeof row!=='object')continue;data[symbol]={...row,scorecard:scoreStock({...row,asOf:row.asOf||timestamp,fearGreed:row.fearGreed??x.fearGreed,advanceDecline:row.advanceDecline??x.advanceDecline,futuresChangePct:row.futuresChangePct??x.futuresChangePct})};}return {data,source:x.source||'Configured full-market scanner',timestamp,scannedCount:Object.keys(data).length};
+    },e=>({data:{},source:'unavailable',timestamp:now(),scannedCount:0,error:e.message}));
     return json(res,200,result);
   }
   if(u.pathname.startsWith('/api/market/history/')){
