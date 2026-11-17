@@ -30,7 +30,7 @@
 - `GET /api/market/sentiment`：優先使用 FinMind CNN Fear & Greed（日資料，需 Backer 以上），否則使用 `MARKET_SENTIMENT_URL`。
 - `GET /api/market/news`：優先使用 FinMind TaiwanStockNews，否則使用 `MARKET_NEWS_URL`。
 
-全市場掃描資料每檔可提供 `trend, macd, signal, rsi, volumeRatio, institutionalNet, foreignNet, trustNet, dealerNet, marginChange, shortChange`；亦可提供全市場 `fearGreed, advanceDecline, futuresChangePct`。後端會回傳 `scorecard`（0–100 多空方向分數、信心覆蓋率、方向與原因）。分數是透明規則式研究排序，不是勝率；時間戳過期或覆蓋率不足時只顯示觀望。
+全市場掃描資料每檔可提供 `trend, macd, signal, rsi, volumeRatio, institutionalNet, foreignNet, trustNet, dealerNet, marginChange, shortChange, pe, pb, dividendYield, trustFlowPct5d, foreignFlowPct5d`；亦可提供全市場 `fearGreed, advanceDecline, futuresChangePct`。後端會回傳 `scorecard`（0–100 多空方向分數、信心覆蓋率、方向與原因）。分數是透明規則式研究排序，不是勝率；時間戳過期或覆蓋率不足時只顯示觀望。
 
 自訂 URL 必須回傳 JSON，資料契約範例見下方：
 - 行情：`{source, timestamp, data: {"2330": {price, changePct, volume, timestamp}}}`
@@ -44,9 +44,10 @@
 - TWSE OpenAPI：<https://openapi.twse.com.tw/>
 - TPEx OpenAPI：<https://www.tpex.org.tw/openapi/>
 - TAIFEX OpenAPI：<https://openapi.taifex.com.tw/>
-- 非凡新聞官方直播：<https://news.ustv.com.tw/livevideo>
+- 非凡新聞台官方直播：<https://news.ustv.com.tw/livevideo>
+- 非凡商業台官方財經直播：<https://biz.ustv.com.tw/livevideo>
 
-Fugle 全市場快照上游每五秒更新一次；前端每秒輪詢只代表每秒向本系統詢問一次，不代表上游每秒有新成交。FinMind 日 K、法人、融資融券與恐懼貪婪資料屬日資料，不應標成逐秒更新。全市場日 K、法人與融資融券批次查詢需 FinMind Backer 以上；FinMind 方案及資料授權請見官方 [方案價格](https://finmind.github.io/Pricing/) 與 [商業使用規範](https://finmind.github.io/CommercialUse/)。Fugle 全市場快照需 Developer 或 Advanced 方案，官方快照更新頻率為五秒，方案與價格請見 [Fugle 方案](https://developer.fugle.tw/docs/pricing/)。即時期貨與主力分點資料仍需另有相應授權。新聞 iframe 可能受官方網站 CSP/X-Frame-Options 限制，系統保留官方頁面連結作為備援。
+Fugle 全市場快照上游每五秒更新一次；前端每秒輪詢只代表每秒向本系統詢問一次，不代表上游每秒有新成交。FinMind 日 K、法人、融資融券與恐懼貪婪資料屬日資料，不應標成逐秒更新。全市場日 K、法人與融資融券批次查詢需 FinMind Backer 以上；FinMind 方案及資料授權請見官方 [方案價格](https://finmind.github.io/Pricing/) 與 [商業使用規範](https://finmind.github.io/CommercialUse/)。Fugle 全市場快照需 Developer 或 Advanced 方案，官方快照更新頻率為五秒，方案與價格請見 [Fugle 方案](https://developer.fugle.tw/docs/pricing/)。即時期貨與主力分點資料仍需另有相應授權。前端提供非凡商業台（財經 24 小時直播）與非凡新聞台兩個官方直播來源切換；官方網站可能限制第三方 iframe 嵌入，若播放器空白可開啟官方頁面。
 
 ## 降低預測錯誤率的防呆原則
 1. 資料時間戳過期、欄位缺漏、OHLC 不合理、歷史不足 60 根時，不產生有效訊號。
