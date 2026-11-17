@@ -200,7 +200,7 @@ function rateLimit(req){const ip=req.socket.remoteAddress||'unknown';const t=Dat
 async function route(req,res){
   const u=new URL(req.url,'http://localhost');
   if(req.method!=='GET'){return json(res,405,{error:'method_not_allowed'});}
-  if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),providers:{finmind:!!FINMIND_TOKEN,fugle:!!FUGLE_API_KEY,realtime:true,twseMisFallback:true,scan:!!FINMIND_TOKEN||!!process.env.MARKET_SCAN_URL,flows:!!FINMIND_TOKEN||!!process.env.MARKET_FLOWS_URL,futures:!!FINMIND_TOKEN||!!process.env.MARKET_FUTURES_URL,sentiment:!!FINMIND_TOKEN||!!process.env.MARKET_SENTIMENT_URL,news:!!FINMIND_TOKEN||!!process.env.MARKET_NEWS_URL},mode:process.env.NODE_ENV==='production'?'production':'development'});
+  if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),providers:{finmind:!!FINMIND_TOKEN,fugle:!!FUGLE_API_KEY,realtime:true,twseMisFallback:true,scan:true,flows:true,futures:!!FINMIND_TOKEN||!!process.env.MARKET_FUTURES_URL,sentiment:!!FINMIND_TOKEN||!!process.env.MARKET_SENTIMENT_URL,news:!!FINMIND_TOKEN||!!process.env.MARKET_NEWS_URL},mode:process.env.NODE_ENV==='production'?'production':'development'});
   if(u.pathname==='/api/trading/readiness')return json(res,200,getTradingReadiness());
   if(u.pathname==='/api/market/universe'){
     const result=await safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],source:'unavailable',timestamp:now(),error:e.message}));
@@ -246,8 +246,8 @@ async function route(req,res){
         }
         return {data,source:x.source||'Configured full-market scanner',timestamp:timestamp||now(),scannedCount:Object.keys(data).length,advanceDecline:x.advanceDecline??advanceDecline};
       }
-      if(!FINMIND_TOKEN)throw new Error('請設定 MARKET_SCAN_URL，或提供具備全市場查詢權限的 FINMIND_TOKEN');
-      const base=await safeLoad('all-market-history',6*60*60*1000,async()=>{
+      const base=await safeLoad(FINMIND_TOKEN?'all-market-history':'open-source-market-history',FINMIND_TOKEN?6*60*60*1000:12*60*60*1000,async()=>{
+        if(!FINMIND_TOKEN)return await openSourceMarketHistory();
         const tradingDates=await finmind('TaiwanStockTradingDate',{},15000);
         const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date());
         const localTime=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Taipei',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date());
@@ -277,23 +277,34 @@ async function route(req,res){
       if(listed.error||!listed.data?.length)throw new Error(listed.error||'無法取得證交所上市股票清單');
       const twseSymbols=new Set(listed.data.map(x=>x.symbol));
       const perResult=await safeLoad('all-market-per',6*60*60*1000,async()=>{
-        const rows=await finmind('TaiwanStockPER',{start_date:base.historyAsOf},20000);
         const data={};
-        for(const r of rows){const symbol=String(r.stock_id||'');if(!validateSymbol(symbol))continue;const date=String(r.date||'');if(!data[symbol]||date>String(data[symbol].date||''))data[symbol]={date,pe:Number(r.PER),pb:Number(r.PBR),dividendYield:Number(r.dividend_yield)};}
-        return {data,asOf:base.historyAsOf};
+        if(FINMIND_TOKEN){
+          const rows=await finmind('TaiwanStockPER',{start_date:base.historyAsOf},20000);
+          for(const r of rows){const symbol=String(r.stock_id||'');if(!validateSymbol(symbol))continue;const date=String(r.date||'');if(!data[symbol]||date>String(data[symbol].date||''))data[symbol]={date,pe:Number(r.PER),pb:Number(r.PBR),dividendYield:Number(r.dividend_yield)};}
+          return {data,asOf:base.historyAsOf,source:'FinMind TaiwanStockPER'};
+        }
+        const rows=await fetchJson('https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL',12000);
+        for(const r of rows||[]){
+          const symbol=String(r.Code||r['證券代號']||r['股票代號']||'');if(!validateSymbol(symbol))continue;
+          const pick=(re)=>{const k=Object.keys(r).find(key=>re.test(key));return k?twseNumber(r[k]):null;};
+          const pe=pick(/PEratio|本益比/),pb=pick(/PBratio|股價淨值比/),yieldPct=pick(/DividendYield|殖利率/);
+          data[symbol]={date:base.historyAsOf,pe,pb,dividendYield:yieldPct};
+        }
+        return {data,asOf:base.historyAsOf,source:'TWSE OpenAPI BWIBBU_ALL'};
       },e=>({data:{},error:e.message}));
-      const quotes=stale('snapshot')?.data||{},flows=stale('flows')?.data||{},sentiment=stale('sentiment')?.data||{},futures=stale('futures')?.data||{},data={};
+      const flowResult=await safeLoad('flows',TTL.flows,()=>twseInstitutionalFlows(),e=>({data:{},error:e.message}));
+      const quotes=stale('snapshot')?.data||{},flows=flowResult.data||stale('flows')?.data||{},sentiment=stale('sentiment')?.data||{},futures=stale('futures')?.data||{},data={};
       const fiveDay=Object.values(base.data||{}).map(x=>Number(x.return5dPct)).filter(Number.isFinite),adv=fiveDay.filter(v=>v>0).length,dec=fiveDay.filter(v=>v<0).length,advanceDecline=adv/Math.max(1,dec);
       for(const [symbol,technical] of Object.entries(base.data||{})){
         if(!twseSymbols.has(symbol))continue;
         const quote=quotes[symbol]||{},flow=flows[symbol]||{},valuation=perResult.data?.[symbol]||{},price=quote.price!=null&&Number.isFinite(Number(quote.price))&&Number(quote.price)>0?Number(quote.price):null;
         const trustFlowPct5d=Number.isFinite(Number(flow.trustNet5d))&&technical.volume5d>0?(Number(flow.trustNet5d)/technical.volume5d)*100:null;
         const foreignFlowPct5d=Number.isFinite(Number(flow.foreignNet5d))&&technical.volume5d>0?(Number(flow.foreignNet5d)/technical.volume5d)*100:null;
-        const row={...technical,...flow,...valuation,pe:valuation.pe,pb:valuation.pb,dividendYield:valuation.dividendYield,trustFlowPct5d,foreignFlowPct5d,signal:technical.macdSignal,price,changePct:quote.changePct,volume:quote.volume,asOf:quote.timestamp||null,priceVsEma20Pct:price!==null&&technical.ema20?((price/technical.ema20)-1)*100:null,priceVsEma60Pct:price!==null&&technical.ema60?((price/technical.ema60)-1)*100:null};
-        row.scorecard=scoreStock({...row,asOf:row.asOf,maxAgeMs:180000,fearGreed:sentiment.fearGreed,advanceDecline:sentiment.advanceDecline??advanceDecline,futuresChangePct:futures.changePct});
+        const row={...technical,...flow,...valuation,pe:valuation.pe,pb:valuation.pb,dividendYield:valuation.dividendYield,trustFlowPct5d,foreignFlowPct5d,signal:technical.macdSignal,price,changePct:quote.changePct,volume:quote.volume,asOf:quote.timestamp||technical.asOf||null,priceVsEma20Pct:price!==null&&technical.ema20?((price/technical.ema20)-1)*100:null,priceVsEma60Pct:price!==null&&technical.ema60?((price/technical.ema60)-1)*100:null};
+        row.scorecard=scoreStock({...row,asOf:row.asOf,maxAgeMs:36*60*60*1000,fearGreed:sentiment.fearGreed,advanceDecline:sentiment.advanceDecline??advanceDecline,futuresChangePct:futures.changePct});
         data[symbol]=row;
       }
-      return {data,source:'FinMind TWSE-listed daily history + TSE live quote overlay',timestamp:now(),scannedCount:Object.keys(data).length,historyAsOf:base.historyAsOf,advanceDecline};
+      return {data,source:(base.source||'FinMind')+' + TWSE 即時行情／公開估值／籌碼',timestamp:now(),scannedCount:Object.keys(data).length,historyAsOf:base.historyAsOf,historyCount:base.historyCount||Object.keys(base.data||{}).length,advanceDecline};
     },e=>({data:{},source:'unavailable',timestamp:now(),scannedCount:0,error:e.message}));
     if(result.stale&&result.data){const safeData={};for(const [symbol,row] of Object.entries(result.data)){const card=row?.scorecard||{};safeData[symbol]={...row,scorecard:{...card,direction:'觀望',status:'insufficient-data',fresh:false,reasons:[...(card.reasons||[]),'全市場掃描快取已過期，暫停方向判斷']}};}return json(res,200,{...result,data:safeData});}
     return json(res,200,result);
