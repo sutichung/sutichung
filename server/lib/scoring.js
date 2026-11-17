@@ -92,6 +92,8 @@ function scoreStock(input={}) {
   if(finite(input.return5dPct)) add(5,Number(input.return5dPct)>=0?1:-1,'近五日報酬偏強','近五日報酬偏弱');
   if(finite(input.return20dPct)) add(5,Number(input.return20dPct)>=0?1:-1,'近二十日報酬偏強','近二十日報酬偏弱');
 
+  if(finite(input.dailyChangePct)&&Math.abs(Number(input.dailyChangePct))>=8.5)reasons.push('單日漲跌幅達 8.5% 以上，隔日沖與波動風險提高；不因此追價');
+
   const scoreValue=Math.round(clamp(score));
   const confidence=Math.round(covered/total*100);
   const asOf=Date.parse(input.asOf||'');
