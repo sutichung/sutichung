@@ -55,7 +55,7 @@
 
 ## 財經直播中心與自動 AI 分析（2026.11.17.12）
 
-- 官方 YouTube 直播嵌入：57 東森財經、SBN 全球財經台、非凡商業台、寰宇財經新聞、TVBS 財經。
+- 官方 YouTube 頻道入口：57 東森財經、SBN 全球財經台、非凡商業台、寰宇財經新聞、TVBS 財經。免 API Key 時以官方 `/live` 連結外開；站內嵌入需當次直播影片 ID。
 - 官方外開直播：三立財經 iNEWS、非凡新聞台。若來源網站禁止 iframe，系統保留官方連結，不繞過限制。
 - 有聲播放由官方播放器控制；瀏覽器通常要求使用者點播放／解除靜音。
 - HLS 播放器採 hls.js 開源方案，支援加入已授權的 HLS `.m3u8` 來源；需串流伺服器允許 CORS。設定方式見 `docs/AI_AGENTS_SETUP.md`。
@@ -71,7 +71,7 @@
 - 非凡新聞台官方直播：<https://news.ustv.com.tw/livevideo>
 - 非凡商業台官方財經直播：<https://biz.ustv.com.tw/livevideo>
 
-Fugle 全市場快照上游每五秒更新一次；前端每秒輪詢只代表每秒向本系統詢問一次，不代表上游每秒有新成交。FinMind 日 K、法人、融資融券與恐懼貪婪資料屬日資料，不應標成逐秒更新。FinMind 官方免費方案列有 PER/PBR、個股法人買賣超、融資融券與月營收等資料集；但全市場批次查詢的可用範圍、請求額度與速率仍以實際 API 權限及回應為準。系統不會自動升級或付費；遇到權限不足即顯示資料不足並停止使用該因子。PER/PBR 資料約於交易日 18:00 更新，不是盤中即時估值。請見官方 [方案價格](https://finmind.github.io/Pricing/)、[PER/PBR 資料說明](https://finmind.github.io/v3/tutor/TaiwanMarket/Technical/) 與 [商業使用規範](https://finmind.github.io/CommercialUse/)。Fugle 全市場快照需 Developer 或 Advanced 方案，官方快照更新頻率為五秒，方案與價格請見 [Fugle 方案](https://developer.fugle.tw/docs/pricing/)。即時期貨與主力分點資料仍需另有相應授權。前端提供非凡商業台（財經 24 小時直播）與非凡新聞台兩個官方直播來源切換；官方網站可能限制第三方 iframe 嵌入，若播放器空白可開啟官方頁面。
+Fugle 全市場快照上游每五秒更新一次；前端每秒輪詢只代表每秒向本系統詢問一次，不代表上游每秒有新成交。FinMind 日 K、法人、融資融券與恐懼貪婪資料屬日資料，不應標成逐秒更新。FinMind 官方免費方案列有 PER/PBR、個股法人買賣超、融資融券與月營收等資料集；但全市場批次查詢的可用範圍、請求額度與速率仍以實際 API 權限及回應為準。系統不會自動升級或付費；遇到權限不足即顯示資料不足並停止使用該因子。PER/PBR 資料約於交易日 18:00 更新，不是盤中即時估值。請見官方 [方案價格](https://finmind.github.io/Pricing/)、[PER/PBR 資料說明](https://finmind.github.io/v3/tutor/TaiwanMarket/Technical/) 與 [商業使用規範](https://finmind.github.io/CommercialUse/)。Fugle 全市場快照需 Developer 或 Advanced 方案，官方快照更新頻率為五秒，方案與價格請見 [Fugle 方案](https://developer.fugle.tw/docs/pricing/)。即時期貨與主力分點資料仍需另有相應授權。前端提供多個 YouTube 官方 `/live` 連結及非凡商業台、非凡新聞台官方直播頁；YouTube 頻道連結不需 Data API Key。站內 HLS 播放僅支援已獲授權且開放 CORS 的串流。
 
 ## 降低預測錯誤率的防呆原則
 1. 資料時間戳過期、欄位缺漏、OHLC 不合理、歷史不足 60 根時，不產生有效訊號。
