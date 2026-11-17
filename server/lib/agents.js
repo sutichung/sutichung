@@ -91,6 +91,7 @@ async function buildAiCommittee(symbol, options) {
       netMargin:options.fundamentals.financials.netMargin??null,
       debtRatio:options.fundamentals.financials.debtRatio??null,
       currentRatio:options.fundamentals.financials.currentRatio??null,
+      financialHealth:options.fundamentals.financials.financialHealth||null,
       operatingCashFlow:options.fundamentals.financials.cash?.operatingCashFlow??null,
       cashFlowPeriodBasis:options.fundamentals.financials.cash?.periodBasis||null,
       valuation:options.fundamentals.financials.valuation||null
