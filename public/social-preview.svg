@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#07111f"/><stop offset="1" stop-color="#102b4b"/></linearGradient><linearGradient id="line" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#22c55e"/><stop offset="1" stop-color="#60a5fa"/></linearGradient></defs>
+<rect width="1200" height="630" fill="url(#bg)"/><circle cx="1030" cy="80" r="260" fill="#1d4ed8" opacity=".12"/><circle cx="180" cy="590" r="250" fill="#10b981" opacity=".08"/>
+<path d="M70 440 L220 390 L340 420 L470 300 L600 340 L730 210 L850 255 L1010 120 L1130 160" fill="none" stroke="url(#line)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M70 440 L220 390 L340 420 L470 300 L600 340 L730 210 L850 255 L1010 120 L1130 160 L1130 560 L70 560Z" fill="#38bdf8" opacity=".07"/>
+<rect x="72" y="70" width="250" height="42" rx="21" fill="#12395a" stroke="#2563eb"/><text x="197" y="98" fill="#93c5fd" font-size="20" text-anchor="middle" font-family="Arial,sans-serif" letter-spacing="3">TAIWAN STOCK AI</text>
+<text x="72" y="205" fill="#f8fafc" font-size="66" font-weight="700" font-family="Arial,'Noto Sans TC',sans-serif">台股 AI 智慧操盤中樞</text>
+<text x="76" y="260" fill="#bfdbfe" font-size="29" font-family="Arial,'Noto Sans TC',sans-serif">全市場掃描・法人籌碼・台指期・三方 AI 分析</text>
+<g font-family="Arial,'Noto Sans TC',sans-serif" font-size="22"><rect x="74" y="500" width="205" height="52" rx="12" fill="#123b2e" stroke="#16a34a"/><text x="176" y="534" text-anchor="middle" fill="#86efac">即時行情分級</text><rect x="296" y="500" width="205" height="52" rx="12" fill="#172f52" stroke="#3b82f6"/><text x="398" y="534" text-anchor="middle" fill="#bfdbfe">多空風險劇本</text><rect x="518" y="500" width="205" height="52" rx="12" fill="#3b2b17" stroke="#d97706"/><text x="620" y="534" text-anchor="middle" fill="#fde68a">不以假資料補值</text></g>
+<text x="1125" y="590" fill="#64748b" font-size="16" text-anchor="end" font-family="Arial,sans-serif">TAIWAN STOCK HUNTER</text></svg>
