@@ -15,7 +15,7 @@ const FUGLE_BASE = process.env.FUGLE_BASE_URL || 'https://api.fugle.tw/marketdat
 const CACHE = new Map();
 const PENDING = new Map();
 const RATE = new Map();
-const TTL = { universe: 6*60*60*1000, snapshot: 5000, scan: 5000, history: 5*60*1000, flows: 30*60*1000, futures: 5*60*1000, sentiment: 30*60*1000, news: 5*60*1000 };
+const TTL = { universe: 6*60*60*1000, snapshot: 10000, scan: 10000, history: 5*60*1000, flows: 30*60*1000, futures: 5*60*1000, sentiment: 30*60*1000, news: 5*60*1000 };
 const now = () => new Date().toISOString();
 const json = (res, status, body) => { res.writeHead(status, {'content-type':'application/json; charset=utf-8','cache-control':'no-store'}); res.end(JSON.stringify(body)); };
 function cached(key, ttl) { const x=CACHE.get(key); return x && Date.now()-x.time<ttl ? x.value : null; }
