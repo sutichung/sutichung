@@ -388,7 +388,11 @@ async function route(req,res){
     if(!SUPABASE_CONFIGURED)return json(res,503,{error:'Supabase 尚未設定'});
     const origin=(req.headers['x-forwarded-proto']||'https')+'://'+(req.headers['x-forwarded-host']||req.headers.host);
     const target=new URL(SUPABASE_URL+'/auth/v1/authorize');target.searchParams.set('provider',oauthMatch[1]);target.searchParams.set('redirect_to',origin+'/');
-    res.writeHead(302,{Location:target.toString(),'Cache-Control':'no-store'});return res.end();
+    const upstream=await fetch(target.toString(),{headers:{apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+SUPABASE_ANON_KEY},redirect:'manual',signal:AbortSignal.timeout(12000)});
+    const location=upstream.headers.get('location');
+    if(upstream.status>=300&&upstream.status<400&&location){res.writeHead(302,{Location:location,'Cache-Control':'no-store'});return res.end();}
+    const detail=(await upstream.text()).slice(0,300);
+    return json(res,502,{error:'Supabase OAuth 初始化失敗：'+(detail||'請確認 Apple／Facebook Provider 設定')});
   }
   if(u.pathname==='/api/auth/phone/start'&&req.method==='POST'){
     if(!SUPABASE_CONFIGURED)return json(res,503,{error:'會員服務尚未設定'});
