@@ -26,7 +26,7 @@ async function fetchJson(url, timeoutMs=8000, extraHeaders={}) {
   finally { clearTimeout(timer); }
 }
 async function twseMisSnapshot(){
-  const listed=await safeLoad('universe',TTL.universe,async()=>({data:currentTwseRows(await finmind('TaiwanStockInfo')),source:'FinMind TaiwanStockInfo',timestamp:now()}));
+  const listed=await safeLoad('universe',TTL.universe,async()=>({data:(await twseListedUniverse()).data,source:'FinMind TaiwanStockInfo',timestamp:now()}));
   const symbols=(listed.data||[]).map(x=>x.symbol).filter(x=>/^[0-9]{4,6}$/.test(x));
   if(!symbols.length)throw new Error('無上市股票清單，無法連接證交所行情');
   const chunks=[];for(let i=0;i<symbols.length;i+=80)chunks.push(symbols.slice(i,i+80));
@@ -72,21 +72,27 @@ async function safeLoad(key, ttl, loader, fallback) {
 async function mapLimit(items,limit,worker){const out=new Array(items.length);let next=0;await Promise.all(Array.from({length:Math.min(limit,items.length)},async()=>{while(true){const i=next++;if(i>=items.length)return;out[i]=await worker(items[i],i);}}));return out;}
 function currentTwseRows(rows){
   const latest=new Map();
-  for(const row of rows){
-    const symbol=String(row.stock_id||'');
-    if(!/^[0-9]{4,6}$/.test(symbol)||String(row.type||'').toLowerCase()!=='twse')continue;
-    if(['大盤','Index','所有證券'].includes(String(row.industry_category||'')))continue;
-    const previous=latest.get(symbol);
-    if(!previous||String(row.date||'')>=String(previous.date||''))latest.set(symbol,row);
+  for(const row of rows||[]){
+    const symbol=String(row.stock_id||row['公司代號']||row['股票代號']||row['有價證券代號']||row['代號']||'').trim();
+    if(!/^[0-9]{4,6}$/.test(symbol))continue;
+    if(String(row.type||'').toLowerCase() && String(row.type).toLowerCase()!=='twse')continue;
+    const name=row.stock_name||row['公司簡稱']||row['有價證券名稱']||row['公司名稱']||symbol;
+    latest.set(symbol,{symbol,name,sector:row.industry_category||row['產業別']||'未分類',exchange:'TWSE'});
   }
-  return [...latest.values()].map(row=>({symbol:String(row.stock_id),name:row.stock_name||row.stock_id,sector:row.industry_category||'未分類',exchange:'TWSE'}));
+  return [...latest.values()];
+}
+async function twseListedUniverse(){
+  const rows=await fetchJson('https://openapi.twse.com.tw/v1/opendata/t187ap03_L',10000);
+  const data=currentTwseRows(rows);
+  if(!data.length)throw new Error('證交所上市公司清單沒有回傳有效資料');
+  return {data,source:'TWSE OpenAPI 上市公司清單',timestamp:now()};
 }
 function validateSymbol(s){return /^[0-9A-Z]{2,10}$/.test(s||'');}
 function rateLimit(req){const ip=req.socket.remoteAddress||'unknown';const t=Date.now();let a=RATE.get(ip)||[];a=a.filter(x=>t-x<60000);if(a.length>=480)return false;a.push(t);RATE.set(ip,a);return true;}
 async function route(req,res){
   const u=new URL(req.url,'http://localhost');
   if(req.method!=='GET'){return json(res,405,{error:'method_not_allowed'});}
-  if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),providers:{finmind:!!FINMIND_TOKEN,fugle:!!FUGLE_API_KEY,realtime:!!FUGLE_API_KEY||!!process.env.MARKET_REALTIME_URL,scan:!!FINMIND_TOKEN||!!process.env.MARKET_SCAN_URL,flows:!!FINMIND_TOKEN||!!process.env.MARKET_FLOWS_URL,futures:!!FINMIND_TOKEN||!!process.env.MARKET_FUTURES_URL,sentiment:!!FINMIND_TOKEN||!!process.env.MARKET_SENTIMENT_URL,news:!!FINMIND_TOKEN||!!process.env.MARKET_NEWS_URL},mode:process.env.NODE_ENV==='production'?'production':'development'});
+  if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),providers:{finmind:!!FINMIND_TOKEN,fugle:!!FUGLE_API_KEY,realtime:!!FUGLE_API_KEY||!!process.env.MARKET_REALTIME_URL||true,twseMisFallback:true,scan:!!FINMIND_TOKEN||!!process.env.MARKET_SCAN_URL,flows:!!FINMIND_TOKEN||!!process.env.MARKET_FLOWS_URL,futures:!!FINMIND_TOKEN||!!process.env.MARKET_FUTURES_URL,sentiment:!!FINMIND_TOKEN||!!process.env.MARKET_SENTIMENT_URL,news:!!FINMIND_TOKEN||!!process.env.MARKET_NEWS_URL},mode:process.env.NODE_ENV==='production'?'production':'development'});
   if(u.pathname==='/api/trading/readiness')return json(res,200,getTradingReadiness());
   if(u.pathname==='/api/market/universe'){
     const result=await safeLoad('universe',TTL.universe,async()=>{
@@ -102,7 +108,7 @@ async function route(req,res){
         const markets=['TSE'];
         const payloads=await Promise.all(markets.map(async market=>{const u=new URL(FUGLE_BASE+'/snapshot/quotes/'+market);return fetchJson(u.toString(),8000,{'X-API-KEY':FUGLE_API_KEY});}));
         const data={};for(const payload of payloads){for(const row of (payload.data||[])){if(!row.symbol)continue;const stamp=Number(row.lastUpdated);data[String(row.symbol)]={symbol:String(row.symbol),name:row.name||String(row.symbol),price:Number.isFinite(Number(row.lastPrice??row.closePrice))&&Number(row.lastPrice??row.closePrice)>0?Number(row.lastPrice??row.closePrice):null,changePct:Number.isFinite(Number(row.changePercent))?Number(row.changePercent):null,volume:Number(row.tradeVolume),timestamp:Number.isFinite(stamp)&&stamp>0?new Date(stamp/1000).toISOString():now(),market:payload.market};}}
-        return {data,source:'Fugle market-wide snapshot quotes (TSE + OTC; upstream refresh every 5 seconds)',timestamp:now(),delayed:false};
+        return {data,source:'Fugle market-wide snapshot quotes (TSE; upstream refresh every 5 seconds)',timestamp:now(),delayed:false};
       }
       if(process.env.MARKET_REALTIME_URL){
         const x=await external('MARKET_REALTIME_URL','');
