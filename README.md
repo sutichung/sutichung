@@ -22,8 +22,8 @@
 ## API
 - `GET /api/health`：服務健康狀態、Node 版本、執行模式與各資料供應商是否已設定。
 - `GET /api/market/universe`：FinMind TaiwanStockInfo 股票清單（需 FINMIND_TOKEN）。
-- `GET /api/market/snapshot`：授權即時行情服務；需 MARKET_REALTIME_URL。
-- `GET /api/market/scan`：全市場指標摘要服務；需 MARKET_SCAN_URL。回傳 `{data: {"2330": {rsi,trend,macd,signal,volumeRatio}}}`。
+- `GET /api/market/snapshot`：優先使用 Fugle TSE/OTC 全市場快照（`FUGLE_API_KEY`），否則使用 `MARKET_REALTIME_URL`。
+- `GET /api/market/scan`：優先使用 FinMind 全市場日 K + Fugle 即時快照計算所有股票分數；FinMind 方案不足時可改接 `MARKET_SCAN_URL`。回傳每檔 `scorecard`。
 - `GET /api/market/history/:symbol?interval=1d&limit=120`：FinMind TaiwanStockPrice 日 K 歷史資料（需 FINMIND_TOKEN）。
 - `GET /api/market/institutional-flows`：法人、大戶級距、融資融券；需 MARKET_FLOWS_URL。
 - `GET /api/market/futures`：台指期行情與未平倉；需 MARKET_FUTURES_URL。
@@ -46,7 +46,7 @@
 - TAIFEX OpenAPI：<https://openapi.taifex.com.tw/>
 - 非凡新聞官方直播：<https://news.ustv.com.tw/livevideo>
 
-FinMind 日 K 資料不是逐筆即時行情。前端每秒輪詢只代表每秒向本系統詢問一次，不代表供應商每秒有新成交。正式逐秒／逐筆報價、即時期貨、全市場逐股掃描與法人籌碼需要有相應授權及 API 配額。新聞 iframe 可能受官方網站 CSP/X-Frame-Options 限制，系統保留官方頁面連結作為備援。
+Fugle 全市場快照上游每五秒更新一次；前端每秒輪詢只代表每秒向本系統詢問一次，不代表上游每秒有新成交。FinMind 日 K 資料不是逐筆即時行情。前端每秒輪詢只代表每秒向本系統詢問一次，不代表供應商每秒有新成交。正式逐秒／逐筆報價、即時期貨、全市場逐股掃描與法人籌碼需要有相應授權及 API 配額。新聞 iframe 可能受官方網站 CSP/X-Frame-Options 限制，系統保留官方頁面連結作為備援。
 
 ## 降低預測錯誤率的防呆原則
 1. 資料時間戳過期、欄位缺漏、OHLC 不合理、歷史不足 60 根時，不產生有效訊號。
