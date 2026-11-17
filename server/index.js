@@ -15,7 +15,7 @@ const FUGLE_BASE = process.env.FUGLE_BASE_URL || 'https://api.fugle.tw/marketdat
 const CACHE = new Map();
 const PENDING = new Map();
 const RATE = new Map();
-const TTL = { universe: 6*60*60*1000, snapshot: 10000, scan: 10000, history: 5*60*1000, flows: 30*60*1000, futures: 5*60*1000, sentiment: 30*60*1000, news: 5*60*1000 };
+const TTL = { universe: 6*60*60*1000, snapshot: 10000, scan: 10000, history: 5*60*1000, flows: 5*60*1000, futures: 5*60*1000, sentiment: 30*60*1000, news: 5*60*1000 };
 const now = () => new Date().toISOString();
 const json = (res, status, body) => { res.writeHead(status, {'content-type':'application/json; charset=utf-8','cache-control':'no-store'}); res.end(JSON.stringify(body)); };
 function cached(key, ttl) { const x=CACHE.get(key); return x && Date.now()-x.time<ttl ? x.value : null; }
@@ -98,6 +98,60 @@ async function twseListedUniverse(){
   if(!data.length)throw new Error('證交所上市公司清單沒有回傳有效資料');
   return {data,source:'TWSE OpenAPI 上市公司清單',timestamp:now()};
 }
+
+function twseNumber(value){const n=Number(String(value??'').replace(/,/g,'').trim());return Number.isFinite(n)?n:0;}
+function twseField(fields,pattern,fallback){const i=(fields||[]).findIndex(x=>pattern.test(String(x)));return i>=0?i:fallback;}
+async function twseInstitutionalDay(date){
+  const ymd=date.replace(/-/g,'');
+  const url='https://www.twse.com.tw/rwd/zh/fund/T86?response=json&date='+ymd+'&selectType=ALL&_= '+Date.now();
+  const payload=await fetchJson(url.replace('&_= ','&_='),12000,{'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36','Referer':'https://www.twse.com.tw/','Accept':'application/json, text/plain, */*'});
+  const table=(payload.tables||[]).find(t=>Array.isArray(t.data)&&t.data.length)||payload;
+  const fields=table.fields||payload.fields||[];
+  const rows=table.data||payload.data||[];
+  if(!Array.isArray(rows)||!rows.length)return {date,rows:[]};
+  const idx={
+    symbol:twseField(fields,/證券代號/,0),
+    foreign:twseField(fields,/外陸資買賣超股數.*不含外資自營商/,4),
+    foreignDealer:twseField(fields,/外資自營商買賣超股數/,7),
+    trust:twseField(fields,/投信買賣超股數/,10),
+    dealer:twseField(fields,/自營商買賣超股數.*自行買賣/,13),
+    dealerHedge:twseField(fields,/自營商買賣超股數.*避險/,16)
+  };
+  return {date,rows:rows.map(r=>({symbol:String(Array.isArray(r)?r[idx.symbol]:r['證券代號']||r['股票代號']||''),foreign:twseNumber(Array.isArray(r)?r[idx.foreign]:r['外陸資買賣超股數']),foreignDealer:twseNumber(Array.isArray(r)?r[idx.foreignDealer]:r['外資自營商買賣超股數']),trust:twseNumber(Array.isArray(r)?r[idx.trust]:r['投信買賣超股數']),dealer:twseNumber(Array.isArray(r)?r[idx.dealer]:r['自營商買賣超股數(自行買賣)']),dealerHedge:twseNumber(Array.isArray(r)?r[idx.dealerHedge]:r['自營商買賣超股數(避險)'])})).filter(x=>/^[0-9]{4,6}$/.test(x.symbol))};
+}
+async function twseInstitutionalFlows(){
+  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date());
+  const dates=[];
+  for(let i=0;i<14;i++){const d=new Date(today+'T12:00:00+08:00');d.setDate(d.getDate()-i);dates.push(new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(d));}
+  const daily=await mapLimit(dates,3,async date=>{try{return await twseInstitutionalDay(date);}catch(e){return {date,rows:[],error:e.message};}});
+  const valid=daily.filter(x=>x.rows.length).sort((a,b)=>a.date.localeCompare(b.date)).slice(-5);
+  if(!valid.length)throw new Error('TWSE T86 三大法人日報暫無可用資料：'+(daily.find(x=>x.error)?.error||'近 14 日沒有有效交易日資料'));
+  const data={};
+  for(const day of valid)for(const r of day.rows){
+    const x=data[r.symbol]||(data[r.symbol]={asOf:day.date,foreignNet:0,trustNet:0,dealerNet:0,foreignNet5d:0,trustNet5d:0,dealerNet5d:0,institutionalNet:0,institutionalNet5d:0});
+    const foreign=r.foreign+r.foreignDealer,dealer=r.dealer+r.dealerHedge,total=foreign+r.trust+dealer;
+    x.foreignNet5d+=foreign;x.trustNet5d+=r.trust;x.dealerNet5d+=dealer;x.institutionalNet5d+=total;
+    if(day.date===valid.at(-1).date){x.asOf=day.date;x.foreignNet=foreign;x.trustNet=r.trust;x.dealerNet=dealer;x.institutionalNet=total;}
+  }
+  let marginAsOf=null;
+  try{
+    const marginRows=await fetchJson('https://openapi.twse.com.tw/v1/exchangeReport/MI_MARGN',12000);
+    for(const r of marginRows||[]){
+      const symbol=String(r['股票代號']||r['證券代號']||r['代號']||'');
+      if(!/^[0-9]{4,6}$/.test(symbol))continue;
+      const mNow=twseNumber(r['融資今日餘額']??r['融資餘額']??r['融資餘額(張)']);
+      const mPrev=twseNumber(r['融資前日餘額']??r['融資昨日餘額']);
+      const sNow=twseNumber(r['融券今日餘額']??r['融券餘額']??r['融券餘額(張)']);
+      const sPrev=twseNumber(r['融券前日餘額']??r['融券昨日餘額']);
+      const x=data[symbol]||(data[symbol]={asOf:marginAsOf||valid.at(-1).date});
+      if(mNow||mPrev)x.marginChange=mNow-mPrev;
+      if(sNow||sPrev)x.shortChange=sNow-sPrev;
+      marginAsOf=String(r['資料日期']||r['日期']||marginAsOf||'');
+    }
+  }catch(e){/* Keep valid T86 institutional data even if margin feed is temporarily unavailable. */}
+  return {data,source:'TWSE 官方 T86 三大法人日報 + MI_MARGN 融資融券',timestamp:now(),asOf:valid.at(-1).date,days:valid.map(x=>x.date),marginAsOf};
+}
+
 function validateSymbol(s){return /^[0-9A-Z]{2,10}$/.test(s||'');}
 function rateLimit(req){const ip=req.socket.remoteAddress||'unknown';const t=Date.now();let a=RATE.get(ip)||[];a=a.filter(x=>t-x<60000);if(a.length>=480)return false;a.push(t);RATE.set(ip,a);return true;}
 async function route(req,res){
@@ -215,27 +269,9 @@ async function route(req,res){
   }
   if(u.pathname==='/api/market/institutional-flows'){
     const result=await safeLoad('flows',TTL.flows,async()=>{
-      if(process.env.MARKET_FLOWS_URL){const x=await external('MARKET_FLOWS_URL','');return {data:x.data||{},source:x.source||'Configured flow provider',timestamp:x.timestamp||now()};}
-      if(!FINMIND_TOKEN)throw new Error('未設定 FINMIND_TOKEN 或 MARKET_FLOWS_URL');
-      const dates=await finmind('TaiwanStockTradingDate',{},15000);
-      const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date());
-      const localTime=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Taipei',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date());
-      const includeToday=localTime>='20:30';
-      const recent=dates.map(x=>String(x.date||'')).filter(x=>x&&x<=today&&(includeToday||x<today)).sort().slice(-5);
-      if(recent.length<5)throw new Error('近五個交易日資料不足，暫停法人籌碼評分');
-      const latestDate=recent.at(-1),previousDate=recent.at(-2);
-      const [inst,marginLatest,marginPrevious]=await Promise.all([
-        finmind('TaiwanStockInstitutionalInvestorsBuySell',{start_date:recent[0],end_date:latestDate},30000),
-        finmind('TaiwanStockMarginPurchaseShortSale',{start_date:latestDate},30000),
-        finmind('TaiwanStockMarginPurchaseShortSale',{start_date:previousDate,end_date:previousDate},30000)
-      ]);
-      const data={},latestInst=new Map();
-      for(const r of inst){const symbol=String(r.stock_id||'');if(!validateSymbol(symbol))continue;const prev=latestInst.get(symbol);if(!prev)latestInst.set(symbol,{rows:[r]});else prev.rows.push(r);}
-      for(const [symbol,group] of latestInst){const x={asOf:latestDate,foreignNet:0,trustNet:0,dealerNet:0,dealerNet5d:0,institutionalNet:0,foreignNet5d:0,trustNet5d:0,institutionalNet5d:0};for(const r of group.rows){const net=Number(r.buy||0)-Number(r.sell||0);if(!Number.isFinite(net))continue;x.institutionalNet5d+=net;const name=String(r.name||'').toLowerCase();if(name.includes('foreign'))x.foreignNet5d+=net;else if(name.includes('trust')||name.includes('investment'))x.trustNet5d+=net;else if(name.includes('dealer'))x.dealerNet5d+=net;if(String(r.date||'')===latestDate){x.institutionalNet+=net;if(name.includes('dealer'))x.dealerNet+=net;if(name.includes('foreign'))x.foreignNet+=net;else if(name.includes('trust')||name.includes('investment'))x.trustNet+=net;}}data[symbol]=x;}
-      const previousBySymbol=new Map(marginPrevious.map(r=>[String(r.stock_id||''),r]));
-      for(const r of marginLatest){const symbol=String(r.stock_id||'');if(!validateSymbol(symbol))continue;const prev=previousBySymbol.get(symbol);const x=data[symbol]||{asOf:latestDate};if(prev){x.marginChange=Number(r.MarginPurchaseTodayBalance||0)-Number(prev.MarginPurchaseTodayBalance||0);x.shortChange=Number(r.ShortSaleTodayBalance||0)-Number(prev.ShortSaleTodayBalance||0);}data[symbol]=x;}
-      return {data,source:'FinMind five-day institutional flows + daily margin/short-sale data',timestamp:now(),asOf:latestDate};
-    },e=>({data:{},source:'unavailable',timestamp:now(),error:e.message}));
+      if(process.env.MARKET_FLOWS_URL){const x=await external('MARKET_FLOWS_URL','');return {data:x.data||{},source:x.source||'Configured flow provider',timestamp:x.timestamp||now(),asOf:x.asOf||null};}
+      return await twseInstitutionalFlows();
+    },e=>({data:{},source:'unavailable',timestamp:now(),error:e.message,asOf:null}));
     return json(res,200,result);
   }
   if(u.pathname==='/api/market/futures'){
