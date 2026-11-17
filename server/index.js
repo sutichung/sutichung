@@ -495,7 +495,7 @@ async function route(req,res){
         capital:issuerProfile?.['實收資本額']||null,
         mopsUrl:'https://mops.twse.com.tw/mops/web/t05st03'
       };
-      if(!FINMIND_TOKEN)throw new Error('未設定 FINMIND_TOKEN；公司財報、月營收與股利資料暫不可用');
+      if(!FINMIND_TOKEN)return {company:officialCompany,profile:{description:officialCompany.businessDescription,descriptionNote:'尚未設定 FinMind Token；財務報表、月營收與股利資料暫不可用。',mopsUrl:officialCompany.mopsUrl},financials:null,error:'未設定 FINMIND_TOKEN；財報資料暫不可用',source:'TWSE／TPEx 官方公司基本資料',timestamp:now()};
       const startDate='2018-01-01';
       const [income,balance,cash,revenue,dividends]=await Promise.all([
         finmind('TaiwanStockFinancialStatements',{data_id:symbol,start_date:startDate},20000),
