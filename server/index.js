@@ -101,31 +101,49 @@ async function twseListedUniverse(){
 
 function twseNumber(value){const n=Number(String(value??'').replace(/,/g,'').trim());return Number.isFinite(n)?n:0;}
 function twseField(fields,pattern,fallback){const i=(fields||[]).findIndex(x=>pattern.test(String(x)));return i>=0?i:fallback;}
+function archiveDates(days=120){
+  const out=[];
+  for(let i=0;i<days;i++){const d=new Date();d.setUTCHours(0,0,0,0);d.setUTCDate(d.getUTCDate()-i);if(d.getUTCDay()!==0&&d.getUTCDay()!==6)out.push(d.toISOString().slice(0,10));}
+  return out;
+}
+async function fetchOpenArchive(kind,date){
+  const base=process.env.OPEN_DATA_ARCHIVE_URL||'https://raw.githubusercontent.com/88jiayu/tw-chip-open-data/main/data/official';
+  const doc=await fetchJson(base+'/'+kind+'/'+date+'.json',12000,{'User-Agent':'TaiwanStockDashboard/1.0','Accept':'application/json'});
+  if(!doc||doc.license!=='open'||doc.kind!==kind||doc.trade_date!==date||!doc.rows||typeof doc.rows!=='object')throw new Error('開放資料檔案格式或授權欄位不符');
+  return doc;
+}
+async function recentOpenArchive(kind,count=2){
+  const dates=archiveDates(18);
+  const docs=await mapLimit(dates,6,async date=>{try{return await fetchOpenArchive(kind,date);}catch(_){return null;}});
+  return docs.filter(Boolean).sort((a,b)=>a.trade_date.localeCompare(b.trade_date)).slice(-count);
+}
 async function twseInstitutionalDay(date){
   const ymd=date.replace(/-/g,'');
-  const url='https://www.twse.com.tw/rwd/zh/fund/T86?response=json&date='+ymd+'&selectType=ALL&_= '+Date.now();
-  const payload=await fetchJson(url.replace('&_= ','&_='),12000,{'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36','Referer':'https://www.twse.com.tw/','Accept':'application/json, text/plain, */*'});
+  const url='https://www.twse.com.tw/rwd/zh/fund/T86?response=json&date='+ymd+'&selectType=ALLBUT0999';
+  const payload=await fetchJson(url,12000,{'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36','Referer':'https://www.twse.com.tw/','Accept':'application/json, text/plain, */*'});
   const table=(payload.tables||[]).find(t=>Array.isArray(t.data)&&t.data.length)||payload;
   const fields=table.fields||payload.fields||[];
   const rows=table.data||payload.data||[];
+  if(payload.stat&&payload.stat!=='OK')return {date,rows:[]};
   if(!Array.isArray(rows)||!rows.length)return {date,rows:[]};
   const idx={
     symbol:twseField(fields,/證券代號/,0),
-    foreign:twseField(fields,/外陸資買賣超股數.*不含外資自營商/,4),
+    foreign:twseField(fields,/外陸資買賣超股數\\(不含外資自營商\\)/,4),
     foreignDealer:twseField(fields,/外資自營商買賣超股數/,7),
     trust:twseField(fields,/投信買賣超股數/,10),
-    dealer:twseField(fields,/自營商買賣超股數.*自行買賣/,13),
-    dealerHedge:twseField(fields,/自營商買賣超股數.*避險/,16)
+    dealer:twseField(fields,/自營商買賣超股數\\(自行買賣\\)/,13),
+    dealerHedge:twseField(fields,/自營商買賣超股數\\(避險\\)/,16)
   };
-  return {date,rows:rows.map(r=>({symbol:String(Array.isArray(r)?r[idx.symbol]:r['證券代號']||r['股票代號']||''),foreign:twseNumber(Array.isArray(r)?r[idx.foreign]:r['外陸資買賣超股數']),foreignDealer:twseNumber(Array.isArray(r)?r[idx.foreignDealer]:r['外資自營商買賣超股數']),trust:twseNumber(Array.isArray(r)?r[idx.trust]:r['投信買賣超股數']),dealer:twseNumber(Array.isArray(r)?r[idx.dealer]:r['自營商買賣超股數(自行買賣)']),dealerHedge:twseNumber(Array.isArray(r)?r[idx.dealerHedge]:r['自營商買賣超股數(避險)'])})).filter(x=>/^[0-9]{4,6}$/.test(x.symbol))};
+  return {date,rows:rows.map(r=>({symbol:String(Array.isArray(r)?r[idx.symbol]:r['證券代號']||''),foreign:twseNumber(Array.isArray(r)?r[idx.foreign]:r['外陸資買賣超股數(不含外資自營商)']),foreignDealer:twseNumber(Array.isArray(r)?r[idx.foreignDealer]:r['外資自營商買賣超股數']),trust:twseNumber(Array.isArray(r)?r[idx.trust]:r['投信買賣超股數']),dealer:twseNumber(Array.isArray(r)?r[idx.dealer]:r['自營商買賣超股數(自行買賣)']),dealerHedge:twseNumber(Array.isArray(r)?r[idx.dealerHedge]:r['自營商買賣超股數(避險)'])})).filter(x=>/^[0-9]{4,6}$/.test(x.symbol))};
 }
 async function twseInstitutionalFlows(){
-  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date());
-  const dates=[];
-  for(let i=0;i<14;i++){const d=new Date(today+'T12:00:00+08:00');d.setDate(d.getDate()-i);dates.push(new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(d));}
-  const daily=await mapLimit(dates,3,async date=>{try{return await twseInstitutionalDay(date);}catch(e){return {date,rows:[],error:e.message};}});
+  const candidates=archiveDates(16).slice(0,8);
+  const daily=await mapLimit(candidates,1,async(date,i)=>{
+    if(i)await new Promise(resolve=>setTimeout(resolve,1800));
+    try{return await twseInstitutionalDay(date);}catch(e){return {date,rows:[],error:e.message};}
+  });
   const valid=daily.filter(x=>x.rows.length).sort((a,b)=>a.date.localeCompare(b.date)).slice(-5);
-  if(!valid.length)throw new Error('TWSE T86 三大法人日報暫無可用資料：'+(daily.find(x=>x.error)?.error||'近 14 日沒有有效交易日資料'));
+  if(!valid.length)throw new Error('TWSE T86 三大法人日報無有效資料：'+(daily.find(x=>x.error)?.error||'近 8 個交易日候選日期沒有有效資料'));
   const data={};
   for(const day of valid)for(const r of day.rows){
     const x=data[r.symbol]||(data[r.symbol]={asOf:day.date,foreignNet:0,trustNet:0,dealerNet:0,foreignNet5d:0,trustNet5d:0,dealerNet5d:0,institutionalNet:0,institutionalNet5d:0});
@@ -135,21 +153,46 @@ async function twseInstitutionalFlows(){
   }
   let marginAsOf=null;
   try{
-    const marginRows=await fetchJson('https://openapi.twse.com.tw/v1/exchangeReport/MI_MARGN',12000);
-    for(const r of marginRows||[]){
-      const symbol=String(r['股票代號']||r['證券代號']||r['代號']||'');
-      if(!/^[0-9]{4,6}$/.test(symbol))continue;
-      const mNow=twseNumber(r['融資今日餘額']??r['融資餘額']??r['融資餘額(張)']);
-      const mPrev=twseNumber(r['融資前日餘額']??r['融資昨日餘額']);
-      const sNow=twseNumber(r['融券今日餘額']??r['融券餘額']??r['融券餘額(張)']);
-      const sPrev=twseNumber(r['融券前日餘額']??r['融券昨日餘額']);
-      const x=data[symbol]||(data[symbol]={asOf:marginAsOf||valid.at(-1).date});
-      if(mNow||mPrev)x.marginChange=mNow-mPrev;
-      if(sNow||sPrev)x.shortChange=sNow-sPrev;
-      marginAsOf=String(r['資料日期']||r['日期']||marginAsOf||'');
+    const margins=await recentOpenArchive('margin_twse',2);
+    if(margins.length){
+      const latest=margins.at(-1),previous=margins.at(-2);
+      marginAsOf=latest.trade_date;
+      for(const [symbol,values] of Object.entries(latest.rows)){
+        const old=previous?.rows?.[symbol];
+        const x=data[symbol]||(data[symbol]={asOf:valid.at(-1).date});
+        const margin=Number(values?.[0]),short=Number(values?.[1]);
+        if(Number.isFinite(margin)){x.marginBalance=margin;if(old&&Number.isFinite(Number(old[0])))x.marginChange=margin-Number(old[0]);}
+        if(Number.isFinite(short)){x.shortBalance=short;if(old&&Number.isFinite(Number(old[1])))x.shortChange=short-Number(old[1]);}
+      }
     }
-  }catch(e){/* Keep valid T86 institutional data even if margin feed is temporarily unavailable. */}
-  return {data,source:'TWSE 官方 T86 三大法人日報 + MI_MARGN 融資融券',timestamp:now(),asOf:valid.at(-1).date,days:valid.map(x=>x.date),marginAsOf};
+  }catch(_){}
+  return {data,source:'TWSE T86 三大法人 + TWSE Open Data 歷史融資融券（開放資料歸檔）',timestamp:now(),asOf:valid.at(-1).date,days:valid.map(x=>x.date),marginAsOf};
+}
+async function openSourceMarketHistory(){
+  const dates=archiveDates(120);
+  const docs=await mapLimit(dates,8,async date=>{try{return await fetchOpenArchive('price_twse',date);}catch(_){return null;}});
+  const valid=docs.filter(Boolean).sort((a,b)=>a.trade_date.localeCompare(b.trade_date));
+  if(valid.length<60)throw new Error('開放資料歷史庫目前只有 '+valid.length+' 個有效交易日，至少需要 60 日才能計算完整技術指標');
+  const grouped=new Map();
+  for(const doc of valid){
+    const fields=doc.fields||[],idx={open:fields.indexOf('open'),high:fields.indexOf('high'),low:fields.indexOf('low'),close:fields.indexOf('close'),volume:fields.indexOf('volume_shares')};
+    if(Object.values(idx).some(i=>i<0))continue;
+    for(const [symbol,values] of Object.entries(doc.rows||{})){
+      if(!/^[0-9A-Z]{4,10}$/.test(symbol)||!Array.isArray(values))continue;
+      const candle={time:doc.trade_date,open:Number(values[idx.open]),high:Number(values[idx.high]),low:Number(values[idx.low]),close:Number(values[idx.close]),volume:Number(values[idx.volume])};
+      if(![candle.open,candle.high,candle.low,candle.close,candle.volume].every(Number.isFinite)||candle.close<=0||candle.high<=0||candle.low<=0)continue;
+      if(!grouped.has(symbol))grouped.set(symbol,[]);grouped.get(symbol).push(candle);
+    }
+  }
+  const data={};
+  for(const [symbol,candles] of grouped){
+    candles.sort((a,b)=>a.time.localeCompare(b.time));
+    if(candles.length<60)continue;
+    const ind=indicators(candles);if(!ind)continue;
+    const last=candles.at(-1),prior=candles.at(-2)?.close,close5=candles.at(-6)?.close,close20=candles.at(-21)?.close,volume5d=candles.slice(-5).reduce((sum,row)=>sum+row.volume,0);
+    data[symbol]={...ind,technicalAsOf:last.time,asOf:valid.at(-1).fetched_at||now(),close:last.close,volume5d,dailyChangePct:prior?((last.close/prior)-1)*100:null,return5dPct:close5?((last.close/close5)-1)*100:null,return20dPct:close20?((last.close/close20)-1)*100:null};
+  }
+  return {data,historyAsOf:valid.at(-1).trade_date,historyDateCount:valid.length,historyCount:Object.keys(data).length,source:'88jiayu/tw-chip-open-data（TWSE 官方開放資料歸檔；OGDL）'};
 }
 
 function validateSymbol(s){return /^[0-9A-Z]{2,10}$/.test(s||'');}
