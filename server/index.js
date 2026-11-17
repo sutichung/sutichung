@@ -352,39 +352,68 @@ async function route(req,res){
   if(u.pathname==='/api/market/futures'){
     const result=await safeLoad('futures',TTL.futures,async()=>{
       if(process.env.MARKET_FUTURES_URL){const x=await external('MARKET_FUTURES_URL','');return {data:x.data||null,source:x.source||'Configured futures provider',timestamp:x.timestamp||now()};}
-      if(!FINMIND_TOKEN)throw new Error('未設定 FINMIND_TOKEN 或 MARKET_FUTURES_URL');
-      const d=new Date();d.setDate(d.getDate()-14);const startDate=d.toISOString().slice(0,10);
-      const rows=await finmind('TaiwanFuturesDaily',{data_id:'TX',start_date:startDate},20000);
-      if(!rows.length)throw new Error('FinMind TX 期貨日資料目前無資料');
-      const latestDate=rows.map(x=>String(x.date||'')).sort().at(-1);
-      const today=rows.filter(x=>String(x.date)===latestDate).sort((a,b)=>Number(b.volume||0)-Number(a.volume||0));
-      const latest=today[0],contract=String(latest.contract_date||'');
-      const prior=rows.filter(x=>String(x.contract_date||'')===contract&&String(x.date)<latestDate).sort((a,b)=>String(b.date).localeCompare(String(a.date)))[0];
-      const last=Number(latest.close),prev=Number(prior?.close);
-      return {data:{last:Number.isFinite(last)?last:null,changePct:Number.isFinite(prev)&&prev!==0?(last/prev-1)*100:null,openInterestChange:prior?Number(latest.open_interest||0)-Number(prior.open_interest||0):null,volume:Number(latest.volume||0),contractDate:contract,asOf:latestDate,frequency:'daily'},source:'FinMind TaiwanFuturesDaily（非即時）',timestamp:now()};
+      if(FINMIND_TOKEN){
+        const d=new Date();d.setDate(d.getDate()-14);const startDate=d.toISOString().slice(0,10);
+        const rows=await finmind('TaiwanFuturesDaily',{data_id:'TX',start_date:startDate},20000);
+        if(!rows.length)throw new Error('FinMind TX 期貨日資料目前無資料');
+        const latestDate=rows.map(x=>String(x.date||'')).sort().at(-1);
+        const today=rows.filter(x=>String(x.date)===latestDate).sort((a,b)=>Number(b.volume||0)-Number(a.volume||0));
+        const latest=today[0],contract=String(latest.contract_date||'');
+        const prior=rows.filter(x=>String(x.contract_date||'')===contract&&String(x.date)<latestDate).sort((a,b)=>String(b.date).localeCompare(String(a.date)))[0];
+        const last=Number(latest.close),prev=Number(prior?.close);
+        return {data:{last:Number.isFinite(last)?last:null,changePct:Number.isFinite(prev)&&prev!==0?(last/prev-1)*100:null,openInterestChange:prior?Number(latest.open_interest||0)-Number(prior.open_interest||0):null,volume:Number(latest.volume||0),contractDate:contract,asOf:latestDate,frequency:'daily'},source:'FinMind TaiwanFuturesDaily（日資料，非即時）',timestamp:now()};
+      }
+      const rows=await fetchJson('https://openapi.taifex.com.tw/v1/DailyMarketReportFut',15000,{'User-Agent':'Mozilla/5.0','Accept':'application/json'});
+      if(!Array.isArray(rows)||!rows.length)throw new Error('TAIFEX OpenAPI 未回傳期貨日報');
+      const tx=rows.filter(r=>String(r.Contract||r['契約']||r['商品']||'').trim().toUpperCase()==='TX');
+      if(!tx.length)throw new Error('TAIFEX 日報沒有 TX 臺股期貨資料');
+      const currentMonth=new Date().toISOString().slice(0,7).replace('-','');
+      const sorted=tx.map(r=>{
+        const pick=(re)=>{const k=Object.keys(r).find(key=>re.test(key));return k?r[k]:null;};
+        const month=String(pick(/ContractMonth|契約月份/ )||'').replace(/\D/g,'');
+        const last=twseNumber(pick(/^Last$|最後成交價|最後價/));
+        const changeRaw=String(pick(/Change%|漲跌百分比|漲跌幅/ )??'').replace(/[▲▼,%\s]/g,'');
+        const changePct=Number(changeRaw);
+        return {month,last,changePct:Number.isFinite(changePct)?changePct:null,volume:twseNumber(pick(/Volume-Total|總成交量|成交量/)),openInterest:twseNumber(pick(/OpenInterest|未平倉契約數/)),date:String(pick(/^Date$|日期/ )||'')};
+      }).filter(r=>r.month&&r.last>0).sort((a,b)=>a.month.localeCompare(b.month));
+      const near=sorted.find(r=>r.month.slice(0,6)>=currentMonth)||sorted[0];
+      if(!near)throw new Error('TAIFEX TX 近月合約欄位無法解析');
+      return {data:{last:near.last,changePct:near.changePct,openInterestChange:null,openInterest:near.openInterest,volume:near.volume,contractDate:near.month,asOf:near.date,frequency:'daily'},source:'TAIFEX OpenAPI DailyMarketReportFut（官方日資料，非逐筆即時）',timestamp:now()};
     },e=>({data:null,source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
   }
   if(u.pathname==='/api/market/sentiment'){
     const result=await safeLoad('sentiment',TTL.sentiment,async()=>{
       if(process.env.MARKET_SENTIMENT_URL){const x=await external('MARKET_SENTIMENT_URL','');return {data:x.data||null,source:x.source||'Configured sentiment provider',timestamp:x.timestamp||now()};}
-      if(!FINMIND_TOKEN)throw new Error('未設定 FINMIND_TOKEN 或 MARKET_SENTIMENT_URL');
-      const d=new Date();d.setDate(d.getDate()-45);const startDate=d.toISOString().slice(0,10);
-      const rows=await finmind('CnnFearGreedIndex',{start_date:startDate},15000);
-      const latest=rows.sort((a,b)=>String(a.date).localeCompare(String(b.date))).at(-1);
-      if(!latest)throw new Error('FinMind 恐懼貪婪指數目前無資料');
-      return {data:{fearGreed:Number(latest.fear_greed),label:latest.fear_greed_emotion,asOf:latest.date},source:'FinMind CnnFearGreedIndex（日資料）',timestamp:now()};
+      if(FINMIND_TOKEN){
+        const d=new Date();d.setDate(d.getDate()-45);const startDate=d.toISOString().slice(0,10);
+        const rows=await finmind('CnnFearGreedIndex',{start_date:startDate},15000);
+        const latest=rows.sort((a,b)=>String(a.date).localeCompare(String(b.date))).at(-1);
+        if(latest)return {data:{fearGreed:Number(latest.fear_greed),label:latest.fear_greed_emotion,asOf:latest.date},source:'FinMind CnnFearGreedIndex（日資料）',timestamp:now()};
+      }
+      const base=await safeLoad('open-source-market-history',12*60*60*1000,openSourceMarketHistory,e=>({data:{},error:e.message}));
+      if(base.error)throw new Error(base.error);
+      const returns=Object.values(base.data||{}).map(x=>Number(x.return5dPct)).filter(Number.isFinite);
+      const adv=returns.filter(x=>x>0).length,dec=returns.filter(x=>x<0).length;
+      return {data:{advanceDecline:adv/Math.max(1,dec),advancers:adv,decliners:dec,asOf:base.historyAsOf,label:'全市場近五日漲跌家數比'},source:'TWSE 官方開放資料計算市場廣度（非 CNN 恐懼貪婪指數）',timestamp:now()};
     },e=>({data:null,source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
   }
   if(u.pathname==='/api/market/news'){
     const result=await safeLoad('news',TTL.news,async()=>{
-      if(process.env.MARKET_NEWS_URL){const x=await external('MARKET_NEWS_URL','');return {data:Array.isArray(x.data)?x.data:[],source:x.source||'Configured licensed news provider',timestamp:x.timestamp||now()};}
-      if(!FINMIND_TOKEN)throw new Error('未設定 FINMIND_TOKEN 或 MARKET_NEWS_URL');
-      const d=new Date();d.setDate(d.getDate()-3);const startDate=d.toISOString().slice(0,10);
-      const rows=await finmind('TaiwanStockNews',{start_date:startDate},20000);
-      const data=rows.map(r=>({title:r.title||'',summary:r.description||'',url:r.link||'',source:r.source||'FinMind',publishedAt:r.date||'',symbol:r.stock_id||''})).filter(x=>x.title||x.url).sort((a,b)=>String(b.publishedAt).localeCompare(String(a.publishedAt))).slice(0,50);
-      return {data,source:'FinMind TaiwanStockNews（標題與摘要）',timestamp:now()};
+      if(process.env.MARKET_NEWS_URL){const x=await external('MARKET_NEWS_URL','');return {data:Array.isArray(x.data)?x.data:[],source:x.source||'Configured news provider',timestamp:x.timestamp||now()};}
+      if(FINMIND_TOKEN){
+        const d=new Date();d.setDate(d.getDate()-3);const startDate=d.toISOString().slice(0,10);
+        const rows=await finmind('TaiwanStockNews',{start_date:startDate},20000);
+        const data=rows.map(r=>({title:r.title||'',summary:r.description||'',url:r.link||'',source:r.source||'FinMind',publishedAt:r.date||'',symbol:r.stock_id||''})).filter(x=>x.title||x.url).sort((a,b)=>String(b.publishedAt).localeCompare(String(a.publishedAt))).slice(0,50);
+        if(data.length)return {data,source:'FinMind TaiwanStockNews',timestamp:now()};
+      }
+      const rows=await fetchJson('https://openapi.twse.com.tw/v1/news/newsList',12000);
+      const data=(rows||[]).map(r=>{
+        const pick=(re)=>{const k=Object.keys(r).find(key=>re.test(key));return k?r[k]:'';};
+        return {title:String(pick(/title|標題|主旨/i)||''),summary:String(pick(/content|摘要|內容/i)||''),url:String(pick(/url|link|網址|連結/i)||''),source:'臺灣證券交易所公告',publishedAt:String(pick(/date|時間|日期/i)||'')};
+      }).filter(x=>x.title).slice(0,50);
+      return {data,source:'TWSE OpenAPI newsList（交易所公告，不等同即時財經新聞）',timestamp:now()};
     },e=>({data:[],source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
   }
