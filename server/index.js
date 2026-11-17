@@ -398,7 +398,7 @@ async function route(req,res){
   }
   if(u.pathname==='/api/auth/phone/verify'&&req.method==='POST'){
     if(!SUPABASE_CONFIGURED)return json(res,503,{error:'會員服務尚未設定'});
-    try{const body=await readRequestJson(req),phone=String(body.phone||'').trim(),token=String(body.token||'').trim();if(!/^\\+[1-9]\\d{7,14}$/.test(phone)||!/^\d{4,8}$/.test(token))return json(res,400,{error:'手機號碼或簡訊驗證碼格式錯誤'});
+    try{const body=await readRequestJson(req),phone=String(body.phone||'').trim(),token=String(body.token||'').trim();if(!/^\+[1-9]\d{7,14}$/.test(phone)||!/^\d{4,8}$/.test(token))return json(res,400,{error:'手機號碼或簡訊驗證碼格式錯誤'});
       const data=await supabaseRequest('/auth/v1/verify',{method:'POST',body:{phone,token,type:'sms'}});return json(res,200,{access_token:data.access_token,refresh_token:data.refresh_token,expires_in:data.expires_in,user:data.user});
     }catch(e){return json(res,e.status||401,{error:e.message});}
   }
