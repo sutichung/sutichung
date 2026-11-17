@@ -263,7 +263,7 @@ async function loadStockHistory(symbol){
 async function route(req,res){
   const u=new URL(req.url,'http://localhost');
   if(req.method!=='GET'){return json(res,405,{error:'method_not_allowed'});}
-  if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),providers:{finmind:!!FINMIND_TOKEN,fugle:!!FUGLE_API_KEY,youtubeLiveResolver:!!process.env.YOUTUBE_API_KEY,realtime:true,twseMisFallback:true,scan:true,flows:true,futures:true,sentiment:true,news:true,openDataArchive:true},mode:process.env.NODE_ENV==='production'?'production':'development'});
+  if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),providers:{finmind:!!FINMIND_TOKEN,fugle:!!FUGLE_API_KEY,youtubeLiveResolver:!!process.env.YOUTUBE_API_KEY,gemini:!!process.env.GEMINI_API_KEY,grok:!!process.env.XAI_API_KEY,deepseek:!!process.env.DEEPSEEK_API_KEY,realtime:true,twseMisFallback:true,scan:true,flows:true,futures:true,sentiment:true,news:true,openDataArchive:true},mode:process.env.NODE_ENV==='production'?'production':'development'});
   if(u.pathname==='/api/live/resolve'){
     const channelId=String(u.searchParams.get('channelId')||'');
     if(!/^[A-Za-z0-9_-]{20,40}$/.test(channelId))return json(res,400,{error:'invalid_channel_id'});
@@ -383,7 +383,7 @@ async function route(req,res){
         const quote=quotes[symbol]||{},flow=flows[symbol]||{},valuation=perResult.data?.[symbol]||{},livePrice=quote.price!=null&&Number.isFinite(Number(quote.price))&&Number(quote.price)>0?Number(quote.price):null,price=livePrice??Number(technical.close);
         const trustFlowPct5d=Number.isFinite(Number(flow.trustNet5d))&&technical.volume5d>0?(Number(flow.trustNet5d)/technical.volume5d)*100:null;
         const foreignFlowPct5d=Number.isFinite(Number(flow.foreignNet5d))&&technical.volume5d>0?(Number(flow.foreignNet5d)/technical.volume5d)*100:null;
-        const row={...technical,...flow,...valuation,pe:valuation.pe,pb:valuation.pb,dividendYield:valuation.dividendYield,trustFlowPct5d,foreignFlowPct5d,signal:technical.macdSignal,price,quoteIsLive:livePrice!==null,changePct:quote.changePct??technical.dailyChangePct,volume:quote.volume??technical.latestVolume,asOf:quote.timestamp||technical.asOf||null,priceVsEma20Pct:price!==null&&technical.ema20?((price/technical.ema20)-1)*100:null,priceVsEma60Pct:price!==null&&technical.ema60?((price/technical.ema60)-1)*100:null};
+        const row={...technical,...flow,...valuation,pe:valuation.pe,pb:valuation.pb,dividendYield:valuation.dividendYield,trustFlowPct5d,foreignFlowPct5d,signal:technical.macdSignal,price,quoteIsLive:livePrice!==null,changePct:quote.changePct??technical.dailyChangePct,volume:quote.volume??technical.latestVolume,asOf:quote.timestamp||(technical.technicalAsOf?new Date(technical.technicalAsOf+'T13:30:00+08:00').toISOString():technical.asOf||null),priceVsEma20Pct:price!==null&&technical.ema20?((price/technical.ema20)-1)*100:null,priceVsEma60Pct:price!==null&&technical.ema60?((price/technical.ema60)-1)*100:null};
         row.scorecard=scoreStock({...row,asOf:row.asOf,maxAgeMs:36*60*60*1000,fearGreed:sentiment.fearGreed,advanceDecline:sentiment.advanceDecline??advanceDecline,futuresChangePct:futures.changePct});
         data[symbol]=row;
       }
@@ -452,7 +452,7 @@ async function route(req,res){
         const toIso=value=>{const n=Number(value);return Number.isFinite(n)&&n>0?new Date(n>1e14?n/1000:n>1e11?n:n*1000).toISOString():null;};
         const normalize=(q,session)=>{
           if(!q||typeof q!=='object')return null;
-          const last=q.isTrial?(Number(q.lastTrade?.price)>0?Number(q.lastTrade.price):null):(Number(q.lastPrice??q.closePrice)>0?Number(q.lastPrice??q.closePrice):null);
+          const last=q.isTrial?null:(Number(q.lastPrice??q.closePrice)>0?Number(q.lastPrice??q.closePrice):null);
           return {symbol:q.symbol||'TXF1!',name:q.name||'臺股期貨近月',last,change:Number.isFinite(Number(q.change))?Number(q.change):null,changePct:Number.isFinite(Number(q.changePercent))?Number(q.changePercent):null,previousClose:Number(q.previousClose)>0?Number(q.previousClose):null,open:Number(q.openPrice)>0?Number(q.openPrice):null,high:Number(q.highPrice)>0?Number(q.highPrice):null,low:Number(q.lowPrice)>0?Number(q.lowPrice):null,volume:Number(q.total?.tradeVolume??0),timestamp:toIso(q.lastUpdated||q.lastTrade?.time||q.closeTime),date:q.date||null,isTrial:!!q.isTrial,session};
         };
         try{
