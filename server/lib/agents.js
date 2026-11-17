@@ -31,11 +31,11 @@ async function runAgent(provider, prompt, env) {
   const system = '你是台灣股票市場獨立研究分析員。只能根據提供的行情、K線與籌碼數據判讀；不可捏造新聞、即時報價或未提供的資料。不要輸出隱藏思維鏈，只回傳可公開的結論、可核對依據、看多理由、看空理由、風險與失效條件。若資料不足，direction 必須為「中性」，confidence 降低。score 是方向強度評分，不是勝率或機率。只輸出 JSON，欄位：direction(看多/看空/中性),score(0-100),confidence(0-100),summary,bullReasons(最多4項),bearReasons(最多4項),logic(最多5項),risks(最多3項),invalidation。';
   let raw = '';
   if (provider === 'gemini') {
-    const result = await postJson('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(config.model) + ':generateContent?key=' + encodeURIComponent(config.key), {
+    const result = await postJson('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(config.model) + ':generateContent', {
       systemInstruction: { parts: [{ text: system }] },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens: 900 }
-    });
+    }, { 'x-goog-api-key': config.key });
     raw = (result.candidates && result.candidates[0] && result.candidates[0].content && result.candidates[0].content.parts || []).map(part => part.text || '').join('');
   } else {
     const body = { model: config.model, messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }], temperature: 0.2, max_tokens: 1100, response_format: { type: 'json_object' } };
