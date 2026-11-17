@@ -502,17 +502,17 @@ async function route(req,res){
       };
       if(!FINMIND_TOKEN)return {company:officialCompany,profile:{description:officialCompany.businessDescription,descriptionNote:'尚未設定 FinMind Token；財務報表、月營收與股利資料暫不可用。',mopsUrl:officialCompany.mopsUrl},financials:null,error:'未設定 FINMIND_TOKEN；財報資料暫不可用',source:'TWSE／TPEx 官方公司基本資料',timestamp:now()};
       const startDate='2018-01-01';
-      const datasets=['TaiwanStockFinancialStatements','TaiwanStockBalanceSheet','TaiwanStockCashFlowsStatement','TaiwanStockMonthRevenue','TaiwanStockDividend'];
+      const datasets=['TaiwanStockFinancialStatements','TaiwanStockBalanceSheet','TaiwanStockCashFlowsStatement','TaiwanStockMonthRevenue','TaiwanStockDividend','TaiwanStockPER'];
       const datasetErrors={};
       const loadDataset=async name=>{try{return await finmind(name,{data_id:symbol,start_date:name==='TaiwanStockDividend'?'2018-01-01':startDate},20000);}catch(error){datasetErrors[name]=String(error.message||error);return [];}};
-      const [income,balance,cash,revenue,dividends]=await Promise.all(datasets.map(loadDataset));
-      const latestByDate=rows=>{const dates=[...new Set((rows||[]).map(x=>String(x.date||'')))].filter(Boolean).sort();return dates;};
-      const latestIncome=latestByDate(income).at(-1)||null,latestBalance=latestByDate(balance).at(-1)||null,latestCash=latestByDate(cash).at(-1)||null;
+      const [income,balance,cash,revenue,dividends,valuationRows]=await Promise.all(datasets.map(loadDataset));
+      const datesOf=rows=>[...new Set((rows||[]).map(x=>String(x.date||'')))].filter(Boolean).sort();
+      const latestIncome=datesOf(income).at(-1)||null,latestBalance=datesOf(balance).at(-1)||null,latestCash=datesOf(cash).at(-1)||null;
       const pick=(rows,date,keys)=>{const found=(rows||[]).filter(x=>String(x.date||'')===date);for(const key of keys){const row=found.find(x=>String(x.type||'').toLowerCase()===key.toLowerCase()||String(x.origin_name||'').toLowerCase()===key.toLowerCase());if(row&&Number.isFinite(Number(row.value)))return Number(row.value);}return null;};
       const incomeSummary=latestIncome?{
-        revenue:pick(income,latestIncome,['Revenue','OperatingRevenue','營業收入合計']),
+        revenue:pick(income,latestIncome,['Revenue','OperatingRevenue','Income','營業收入合計','收益']),
         grossProfit:pick(income,latestIncome,['GrossProfit','營業毛利（毛損）淨額']),
-        operatingIncome:pick(income,latestIncome,['OperatingIncome','OperatingIncomeLoss','營業利益（損失）']),
+        operatingIncome:pick(income,latestIncome,['OperatingIncome','OperatingIncomeLoss','IncomeFromOperations','營業利益（損失）']),
         netIncome:pick(income,latestIncome,['IncomeAfterTaxes','NetIncome','本期淨利（淨損）']),
         eps:pick(income,latestIncome,['EPS','EarningsPerShare','基本每股盈餘（元）'])
       }:null;
@@ -523,18 +523,27 @@ async function route(req,res){
         currentAssets:pick(balance,latestBalance,['CurrentAssets','流動資產合計']),
         currentLiabilities:pick(balance,latestBalance,['CurrentLiabilities','流動負債合計'])
       }:null;
-      const cashSummary=latestCash?{
-        operatingCashFlow:pick(cash,latestCash,['CashFlowsFromOperatingActivities','營業活動之淨現金流入（流出）']),
-        investingCashFlow:pick(cash,latestCash,['CashFlowsFromInvestingActivities','投資活動之淨現金流入（流出）']),
-        financingCashFlow:pick(cash,latestCash,['CashFlowsFromFinancingActivities','籌資活動之淨現金流入（流出）'])
-      }:null;
+      const cashKeys={operatingCashFlow:['CashFlowsFromOperatingActivities','CashProvidedByOperatingActivities','營業活動之淨現金流入（流出）'],investingCashFlow:['CashFlowsFromInvestingActivities','CashProvidedByInvestingActivities','投資活動之淨現金流入(流出)'],financingCashFlow:['CashFlowsFromFinancingActivities','CashProvidedByFinancingActivities','籌資活動之淨現金流入（流出）']};
+      const cashYtd=latestCash?Object.fromEntries(Object.entries(cashKeys).map(([key,keys])=>[key,pick(cash,latestCash,keys)])):{};
+      const cashDate=latestCash?new Date(latestCash+'T00:00:00Z'):null,cashMonth=cashDate?cashDate.getUTCMonth()+1:0;
+      const priorCashDate=cashDate&&cashMonth>3?new Date(Date.UTC(cashDate.getUTCFullYear(),cashDate.getUTCMonth()-3,0)).toISOString().slice(0,10):null;
+      const hasPriorCash=!!priorCashDate&&datesOf(cash).includes(priorCashDate);
+      const cashQuarter=latestCash?Object.fromEntries(Object.entries(cashKeys).map(([key,keys])=>{const current=cashYtd[key],prior=hasPriorCash?pick(cash,priorCashDate,keys):cashMonth===3?0:null;return [key,current==null||prior==null?null:current-prior];})):{};
+      const cashSummary=latestCash?{...cashQuarter,operatingCashFlowYtd:cashYtd.operatingCashFlow,investingCashFlowYtd:cashYtd.investingCashFlow,financingCashFlowYtd:cashYtd.financingCashFlow,periodBasis:cashMonth===3||hasPriorCash?'single-quarter':'year-to-date',periodDate:latestCash}:null;
+      const debtRatio=balanceSummary?.totalAssets>0&&balanceSummary?.totalLiabilities!=null?balanceSummary.totalLiabilities/balanceSummary.totalAssets*100:null;
+      const currentRatio=balanceSummary?.currentLiabilities>0&&balanceSummary?.currentAssets!=null?balanceSummary.currentAssets/balanceSummary.currentLiabilities:null;
+      const grossMargin=incomeSummary?.revenue>0&&incomeSummary?.grossProfit!=null?incomeSummary.grossProfit/incomeSummary.revenue*100:null;
+      const operatingMargin=incomeSummary?.revenue>0&&incomeSummary?.operatingIncome!=null?incomeSummary.operatingIncome/incomeSummary.revenue*100:null;
+      const netMargin=incomeSummary?.revenue>0&&incomeSummary?.netIncome!=null?incomeSummary.netIncome/incomeSummary.revenue*100:null;
+      const latestValuation=valuationRows.filter(x=>String(x.date||'')).sort((a,b)=>String(b.date).localeCompare(String(a.date)))[0]||null;
+      const valuation=latestValuation?{asOf:latestValuation.date,pe:Number.isFinite(Number(latestValuation.PER))?Number(latestValuation.PER):null,pb:Number.isFinite(Number(latestValuation.PBR))?Number(latestValuation.PBR):null,dividendYield:Number.isFinite(Number(latestValuation.dividend_yield))?Number(latestValuation.dividend_yield):null}:null;
       const months=(revenue||[]).map(x=>({date:String(x.date||''),revenue:Number(x.revenue),year:Number(x.revenue_year),month:Number(x.revenue_month)})).filter(x=>x.date&&Number.isFinite(x.revenue)).sort((a,b)=>a.date.localeCompare(b.date));
       const monthMap=new Map(months.map(x=>[x.year+'-'+x.month,x.revenue]));
       const monthlyRevenue=months.slice(-24).map(x=>({date:x.date,revenue:x.revenue,yoy:monthMap.has((x.year-1)+'-'+x.month)&&monthMap.get((x.year-1)+'-'+x.month)!==0?(x.revenue/monthMap.get((x.year-1)+'-'+x.month)-1)*100:null}));
       const debtRatio=balanceSummary?.totalAssets>0&&balanceSummary?.totalLiabilities!=null?balanceSummary.totalLiabilities/balanceSummary.totalAssets*100:null;
       const currentRatio=balanceSummary?.currentLiabilities>0&&balanceSummary?.currentAssets!=null?balanceSummary.currentAssets/balanceSummary.currentLiabilities:null;
       const dividendHistory=(dividends||[]).slice(-12);
-      return {company:officialCompany,profile:{description:officialCompany.businessDescription,descriptionNote:officialCompany.businessDescription?'公司業務簡介取自證交所公開公司基本資料。':'官方公司基本資料未提供可用的營業項目欄位；請以公開資訊觀測站公司基本資料／年報為準。',mopsUrl:officialCompany.mopsUrl},financials:{incomeAsOf:latestIncome,balanceAsOf:latestBalance,cashAsOf:latestCash,income:incomeSummary,balance:balanceSummary,cash:cashSummary,debtRatio,currentRatio,monthlyRevenue,dividends:dividendHistory},datasetErrors,source:'FinMind 財報／月營收／股利資料；公司清單 TWSE／TPEx',timestamp:now(),periodType:'財報為季資料；月營收為月資料'};
+      return {company:officialCompany,profile:{description:officialCompany.businessDescription,descriptionNote:officialCompany.businessDescription?'公司業務簡介取自證交所公開公司基本資料。':'官方公司基本資料未提供可用的營業項目欄位；請以公開資訊觀測站公司基本資料／年報為準。',mopsUrl:officialCompany.mopsUrl},financials:{incomeAsOf:latestIncome,balanceAsOf:latestBalance,cashAsOf:latestCash,income:incomeSummary,balance:balanceSummary,cash:cashSummary,debtRatio,currentRatio,grossMargin,operatingMargin,netMargin,valuation,monthlyRevenue,dividends:dividendHistory},datasetErrors,source:'FinMind 財報／月營收／股利資料；公司清單 TWSE／TPEx',timestamp:now(),periodType:'財報為季資料；月營收為月資料'};
     },e=>({error:e.message,company:null,financials:null,source:'unavailable',timestamp:now()}));
     return json(res,result.error?503:200,result);
   }
