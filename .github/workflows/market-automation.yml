@@ -9,6 +9,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: taiwan-market-automation
   cancel-in-progress: false
@@ -40,5 +41,34 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: taiwan-market-close-review-${{ github.run_id }}
+          path: reports/
+          retention-days: 90
+  outcome-evaluation:
+    if: github.event_name == 'schedule' && github.event.schedule == '40 5 * * 1-5'
+    needs: close-review
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Download previous close report and evaluate outcomes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MARKET_APP_URL: ${{ secrets.MARKET_APP_URL }}
+        run: |
+          mkdir -p previous-report reports
+          ARTIFACT_ID=$(curl --fail --silent --show-error -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" | jq -r --arg run "$GITHUB_RUN_ID" '.artifacts | map(select(.name | startswith("taiwan-market-close-review-"))) | map(select((.workflow_run.id|tostring) != $run)) | sort_by(.created_at) | last | .id // empty')
+          if [ -z "$ARTIFACT_ID" ]; then
+            echo "No prior close report yet; first day is archive-only." > reports/outcome-review-first-run.md
+          else
+            curl --fail --location --silent --show-error -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" -o /tmp/previous-report.zip
+            unzip -oq /tmp/previous-report.zip -d previous-report
+            PREVIOUS_REPORT=$(find previous-report -name 'close-review-*.json' | head -n 1)
+            node server/jobs/evaluate-outcomes.js "$PREVIOUS_REPORT"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: taiwan-market-outcome-review-${{ github.run_id }}
           path: reports/
           retention-days: 90
