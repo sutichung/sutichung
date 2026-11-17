@@ -7,6 +7,7 @@ const PORT = Number(process.env.PORT || 8787);
 const FINMIND_BASE = process.env.FINMIND_BASE || 'https://api.finmindtrade.com/api/v4/data';
 const FINMIND_TOKEN = process.env.FINMIND_TOKEN || '';
 const CACHE = new Map();
+const PENDING = new Map();
 const RATE = new Map();
 const TTL = { universe: 6*60*60*1000, snapshot: 1000, history: 5*60*1000, flows: 60*1000, futures: 1000, sentiment: 15000 };
 const now = () => new Date().toISOString();
@@ -36,11 +37,17 @@ async function external(urlEnv, fallbackMessage) {
 function stale(key){const x=CACHE.get(key);return x?x.value:null;}
 async function safeLoad(key, ttl, loader, fallback) {
   const hit=cached(key,ttl); if(hit!==null)return hit;
-  try{return put(key,await loader());}
-  catch(e){const old=stale(key);if(old!==null)return {...old,stale:true,warning:'上游暫時失敗，顯示快取舊資料；不可視為即時行情'};return fallback(e);}
+  if(PENDING.has(key))return PENDING.get(key);
+  const job=(async()=>{
+    try{return put(key,await loader());}
+    catch(e){const old=stale(key);if(old!==null)return {...old,stale:true,warning:'上游暫時失敗，顯示快取舊資料；不可視為即時行情'};return fallback(e);}
+    finally{PENDING.delete(key);}
+  })();
+  PENDING.set(key,job);
+  return job;
 }
 function validateSymbol(s){return /^[0-9A-Z]{2,10}$/.test(s||'');}
-function rateLimit(req){const ip=req.socket.remoteAddress||'unknown';const t=Date.now();let a=RATE.get(ip)||[];a=a.filter(x=>t-x<60000);if(a.length>=180)return false;a.push(t);RATE.set(ip,a);return true;}
+function rateLimit(req){const ip=req.socket.remoteAddress||'unknown';const t=Date.now();let a=RATE.get(ip)||[];a=a.filter(x=>t-x<60000);if(a.length>=480)return false;a.push(t);RATE.set(ip,a);return true;}
 async function route(req,res){
   const u=new URL(req.url,'http://localhost');
   if(req.method!=='GET'){return json(res,405,{error:'method_not_allowed'});}
