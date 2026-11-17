@@ -163,7 +163,7 @@ async function route(req,res){
       const [inst,marginLatest,marginPrevious]=await Promise.all([
         finmind('TaiwanStockInstitutionalInvestorsBuySell',{start_date:recent[0],end_date:latestDate},30000),
         finmind('TaiwanStockMarginPurchaseShortSale',{start_date:latestDate},30000),
-        finmind('TaiwanStockMarginPurchaseShortSale',{start_date:previousDate},30000)
+        finmind('TaiwanStockMarginPurchaseShortSale',{start_date:previousDate,end_date:previousDate},30000)
       ]);
       const data={},latestInst=new Map();
       for(const r of inst){const symbol=String(r.stock_id||'');if(!validateSymbol(symbol))continue;const prev=latestInst.get(symbol);if(!prev)latestInst.set(symbol,{rows:[r]});else prev.rows.push(r);}
