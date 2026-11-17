@@ -114,8 +114,18 @@ async function twseListedUniverse(){
       if(data.length)return data;
       throw new Error('TPEx 公司清單沒有有效資料');
     }catch(error){
+      try{
+        const csv=await fetchText('https://mopsfin.twse.com.tw/opendata/t187ap03_O.csv',12000,{'Accept':'text/csv,text/plain,*/*'});
+        const lines=csv.replace(/^\\uFEFF/,'').split(/\\r?\\n/).filter(x=>x.trim());
+        if(lines.length>1){
+          const headers=parseCsvLine(lines[0]).map(x=>x.trim());
+          const codeIndex=headers.findIndex(x=>/公司代號|證券代號/.test(x)),nameIndex=headers.findIndex(x=>/公司簡稱/.test(x)),sectorIndex=headers.findIndex(x=>/產業別/.test(x));
+          const csvRows=lines.slice(1).map(line=>{const cells=parseCsvLine(line);return {symbol:String(cells[codeIndex]||'').trim(),name:String(cells[nameIndex]||'').trim(),sector:String(cells[sectorIndex]||'未分類').trim(),exchange:'TPEx'};}).filter(x=>validateSymbol(x.symbol));
+          if(csvRows.length)return csvRows;
+        }
+      }catch(_){}
       const archive=await recentOpenArchive('price_tpex',1);
-      if(!archive.length)throw new Error('TPEx 公司清單與官方日行情備援皆不可用：'+error.message);
+      if(!archive.length)throw new Error('TPEx 公司清單 API、官方 CSV 與日行情備援皆不可用：'+error.message);
       return Object.keys(archive[0].rows||{}).filter(validateSymbol).map(symbol=>({symbol,name:symbol,sector:'未分類',exchange:'TPEx',namePending:true}));
     }
   })();
