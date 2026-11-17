@@ -112,17 +112,25 @@ async function route(req,res){
           candles.sort((a,b)=>String(a.time).localeCompare(String(b.time)));
           if(candles.length<60)continue;
           const ind=indicators(candles);if(!ind)continue;
-          const last=candles.at(-1),close5=candles.at(-6)?.close,close20=candles.at(-21)?.close;
-          data[symbol]={...ind,technicalAsOf:last.time,return5dPct:close5?((last.close/close5)-1)*100:null,return20dPct:close20?((last.close/close20)-1)*100:null};
+          const last=candles.at(-1),close5=candles.at(-6)?.close,close20=candles.at(-21)?.close,volume5d=candles.slice(-5).reduce((sum,row)=>sum+row.volume,0);
+          data[symbol]={...ind,technicalAsOf:last.time,volume5d,return5dPct:close5?((last.close/close5)-1)*100:null,return20dPct:close20?((last.close/close20)-1)*100:null};
         }
         return {data,historyAsOf:dates.at(-1),historyDateCount:dates.length,historyCount:Object.keys(data).length};
       },e=>({data:{},error:e.message,historyCount:0}));
       if(base.error)throw new Error(base.error);
+      const perResult=await safeLoad('all-market-per',6*60*60*1000,async()=>{
+        const rows=await finmind('TaiwanStockPER',{start_date:base.historyAsOf},20000);
+        const data={};
+        for(const r of rows){const symbol=String(r.stock_id||'');if(!validateSymbol(symbol))continue;const date=String(r.date||'');if(!data[symbol]||date>String(data[symbol].date||''))data[symbol]={date,pe:Number(r.PER),pb:Number(r.PBR),dividendYield:Number(r.dividend_yield)};}
+        return {data,asOf:base.historyAsOf};
+      },e=>({data:{},error:e.message}));
       const quotes=stale('snapshot')?.data||{},flows=stale('flows')?.data||{},sentiment=stale('sentiment')?.data||{},futures=stale('futures')?.data||{},data={};
       const fiveDay=Object.values(base.data||{}).map(x=>Number(x.return5dPct)).filter(Number.isFinite),adv=fiveDay.filter(v=>v>0).length,dec=fiveDay.filter(v=>v<0).length,advanceDecline=adv/Math.max(1,dec);
       for(const [symbol,technical] of Object.entries(base.data||{})){
-        const quote=quotes[symbol]||{},flow=flows[symbol]||{},price=quote.price!=null&&Number.isFinite(Number(quote.price))&&Number(quote.price)>0?Number(quote.price):null;
-        const row={...technical,...flow,signal:technical.macdSignal,price,changePct:quote.changePct,volume:quote.volume,asOf:quote.timestamp||null,priceVsEma20Pct:price!==null&&technical.ema20?((price/technical.ema20)-1)*100:null,priceVsEma60Pct:price!==null&&technical.ema60?((price/technical.ema60)-1)*100:null};
+        const quote=quotes[symbol]||{},flow=flows[symbol]||{},valuation=perResult.data?.[symbol]||{},price=quote.price!=null&&Number.isFinite(Number(quote.price))&&Number(quote.price)>0?Number(quote.price):null;
+        const trustFlowPct5d=Number.isFinite(Number(flow.trustNet5d))&&technical.volume5d>0?(Number(flow.trustNet5d)/technical.volume5d)*100:null;
+        const foreignFlowPct5d=Number.isFinite(Number(flow.foreignNet5d))&&technical.volume5d>0?(Number(flow.foreignNet5d)/technical.volume5d)*100:null;
+        const row={...technical,...flow,...valuation,pe:valuation.pe,pb:valuation.pb,dividendYield:valuation.dividendYield,trustFlowPct5d,foreignFlowPct5d,signal:technical.macdSignal,price,changePct:quote.changePct,volume:quote.volume,asOf:quote.timestamp||null,priceVsEma20Pct:price!==null&&technical.ema20?((price/technical.ema20)-1)*100:null,priceVsEma60Pct:price!==null&&technical.ema60?((price/technical.ema60)-1)*100:null};
         row.scorecard=scoreStock({...row,asOf:row.asOf,maxAgeMs:180000,fearGreed:sentiment.fearGreed,advanceDecline:sentiment.advanceDecline??advanceDecline,futuresChangePct:futures.changePct});
         data[symbol]=row;
       }
@@ -149,19 +157,20 @@ async function route(req,res){
       if(!FINMIND_TOKEN)throw new Error('未設定 FINMIND_TOKEN 或 MARKET_FLOWS_URL');
       const dates=await finmind('TaiwanStockTradingDate',{},15000);
       const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date());
-      const recent=dates.map(x=>String(x.date||'')).filter(x=>x&&x<today).sort().slice(-2);
-      if(recent.length<2)throw new Error('無足夠交易日資料計算籌碼變化');
+      const recent=dates.map(x=>String(x.date||'')).filter(x=>x&&x<today).sort().slice(-5);
+      if(recent.length<5)throw new Error('近五個交易日資料不足，暫停法人籌碼評分');
+      const latestDate=recent.at(-1),previousDate=recent.at(-2);
       const [inst,marginLatest,marginPrevious]=await Promise.all([
-        finmind('TaiwanStockInstitutionalInvestorsBuySell',{start_date:recent[1]},30000),
-        finmind('TaiwanStockMarginPurchaseShortSale',{start_date:recent[1]},30000),
-        finmind('TaiwanStockMarginPurchaseShortSale',{start_date:recent[0]},30000)
+        finmind('TaiwanStockInstitutionalInvestorsBuySell',{start_date:recent[0],end_date:latestDate},30000),
+        finmind('TaiwanStockMarginPurchaseShortSale',{start_date:latestDate},30000),
+        finmind('TaiwanStockMarginPurchaseShortSale',{start_date:previousDate},30000)
       ]);
       const data={},latestInst=new Map();
       for(const r of inst){const symbol=String(r.stock_id||'');if(!validateSymbol(symbol))continue;const prev=latestInst.get(symbol);if(!prev)latestInst.set(symbol,{rows:[r]});else prev.rows.push(r);}
-      for(const [symbol,group] of latestInst){const x={asOf:recent[1],foreignNet:0,trustNet:0,dealerNet:0,institutionalNet:0};for(const r of group.rows){const net=Number(r.buy||0)-Number(r.sell||0);x.institutionalNet+=net;const name=String(r.name||'').toLowerCase();if(name.includes('foreign'))x.foreignNet+=net;else if(name.includes('trust')||name.includes('investment'))x.trustNet+=net;else if(name.includes('dealer'))x.dealerNet+=net;}data[symbol]=x;}
+      for(const [symbol,group] of latestInst){const x={asOf:latestDate,foreignNet:0,trustNet:0,dealerNet:0,institutionalNet:0,foreignNet5d:0,trustNet5d:0,institutionalNet5d:0};for(const r of group.rows){const net=Number(r.buy||0)-Number(r.sell||0);if(!Number.isFinite(net))continue;x.institutionalNet5d+=net;const name=String(r.name||'').toLowerCase();if(name.includes('foreign'))x.foreignNet5d+=net;else if(name.includes('trust')||name.includes('investment'))x.trustNet5d+=net;else if(name.includes('dealer'))x.dealerNet+=net;if(String(r.date||'')===latestDate){x.institutionalNet+=net;if(name.includes('foreign'))x.foreignNet+=net;else if(name.includes('trust')||name.includes('investment'))x.trustNet+=net;}}data[symbol]=x;}
       const previousBySymbol=new Map(marginPrevious.map(r=>[String(r.stock_id||''),r]));
       for(const r of marginLatest){const symbol=String(r.stock_id||'');if(!validateSymbol(symbol))continue;const prev=previousBySymbol.get(symbol);const x=data[symbol]||{asOf:recent[1]};if(prev){x.marginChange=Number(r.MarginPurchaseTodayBalance||0)-Number(prev.MarginPurchaseTodayBalance||0);x.shortChange=Number(r.ShortSaleTodayBalance||0)-Number(prev.ShortSaleTodayBalance||0);}data[symbol]=x;}
-      return {data,source:'FinMind all-market institutional investors + margin/short-sale daily data',timestamp:now(),asOf:recent[1]};
+      return {data,source:'FinMind five-day institutional flows + daily margin/short-sale data',timestamp:now(),asOf:latestDate};
     },e=>({data:{},source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
   }
