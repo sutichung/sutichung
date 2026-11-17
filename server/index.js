@@ -95,11 +95,7 @@ async function route(req,res){
   if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),providers:{finmind:!!FINMIND_TOKEN,fugle:!!FUGLE_API_KEY,realtime:true,twseMisFallback:true,scan:!!FINMIND_TOKEN||!!process.env.MARKET_SCAN_URL,flows:!!FINMIND_TOKEN||!!process.env.MARKET_FLOWS_URL,futures:!!FINMIND_TOKEN||!!process.env.MARKET_FUTURES_URL,sentiment:!!FINMIND_TOKEN||!!process.env.MARKET_SENTIMENT_URL,news:!!FINMIND_TOKEN||!!process.env.MARKET_NEWS_URL},mode:process.env.NODE_ENV==='production'?'production':'development'});
   if(u.pathname==='/api/trading/readiness')return json(res,200,getTradingReadiness());
   if(u.pathname==='/api/market/universe'){
-    const result=await safeLoad('universe',TTL.universe,async()=>{
-      const rows=await finmind('TaiwanStockInfo');
-      const data=currentTwseRows(rows);
-      return {data,source:'FinMind TaiwanStockInfo (current TWSE listings only)',timestamp:now()};
-    },e=>({data:[],source:'unavailable',timestamp:now(),error:e.message}));
+    const result=await safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
   }
   if(u.pathname==='/api/market/snapshot'){
