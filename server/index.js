@@ -5,6 +5,7 @@ const path = require('node:path');
 const { URL } = require('node:url');
 const { indicators } = require('./lib/indicators');
 const { scoreStock } = require('./lib/scoring');
+const { getTradingReadiness } = require('./lib/trading-readiness');
 
 const PORT = Number(process.env.PORT || 8787);
 const FINMIND_BASE = process.env.FINMIND_BASE || 'https://api.finmindtrade.com/api/v4/data';
@@ -56,7 +57,8 @@ function rateLimit(req){const ip=req.socket.remoteAddress||'unknown';const t=Dat
 async function route(req,res){
   const u=new URL(req.url,'http://localhost');
   if(req.method!=='GET'){return json(res,405,{error:'method_not_allowed'});}
-  if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',providers:{finmind:!!FINMIND_TOKEN,fugle:!!FUGLE_API_KEY,realtime:!!FUGLE_API_KEY||!!process.env.MARKET_REALTIME_URL,scan:!!FINMIND_TOKEN||!!process.env.MARKET_SCAN_URL,flows:!!FINMIND_TOKEN||!!process.env.MARKET_FLOWS_URL,futures:!!FINMIND_TOKEN||!!process.env.MARKET_FUTURES_URL,sentiment:!!FINMIND_TOKEN||!!process.env.MARKET_SENTIMENT_URL,news:!!FINMIND_TOKEN||!!process.env.MARKET_NEWS_URL},mode:process.env.NODE_ENV==='production'?'production':'development'});
+  if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),providers:{finmind:!!FINMIND_TOKEN,fugle:!!FUGLE_API_KEY,realtime:!!FUGLE_API_KEY||!!process.env.MARKET_REALTIME_URL,scan:!!FINMIND_TOKEN||!!process.env.MARKET_SCAN_URL,flows:!!FINMIND_TOKEN||!!process.env.MARKET_FLOWS_URL,futures:!!FINMIND_TOKEN||!!process.env.MARKET_FUTURES_URL,sentiment:!!FINMIND_TOKEN||!!process.env.MARKET_SENTIMENT_URL,news:!!FINMIND_TOKEN||!!process.env.MARKET_NEWS_URL},mode:process.env.NODE_ENV==='production'?'production':'development'});
+  if(u.pathname==='/api/trading/readiness')return json(res,200,getTradingReadiness());
   if(u.pathname==='/api/market/universe'){
     const result=await safeLoad('universe',TTL.universe,async()=>{
       const rows=await finmind('TaiwanStockInfo');
