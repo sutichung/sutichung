@@ -11,6 +11,10 @@ services:
         value: "8787"
       - key: FINMIND_TOKEN
         sync: false
+      - key: FUGLE_API_KEY
+        sync: false
+      - key: FUGLE_BASE_URL
+        value: https://api.fugle.tw/marketdata/v1.0/stock
       - key: MARKET_REALTIME_URL
         sync: false
       - key: MARKET_SCAN_URL
@@ -20,4 +24,6 @@ services:
       - key: MARKET_FUTURES_URL
         sync: false
       - key: MARKET_SENTIMENT_URL
+        sync: false
+      - key: MARKET_NEWS_URL
         sync: false
