@@ -18,6 +18,7 @@ function clearSession(){localStorage.removeItem(ACCESS);localStorage.removeItem(
 export default function AuthGate({children}){
   const [config,setConfig]=useState(null),[user,setUser]=useState(null),[isAdmin,setIsAdmin]=useState(false);
   const [mode,setMode]=useState('login'),[email,setEmail]=useState(''),[password,setPassword]=useState('');
+  const [phone,setPhone]=useState(''),[phoneOtp,setPhoneOtp]=useState(''),[phoneSent,setPhoneSent]=useState(false);
   const [busy,setBusy]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState('');
   const [adminOpen,setAdminOpen]=useState(false),[members,setMembers]=useState([]),[newEmail,setNewEmail]=useState(''),[newPassword,setNewPassword]=useState('');
   const [memberBusy,setMemberBusy]=useState(false),[passwordOpen,setPasswordOpen]=useState(false),[nextPassword,setNextPassword]=useState('');
@@ -27,6 +28,11 @@ export default function AuthGate({children}){
   useEffect(()=>{
     let alive=true;
     (async()=>{try{
+      const hash=new URLSearchParams(window.location.hash.replace(/^#/,'') );
+      const oauthError=hash.get('error_description')||hash.get('error');
+      if(oauthError){setError(decodeURIComponent(oauthError.replace(/\+/g,' ')));window.history.replaceState({},document.title,window.location.pathname+window.location.search);}
+      const oauthAccess=hash.get('access_token'),oauthRefresh=hash.get('refresh_token');
+      if(oauthAccess){saveSession({access_token:oauthAccess,refresh_token:oauthRefresh});window.history.replaceState({},document.title,window.location.pathname+window.location.search);}
       const c=await fetch('/api/auth/config').then(r=>r.json());if(!alive)return;setConfig(c);
       if(!c.configured){setError('伺服器尚未完成 Supabase 設定，會員入口暫時無法啟用。');return;}
       if(getToken()){try{await loadMe();}catch(_){
@@ -56,6 +62,9 @@ export default function AuthGate({children}){
       }
     }catch(err){setError(err.message);}finally{setBusy(false);}
   };
+  const startOAuth=(provider)=>{setError('');setNotice('');window.location.href='/api/auth/oauth/'+provider;};
+  const sendPhoneCode=async()=>{setBusy(true);setError('');setNotice('');try{await request('/auth/phone/start',{method:'POST',body:JSON.stringify({phone})});setPhoneSent(true);setNotice('簡訊驗證碼已送出，請輸入收到的 6 位數驗證碼。');}catch(err){setError(err.message);}finally{setBusy(false);}};
+  const verifyPhoneCode=async()=>{setBusy(true);setError('');setNotice('');try{const data=await request('/auth/phone/verify',{method:'POST',body:JSON.stringify({phone,token:phoneOtp})});saveSession(data);await loadMe();setPhoneSent(false);}catch(err){setError(err.message);}finally{setBusy(false);}};
   const logout=async()=>{try{await request('/auth/logout',{method:'POST'});}catch(_){}clearSession();setUser(null);setIsAdmin(false);setAdminOpen(false);};
   const changePassword=async(e)=>{e.preventDefault();setMemberBusy(true);setError('');try{await request('/auth/password',{method:'POST',body:JSON.stringify({password:nextPassword})});setNextPassword('');setPasswordOpen(false);setNotice('密碼已更新。');}catch(err){setError(err.message);}finally{setMemberBusy(false);}};
   const loadMembers=async()=>{setMemberBusy(true);try{const data=await request('/admin/members');setMembers(data.users||[]);}catch(e){setError(e.message);}finally{setMemberBusy(false);}};
@@ -71,6 +80,15 @@ export default function AuthGate({children}){
       <label style={styles.label}>密碼<input style={styles.input} type="password" autoComplete={mode==='login'?'current-password':'new-password'} value={password} onChange={e=>setPassword(e.target.value)} minLength={10} required placeholder="至少 10 個字元"/></label>
       <button style={styles.submit} disabled={busy}>{busy?'處理中…':mode==='login'?'登入系統':'註冊會員'}</button>
     </form>
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:12}}>
+      <button type="button" style={styles.socialBtn} disabled={busy} onClick={()=>startOAuth('apple')}> 使用 Apple</button>
+      <button type="button" style={styles.socialBtn} disabled={busy} onClick={()=>startOAuth('facebook')}>f 使用 Facebook</button>
+    </div>
+    <div style={{borderTop:'1px solid #293951',marginTop:18,paddingTop:14}}>
+      <b style={{fontSize:13,color:'#dbeafe'}}>手機號碼驗證登入／註冊</b>
+      <label style={{...styles.label,marginTop:10}}>手機號碼（國際格式）<input style={styles.input} type="tel" autoComplete="tel" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+886912345678"/></label>
+      {!phoneSent?<button type="button" style={{...styles.submit,width:'100%',marginTop:9}} disabled={busy||!/^\\+[1-9]\\d{7,14}$/.test(phone)} onClick={sendPhoneCode}>傳送簡訊驗證碼</button>:<><label style={{...styles.label,marginTop:9}}>簡訊驗證碼<input style={styles.input} inputMode="numeric" autoComplete="one-time-code" maxLength={8} value={phoneOtp} onChange={e=>setPhoneOtp(e.target.value.replace(/\\D/g,''))} placeholder="輸入簡訊驗證碼"/></label><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:9}}><button type="button" style={styles.submit} disabled={busy||phoneOtp.length<4} onClick={verifyPhoneCode}>驗證並登入</button><button type="button" style={styles.smallBtn} disabled={busy} onClick={sendPhoneCode}>重新傳送</button></div></>}
+    </div>
     {error&&<div style={styles.error}>{error}</div>}{notice&&<div style={styles.notice}>{notice}</div>}
     <div style={styles.foot}>會員資料由 Supabase Auth 管理；未登入無法讀取市場 API。管理員可建立及停用會員。</div>
   </div></div>;
@@ -96,6 +114,7 @@ const styles={
   tab:{border:0,background:'transparent',color:'#94a3b8',padding:11,borderRadius:8,cursor:'pointer'},activeTab:{border:0,background:'#1d3556',color:'#bfdbfe',padding:11,borderRadius:8,fontWeight:700,cursor:'pointer'},
   label:{display:'grid',gap:7,fontSize:12,color:'#cbd5e1'},input:{width:'100%',boxSizing:'border-box',padding:'13px 12px',borderRadius:10,border:'1px solid #344761',background:'#0b1422',color:'#f8fafc',fontSize:15,outline:'none'},
   submit:{border:0,borderRadius:10,padding:14,background:'linear-gradient(90deg,#2563eb,#0f9f83)',color:'white',fontWeight:800,fontSize:14,cursor:'pointer'},
+  socialBtn:{border:'1px solid #3b526e',borderRadius:10,padding:12,background:'#172338',color:'#f8fafc',fontWeight:700,fontSize:13,cursor:'pointer'},
   error:{marginTop:13,padding:10,borderRadius:9,background:'#451f2a',color:'#fecdd3',fontSize:12},notice:{marginTop:13,padding:10,borderRadius:9,background:'#123b35',color:'#a7f3d0',fontSize:12},
   foot:{marginTop:20,paddingTop:14,borderTop:'1px solid #293951',fontSize:11,color:'#8293aa',lineHeight:1.7},
   userbar:{position:'fixed',zIndex:1000,top:9,right:12,display:'flex',alignItems:'center',gap:7,padding:'6px 8px 6px 12px',border:'1px solid #344761',borderRadius:12,background:'#0b1422ee',color:'#cbd5e1',fontSize:11,boxShadow:'0 4px 20px #0005'},
