@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
 
-const HLS_CHANNELS = (()=>{try{const value=JSON.parse(process.env.REACT_APP_LIVE_HLS_STREAMS||'[]');return Array.isArray(value)?value.filter(x=>x&&x.id&&x.name&&x.src&&/^https:\/\//i.test(x.src)).map(x=>({...x,kind:'hls'})):[];}catch(_){return [];}})();
+const HLS_CHANNELS = (()=>{try{const value=JSON.parse(process.env.REACT_APP_LIVE_HLS_STREAMS||'[]');return Array.isArray(value)?value.filter(x=>x&&x.id&&x.name&&x.src&&/^https:\/\//i.test(x.src)).map(x=>({...x,url:x.url||x.src,kind:'hls'})):[];}catch(_){return [];}})();
 function HlsLivePlayer({src,title}){const ref=useRef(null);useEffect(()=>{const video=ref.current;if(!video)return;let hls;if(video.canPlayType('application/vnd.apple.mpegurl'))video.src=src;else if(Hls.isSupported()){hls=new Hls({enableWorker:true,lowLatencyMode:true});hls.loadSource(src);hls.attachMedia(video);}return()=>{if(hls)hls.destroy();video.removeAttribute('src');video.load();};},[src]);return <video ref={ref} controls playsInline preload="none" aria-label={title} style={{width:'100%',aspectRatio:'16/9',background:'#000',borderRadius:8}}/>;}
 const CHANNELS = [
   {id:'ebc57',name:'57 東森財經新聞',kind:'youtube',channel:'UCuzqko_GKcj9922M1gUo__w',url:'https://www.youtube.com/@57ETFN/live',note:'官方 24 小時財經新聞直播'},
@@ -31,7 +31,7 @@ export default function LiveMarketTV(){
   </div>
   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(145px,1fr))',gap:7,marginBottom:10}}>
    {CHANNELS.map(item=><button key={item.id} onClick={()=>setActive(item.id)} style={{textAlign:'left',background:active===item.id?'#1d426b':'#172338',color:'#e8eef8',border:'1px solid '+(active===item.id?'#60a5fa':'#293951'),borderRadius:8,padding:9,cursor:'pointer'}}>
-    <b style={{fontSize:12}}>{item.name}</b><small style={{display:'block',color:'#91a1b8',fontSize:10,marginTop:4}}>{item.kind==='youtube'?'YouTube 可嵌入':'官方外連直播'}</small>
+    <b style={{fontSize:12}}>{item.name}</b><small style={{display:'block',color:'#91a1b8',fontSize:10,marginTop:4}}>{item.kind==='youtube'?'YouTube 可嵌入':item.kind==='hls'?'HLS 有聲播放器':'官方外連直播'}</small>
    </button>)}
   </div>
   {channel.kind==='hls'?<HlsLivePlayer key={channel.id} src={channel.src} title={channel.name}/>:embed?<iframe key={channel.id+'-'+muted} title={channel.name+' 官方直播'} src={embed} style={{width:'100%',aspectRatio:'16/9',border:0,background:'#000',borderRadius:8}} allow="autoplay; encrypted-media; picture-in-picture; web-share" allowFullScreen loading="lazy"/>:
