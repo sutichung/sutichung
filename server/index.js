@@ -158,15 +158,42 @@ async function route(req,res){
     return json(res,200,result);
   }
   if(u.pathname==='/api/market/futures'){
-    const result=await safeLoad('futures',TTL.futures,async()=>{const x=await external('MARKET_FUTURES_URL','未設定台指期授權行情供應商 MARKET_FUTURES_URL');return {data:x.data||null,source:x.source||'Configured futures provider',timestamp:x.timestamp||now()};},e=>({data:null,source:'unavailable',timestamp:now(),error:e.message}));
-    return json(res,200,result);
-  }
-  if(u.pathname==='/api/market/news'){
-    const result=await safeLoad('news',TTL.news,async()=>{const x=await external('MARKET_NEWS_URL','未設定授權新聞資料供應商 MARKET_NEWS_URL');return {data:Array.isArray(x.data)?x.data:[],source:x.source||'Configured licensed news provider',timestamp:x.timestamp||now()};},e=>({data:[],source:'unavailable',timestamp:now(),error:e.message}));
+    const result=await safeLoad('futures',TTL.futures,async()=>{
+      if(process.env.MARKET_FUTURES_URL){const x=await external('MARKET_FUTURES_URL','');return {data:x.data||null,source:x.source||'Configured futures provider',timestamp:x.timestamp||now()};}
+      if(!FINMIND_TOKEN)throw new Error('未設定 FINMIND_TOKEN 或 MARKET_FUTURES_URL');
+      const d=new Date();d.setDate(d.getDate()-14);const startDate=d.toISOString().slice(0,10);
+      const rows=await finmind('TaiwanFuturesDaily',{data_id:'TX',start_date:startDate},20000);
+      if(!rows.length)throw new Error('FinMind TX 期貨日資料目前無資料');
+      const latestDate=rows.map(x=>String(x.date||'')).sort().at(-1);
+      const today=rows.filter(x=>String(x.date)===latestDate).sort((a,b)=>Number(b.volume||0)-Number(a.volume||0));
+      const latest=today[0],contract=String(latest.contract_date||'');
+      const prior=rows.filter(x=>String(x.contract_date||'')===contract&&String(x.date)<latestDate).sort((a,b)=>String(b.date).localeCompare(String(a.date)))[0];
+      const last=Number(latest.close),prev=Number(prior?.close);
+      return {data:{last:Number.isFinite(last)?last:null,changePct:Number.isFinite(prev)&&prev!==0?(last/prev-1)*100:null,openInterestChange:prior?Number(latest.open_interest||0)-Number(prior.open_interest||0):null,volume:Number(latest.volume||0),contractDate:contract,asOf:latestDate,frequency:'daily'},source:'FinMind TaiwanFuturesDaily（非即時）',timestamp:now()};
+    },e=>({data:null,source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
   }
   if(u.pathname==='/api/market/sentiment'){
-    const result=await safeLoad('sentiment',TTL.sentiment,async()=>{const x=await external('MARKET_SENTIMENT_URL','未設定市場情緒資料供應商 MARKET_SENTIMENT_URL');return {data:x.data||null,source:x.source||'Configured sentiment provider',timestamp:x.timestamp||now()};},e=>({data:null,source:'unavailable',timestamp:now(),error:e.message}));
+    const result=await safeLoad('sentiment',TTL.sentiment,async()=>{
+      if(process.env.MARKET_SENTIMENT_URL){const x=await external('MARKET_SENTIMENT_URL','');return {data:x.data||null,source:x.source||'Configured sentiment provider',timestamp:x.timestamp||now()};}
+      if(!FINMIND_TOKEN)throw new Error('未設定 FINMIND_TOKEN 或 MARKET_SENTIMENT_URL');
+      const d=new Date();d.setDate(d.getDate()-45);const startDate=d.toISOString().slice(0,10);
+      const rows=await finmind('CnnFearGreedIndex',{start_date:startDate},15000);
+      const latest=rows.sort((a,b)=>String(a.date).localeCompare(String(b.date))).at(-1);
+      if(!latest)throw new Error('FinMind 恐懼貪婪指數目前無資料');
+      return {data:{fearGreed:Number(latest.fear_greed),label:latest.fear_greed_emotion,asOf:latest.date},source:'FinMind CnnFearGreedIndex（日資料）',timestamp:now()};
+    },e=>({data:null,source:'unavailable',timestamp:now(),error:e.message}));
+    return json(res,200,result);
+  }
+  if(u.pathname==='/api/market/news'){
+    const result=await safeLoad('news',TTL.news,async()=>{
+      if(process.env.MARKET_NEWS_URL){const x=await external('MARKET_NEWS_URL','');return {data:Array.isArray(x.data)?x.data:[],source:x.source||'Configured licensed news provider',timestamp:x.timestamp||now()};}
+      if(!FINMIND_TOKEN)throw new Error('未設定 FINMIND_TOKEN 或 MARKET_NEWS_URL');
+      const d=new Date();d.setDate(d.getDate()-3);const startDate=d.toISOString().slice(0,10);
+      const rows=await finmind('TaiwanStockNews',{start_date:startDate},20000);
+      const data=rows.map(r=>({title:r.title||'',summary:r.description||'',url:r.link||'',source:r.source||'FinMind',publishedAt:r.date||'',symbol:r.stock_id||''})).filter(x=>x.title||x.url).sort((a,b)=>String(b.publishedAt).localeCompare(String(a.publishedAt))).slice(0,50);
+      return {data,source:'FinMind TaiwanStockNews（標題與摘要）',timestamp:now()};
+    },e=>({data:[],source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
   }
   // In production, serve the compiled React app from the same origin as the API.
