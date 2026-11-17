@@ -459,13 +459,19 @@ async function route(req,res){
           const q=await fetchJson(base+'/intraday/quote/TXF1!?session=afterhours',8000,headers);
           nightSession=normalize(q,'afterhours');
           if(!nightSession||nightSession.last==null)nightSessionError='富果已回應，但目前沒有可用的正式夜盤成交價（可能尚未開盤或只有試撮）';
-        }catch(e){nightSessionError='富果夜盤報價連線失敗：'+e.message;}
+        }catch(e){
+          const message=String(e.message||e);
+          if(message.includes('upstream_http_403'))nightSessionError='富果拒絕期權即時行情（HTTP 403）：目前 API 方案未開通期權即時行情權限。請在 Fugle 會員中心升級至支援期權行情的「開發者」或「進階用戶」方案，並確認期權即時行情已啟用；一般股票 API Key 不代表具備期權權限。';
+          else if(message.includes('upstream_http_401'))nightSessionError='富果期權 API 金鑰驗證失敗（HTTP 401）：請在 Fugle 行情 API 金鑰頁重新建立 Key，並更新 Render 的 FUGLE_API_KEY。';
+          else if(message.includes('upstream_http_429'))nightSessionError='富果期權 API 呼叫已達方案限制（HTTP 429）：請稍後重試或確認方案呼叫額度。';
+          else nightSessionError='富果夜盤報價連線失敗：'+message;
+        }
         try{
           const q=await fetchJson(base+'/intraday/quote/TXF1!',8000,headers);
           daySession=normalize(q,'regular');
         }catch(e){if(!nightSessionError)nightSessionError='富果日盤報價連線失敗：'+e.message;}
         if(nightSession||daySession){
-          return {data:{last:daySession?.last??null,changePct:daySession?.changePct??null,openInterestChange:null,volume:daySession?.volume??null,contractDate:nightSession?.symbol||daySession?.symbol||'TXF1!',frequency:'intraday-rest',daySession,nightSession,nightSessionError,nightSessionSource:'Fugle Futopt REST API',nightSessionRefreshMs:5000},source:'Fugle Futopt REST API（TXF1!；日盤／夜盤分開查詢）',timestamp:now()};
+          return {data:{last:daySession?.last??null,changePct:daySession?.changePct??null,openInterestChange:null,volume:daySession?.volume??null,contractDate:nightSession?.symbol||daySession?.symbol||'TXF1!',frequency:'intraday-rest',daySession,nightSession,nightSessionError,nightSessionErrorCode:nightSessionError?.includes('HTTP 403')?'permission_denied':nightSessionError?.includes('HTTP 401')?'invalid_api_key':nightSessionError?.includes('HTTP 429')?'rate_limited':nightSessionError?'upstream_error':null,nightSessionAction:nightSessionError?.includes('HTTP 403')?'升級 Fugle 期權即時行情權限後再測試':nightSessionError?.includes('HTTP 401')?'重新建立 API Key 並更新 Render 環境變數':null,nightSessionSource:'Fugle Futopt REST API',nightSessionRefreshMs:5000},source:'Fugle Futopt REST API（TXF1!；日盤／夜盤分開查詢）',timestamp:now()};
         }
       }
       if(process.env.MARKET_FUTURES_URL){
@@ -500,6 +506,10 @@ async function route(req,res){
       if(!near)throw new Error('TAIFEX TX 近月合約欄位無法解析');
       return {data:{last:near.last,changePct:near.changePct,openInterestChange:null,openInterest:near.openInterest,volume:near.volume,contractDate:near.month,asOf:near.date,frequency:'daily',nightSession:null,nightSessionError:nightSessionError||'此資料來源僅提供日報，非夜盤即時報價'},source:'TAIFEX OpenAPI DailyMarketReportFut（官方日資料，非逐筆即時）',timestamp:now()};
     },e=>({data:null,source:'unavailable',timestamp:now(),error:e.message}));
+    if(result.stale&&result.data){
+      const data={...result.data,nightSession:result.data.nightSession?{...result.data.nightSession,last:null,stale:true}:null,nightSessionError:'夜盤資料來源更新失敗；舊快取不作為即時成交價顯示。',nightSessionErrorCode:'stale_data'};
+      return json(res,200,{...result,data,stale:true});
+    }
     return json(res,200,result);
   }
   if(u.pathname==='/api/market/sentiment'){
