@@ -638,7 +638,11 @@ async function route(req,res){
           const rawLast=Number(q.lastPrice);
           const hasLastTrade=Number.isFinite(rawLast)&&rawLast>0;
           const last=q.isTrial||staleQuote||!hasLastTrade?null:rawLast;
-          return {symbol:q.symbol||'TXF1!',name:q.name||'臺股期貨近月',last,change:Number.isFinite(Number(q.change))?Number(q.change):null,changePct:Number.isFinite(Number(q.changePercent))?Number(q.changePercent):null,previousClose:Number(q.previousClose)>0?Number(q.previousClose):null,open:Number(q.openPrice)>0?Number(q.openPrice):null,high:Number(q.highPrice)>0?Number(q.highPrice):null,low:Number(q.lowPrice)>0?Number(q.lowPrice):null,volume:Number(q.total?.tradeVolume??0),timestamp,date:q.date||null,isTrial:!!q.isTrial,stale:staleQuote,quoteType:staleQuote?'stale':q.isTrial?'trial':!hasLastTrade?'no-trade':'realtime',session};
+          const openInterestRaw=q.openInterest??q.openInterestQty??q.total?.openInterest;
+          const openInterest= openInterestRaw==null||openInterestRaw===''?null:Number(openInterestRaw);
+          const openInterestChangeRaw=q.openInterestChange??q.openInterestChangeQty;
+          const openInterestChange=openInterestChangeRaw==null||openInterestChangeRaw===''?null:Number(openInterestChangeRaw);
+          return {symbol:q.symbol||'TXF1!',name:q.name||'臺股期貨近月',last,change:Number.isFinite(Number(q.change))?Number(q.change):null,changePct:Number.isFinite(Number(q.changePercent))?Number(q.changePercent):null,previousClose:Number(q.previousClose)>0?Number(q.previousClose):null,open:Number(q.openPrice)>0?Number(q.openPrice):null,high:Number(q.highPrice)>0?Number(q.highPrice):null,low:Number(q.lowPrice)>0?Number(q.lowPrice):null,volume:Number(q.total?.tradeVolume??0),openInterest:Number.isFinite(openInterest)?openInterest:null,openInterestChange:Number.isFinite(openInterestChange)?openInterestChange:null,timestamp,date:q.date||null,isTrial:!!q.isTrial,stale:staleQuote,quoteType:staleQuote?'stale':q.isTrial?'trial':!hasLastTrade?'no-trade':'realtime',session};
         };
         try{
           const q=await fetchJson(base+'/intraday/quote/TXF1!?session=afterhours',8000,headers);
@@ -656,7 +660,7 @@ async function route(req,res){
           daySession=normalize(q,'regular');
         }catch(e){if(!nightSessionError)nightSessionError='富果日盤報價連線失敗：'+e.message;}
         if(nightSession||daySession){
-          return {data:{last:daySession?.last??null,changePct:daySession?.changePct??null,openInterestChange:null,volume:daySession?.volume??null,contractDate:nightSession?.symbol||daySession?.symbol||'TXF1!',frequency:'intraday-rest',daySession,nightSession,nightSessionError,nightSessionErrorCode:nightSessionError?.includes('HTTP 403')?'permission_denied':nightSessionError?.includes('HTTP 401')?'invalid_api_key':nightSessionError?.includes('HTTP 429')?'rate_limited':nightSessionError?'upstream_error':null,nightSessionAction:nightSessionError?.includes('HTTP 403')?'升級 Fugle 期權即時行情權限後再測試':nightSessionError?.includes('HTTP 401')?'重新建立 API Key 並更新 Render 環境變數':null,nightSessionSource:'Fugle Futopt REST API',nightSessionRefreshMs:5000},source:'Fugle Futopt REST API（TXF1!；日盤／夜盤分開查詢）',timestamp:now()};
+          return {data:{last:daySession?.last??null,changePct:daySession?.changePct??null,openInterest:daySession?.openInterest??null,openInterestChange:daySession?.openInterestChange??null,volume:daySession?.volume??null,contractDate:nightSession?.symbol||daySession?.symbol||'TXF1!',frequency:'intraday-rest',daySession,nightSession,nightSessionError,nightSessionErrorCode:nightSessionError?.includes('HTTP 403')?'permission_denied':nightSessionError?.includes('HTTP 401')?'invalid_api_key':nightSessionError?.includes('HTTP 429')?'rate_limited':nightSessionError?'upstream_error':null,nightSessionAction:nightSessionError?.includes('HTTP 403')?'升級 Fugle 期權即時行情權限後再測試':nightSessionError?.includes('HTTP 401')?'重新建立 API Key 並更新 Render 環境變數':null,nightSessionSource:'Fugle Futopt REST API',nightSessionRefreshMs:5000},source:'Fugle Futopt REST API（TXF1!；日盤／夜盤分開查詢）',timestamp:now()};
         }
       }
       if(process.env.MARKET_FUTURES_URL){
