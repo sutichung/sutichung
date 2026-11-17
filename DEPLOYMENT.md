@@ -1,7 +1,7 @@
 # 部署指南（Render / GitHub Actions）
 
 ## Render Blueprint
-目前已在 Render 建立 Blueprint 設定並產生待審核的首次同步計畫；尚未建立正式服務或上線。請先開啟 [Render Blueprint 計畫](https://dashboard.render.com/blueprint/exs-dbu3qhdckfvc73b15l60/sync/exe-dbu3sjhsrm7s73ehn8e0)，確認服務為 Free Docker Web Service，再按 Apply。這一步不會替你購買行情方案。
+目前已在 Render 建立 Blueprint 設定並產生待審核的首次同步計畫；尚未建立正式服務或上線。請先開啟 [Render Blueprint 計畫](https://dashboard.render.com/blueprint/exs-dbu3qhdckfvc73b15l60)，確認服務為 Free Docker Web Service，再按 Apply。這一步不會替你購買行情方案。
 
 首次同步完成後，進入 Render 服務的 Environment，安全地填入：
 - `FINMIND_TOKEN`：FinMind token。全市場日 K、全市場法人／融資資料需要 Backer 以上方案。
