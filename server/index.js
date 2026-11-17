@@ -7,6 +7,7 @@ const { indicators } = require('./lib/indicators');
 const { scoreStock } = require('./lib/scoring');
 const { getTradingReadiness } = require('./lib/trading-readiness');
 const { buildAiCommittee } = require('./lib/agents');
+const { applyFirewall } = require('./lib/firewall');
 
 const PORT = Number(process.env.PORT || 8787);
 const FINMIND_BASE = process.env.FINMIND_BASE || 'https://api.finmindtrade.com/api/v4/data';
@@ -870,7 +871,7 @@ async function route(req,res){
   return json(res,404,{error:'not_found'});
 }
 const server=http.createServer(async(req,res)=>{
-  if(!rateLimit(req))return json(res,429,{error:'rate_limited',retryAfterSeconds:60});
+  if(!applyFirewall(req,res))return;
   try{await route(req,res);}catch(e){json(res,500,{error:'internal_error',message:process.env.NODE_ENV==='production'?'服務暫時無法處理請求':e.message});}
 });
 server.listen(PORT,()=>process.stdout.write('Taiwan stock API listening on '+PORT+'\n'));
