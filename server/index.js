@@ -29,19 +29,30 @@ async function twseMisSnapshot(){
   const listed=await safeLoad('universe',TTL.universe,twseListedUniverse);
   const symbols=(listed.data||[]).map(x=>x.symbol).filter(x=>/^[0-9]{4,6}$/.test(x));
   if(!symbols.length)throw new Error('無上市股票清單，無法連接證交所行情');
-  const chunks=[];for(let i=0;i<symbols.length;i+=80)chunks.push(symbols.slice(i,i+80));
-  const payloads=await mapLimit(chunks,3,async chunk=>{
+  const headers={'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36','Referer':'https://mis.twse.com.tw/stock/index.jsp','Origin':'https://mis.twse.com.tw','Accept':'application/json, text/plain, */*'};
+  const warmUrl='https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_2330.tw&json=1&delay=0&_='+Date.now();
+  const warm=await fetch(warmUrl,{headers,signal:AbortSignal.timeout(12000)});
+  if(!warm.ok)throw new Error('證交所 MIS 初始化連線失敗 HTTP '+warm.status);
+  const cookies=(warm.headers.getSetCookie?.()||[]).map(x=>x.split(';')[0]).filter(Boolean).join('; ');
+  const warmBody=await warm.json();
+  if(warmBody.rtmessage && warmBody.rtmessage!=='OK')throw new Error('證交所 MIS 初始化回應：'+warmBody.rtmessage);
+  const chunks=[];for(let i=0;i<symbols.length;i+=25)chunks.push(symbols.slice(i,i+25));
+  const payloads=await mapLimit(chunks,2,async chunk=>{
     const params=new URLSearchParams({ex_ch:chunk.map(x=>'tse_'+x+'.tw').join('|'),json:'1',delay:'0',_:String(Date.now())});
-    return fetchJson('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?'+params.toString(),10000,{'User-Agent':'Mozilla/5.0','Referer':'https://mis.twse.com.tw/stock/index.jsp'});
+    const h={...headers};if(cookies)h.Cookie=cookies;
+    const payload=await fetchJson('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?'+params.toString(),12000,h);
+    if(payload.rtmessage && payload.rtmessage!=='OK')throw new Error('證交所 MIS 回應：'+payload.rtmessage);
+    return payload;
   });
   const data={};
   for(const payload of payloads)for(const q of (payload.msgArray||[])){
     const symbol=String(q.c||'');if(!symbol)continue;
-    const price=Number(q.z),prev=Number(q.y),volume=Number(q.tv);
-    data[symbol]={symbol,name:q.n||symbol,price:Number.isFinite(price)&&price>0?price:null,changePct:Number.isFinite(price)&&Number.isFinite(prev)&&prev>0?((price/prev)-1)*100:null,volume:Number.isFinite(volume)?volume:null,timestamp:q.t?new Date(String(q.d||'').replace(/\//g,'-')+'T'+q.t+'+08:00').toISOString():null,market:'TSE',source:'TWSE MIS'};
+    const price=Number(q.z),preClose=Number(q.y),volume=Number(q.v??q.tv);
+    const quoteTime=q.tlong?new Date(Number(q.tlong)).toISOString():(q.t&&q.d?new Date(String(q.d).replace(/\//g,'-')+'T'+q.t+'+08:00').toISOString():null);
+    data[symbol]={symbol,name:q.n||symbol,price:Number.isFinite(price)&&price>0?price:(Number(q.pz)>0?Number(q.pz):null),changePct:Number.isFinite(price)&&Number.isFinite(preClose)&&preClose>0?((price/preClose)-1)*100:null,volume:Number.isFinite(volume)?volume:null,timestamp:quoteTime,market:'TSE',source:'TWSE MIS'};
   }
-  if(!Object.keys(data).length)throw new Error('證交所 MIS 未回傳有效報價');
-  return {data,source:'證交所 TWSE MIS 官方行情（即時報價）',timestamp:now(),delayed:false,scannedCount:Object.keys(data).length};
+  if(!Object.keys(data).length)throw new Error('證交所 MIS 已連線但未回傳股票報價；回應 '+(payloads[0]?.rtmessage||'無有效 msgArray'));
+  return {data,source:'證交所 TWSE MIS 官方行情',timestamp:now(),delayed:false,scannedCount:Object.keys(data).length,listedCount:symbols.length};
 }
 async function finmind(dataset, extra={}, timeoutMs=8000) {
   if(!FINMIND_TOKEN) throw new Error('未設定 FINMIND_TOKEN');
@@ -97,6 +108,17 @@ async function route(req,res){
   if(u.pathname==='/api/market/universe'){
     const result=await safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
+  }
+  if(u.pathname==='/api/diagnostics/market'){
+    try{
+      const listed=await twseListedUniverse();
+      const live=await twseMisSnapshot();
+      const sample=Object.values(live.data).slice(0,5).map(x=>({symbol:x.symbol,name:x.name,price:x.price,timestamp:x.timestamp}));
+      return json(res,200,{ok:true,connection:'connected',source:live.source,listedCount:listed.data.length,quoteCount:live.scannedCount,serverTime:now(),sample});
+    }catch(e){
+      console.error('[market-diagnostics] '+(e.stack||e.message));
+      return json(res,200,{ok:false,connection:'disconnected',error:e.message,serverTime:now()});
+    }
   }
   if(u.pathname==='/api/market/snapshot'){
     const result=await safeLoad('snapshot',TTL.snapshot,async()=>{
