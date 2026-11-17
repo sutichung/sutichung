@@ -4,7 +4,7 @@ const path=require('node:path');
 const base=String(process.env.MARKET_APP_URL||'').replace(/\/$/,'');
 if(!base) throw new Error('MARKET_APP_URL secret is required');
 async function get(endpoint){
- const response=await fetch(base+endpoint,{headers:{accept:'application/json'},signal:AbortSignal.timeout(20000)});
+ const response=await fetch(base+endpoint,{headers:{accept:'application/json'},signal:AbortSignal.timeout(120000)});
  if(!response.ok) throw new Error(endpoint+' returned HTTP '+response.status);
  return response.json();
 }
