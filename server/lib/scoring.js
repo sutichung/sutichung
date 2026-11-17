@@ -68,6 +68,17 @@ function scoreStock(input={}) {
     const f=Number(input.futuresChangePct);
     add(5,f>0?1:f<0?-1:0,'台指期方向偏多','台指期方向偏空');
   }
+  if(finite(input.k)) {
+    const k=Number(input.k);
+    if(k>=50&&k<=80)add(5,1,'KD 動能偏多','');
+    else if(k>90)add(5,-1,'','KD 高檔鈍化風險');
+    else if(k<20)add(5,-0.25,'','KD 位於超賣區，等待反轉確認');
+    else covered+=5;
+  }
+  if(finite(input.priceVsEma20Pct)) add(5,Number(input.priceVsEma20Pct)>=0?1:-1,'價格位於 EMA20 之上','價格位於 EMA20 之下');
+  if(finite(input.priceVsEma60Pct)) add(5,Number(input.priceVsEma60Pct)>=0?1:-1,'價格位於 EMA60 之上','價格位於 EMA60 之下');
+  if(finite(input.return5dPct)) add(5,Number(input.return5dPct)>=0?1:-1,'近五日報酬偏強','近五日報酬偏弱');
+  if(finite(input.return20dPct)) add(5,Number(input.return20dPct)>=0?1:-1,'近二十日報酬偏強','近二十日報酬偏弱');
 
   const scoreValue=Math.round(clamp(score));
   const confidence=Math.round(covered/total*100);
