@@ -15,7 +15,7 @@ const FUGLE_BASE = process.env.FUGLE_BASE_URL || 'https://api.fugle.tw/marketdat
 const CACHE = new Map();
 const PENDING = new Map();
 const RATE = new Map();
-const TTL = { universe: 6*60*60*1000, snapshot: 10000, scan: 10000, history: 5*60*1000, flows: 5*60*1000, futures: 5*60*1000, sentiment: 30*60*1000, news: 5*60*1000 };
+const TTL = { universe: 6*60*60*1000, snapshot: 10000, scan: 10000, history: 5*60*1000, flows: 30*60*1000, futures: 5*60*1000, sentiment: 30*60*1000, news: 5*60*1000 };
 const now = () => new Date().toISOString();
 const json = (res, status, body) => { res.writeHead(status, {'content-type':'application/json; charset=utf-8','cache-control':'no-store'}); res.end(JSON.stringify(body)); };
 function cached(key, ttl) { const x=CACHE.get(key); return x && Date.now()-x.time<ttl ? x.value : null; }
@@ -128,11 +128,11 @@ async function twseInstitutionalDay(date){
   if(!Array.isArray(rows)||!rows.length)return {date,rows:[]};
   const idx={
     symbol:twseField(fields,/證券代號/,0),
-    foreign:twseField(fields,/外陸資買賣超股數\\(不含外資自營商\\)/,4),
+    foreign:twseField(fields,/外陸資買賣超股數\(不含外資自營商\)/,4),
     foreignDealer:twseField(fields,/外資自營商買賣超股數/,7),
     trust:twseField(fields,/投信買賣超股數/,10),
-    dealer:twseField(fields,/自營商買賣超股數\\(自行買賣\\)/,13),
-    dealerHedge:twseField(fields,/自營商買賣超股數\\(避險\\)/,16)
+    dealer:twseField(fields,/自營商買賣超股數\(自行買賣\)/,13),
+    dealerHedge:twseField(fields,/自營商買賣超股數\(避險\)/,16)
   };
   return {date,rows:rows.map(r=>({symbol:String(Array.isArray(r)?r[idx.symbol]:r['證券代號']||''),foreign:twseNumber(Array.isArray(r)?r[idx.foreign]:r['外陸資買賣超股數(不含外資自營商)']),foreignDealer:twseNumber(Array.isArray(r)?r[idx.foreignDealer]:r['外資自營商買賣超股數']),trust:twseNumber(Array.isArray(r)?r[idx.trust]:r['投信買賣超股數']),dealer:twseNumber(Array.isArray(r)?r[idx.dealer]:r['自營商買賣超股數(自行買賣)']),dealerHedge:twseNumber(Array.isArray(r)?r[idx.dealerHedge]:r['自營商買賣超股數(避險)'])})).filter(x=>/^[0-9]{4,6}$/.test(x.symbol))};
 }
@@ -190,7 +190,7 @@ async function openSourceMarketHistory(){
     if(candles.length<60)continue;
     const ind=indicators(candles);if(!ind)continue;
     const last=candles.at(-1),prior=candles.at(-2)?.close,close5=candles.at(-6)?.close,close20=candles.at(-21)?.close,volume5d=candles.slice(-5).reduce((sum,row)=>sum+row.volume,0);
-    data[symbol]={...ind,technicalAsOf:last.time,asOf:valid.at(-1).fetched_at||now(),close:last.close,volume5d,dailyChangePct:prior?((last.close/prior)-1)*100:null,return5dPct:close5?((last.close/close5)-1)*100:null,return20dPct:close20?((last.close/close20)-1)*100:null};
+    data[symbol]={...ind,technicalAsOf:last.time,asOf:valid.at(-1).fetched_at||now(),close:last.close,latestVolume:last.volume,volume5d,dailyChangePct:prior?((last.close/prior)-1)*100:null,return5dPct:close5?((last.close/close5)-1)*100:null,return20dPct:close20?((last.close/close20)-1)*100:null};
   }
   return {data,historyAsOf:valid.at(-1).trade_date,historyDateCount:valid.length,historyCount:Object.keys(data).length,source:'88jiayu/tw-chip-open-data（TWSE 官方開放資料歸檔；OGDL）'};
 }
@@ -297,10 +297,10 @@ async function route(req,res){
       const fiveDay=Object.values(base.data||{}).map(x=>Number(x.return5dPct)).filter(Number.isFinite),adv=fiveDay.filter(v=>v>0).length,dec=fiveDay.filter(v=>v<0).length,advanceDecline=adv/Math.max(1,dec);
       for(const [symbol,technical] of Object.entries(base.data||{})){
         if(!twseSymbols.has(symbol))continue;
-        const quote=quotes[symbol]||{},flow=flows[symbol]||{},valuation=perResult.data?.[symbol]||{},price=quote.price!=null&&Number.isFinite(Number(quote.price))&&Number(quote.price)>0?Number(quote.price):null;
+        const quote=quotes[symbol]||{},flow=flows[symbol]||{},valuation=perResult.data?.[symbol]||{},livePrice=quote.price!=null&&Number.isFinite(Number(quote.price))&&Number(quote.price)>0?Number(quote.price):null,price=livePrice??Number(technical.close);
         const trustFlowPct5d=Number.isFinite(Number(flow.trustNet5d))&&technical.volume5d>0?(Number(flow.trustNet5d)/technical.volume5d)*100:null;
         const foreignFlowPct5d=Number.isFinite(Number(flow.foreignNet5d))&&technical.volume5d>0?(Number(flow.foreignNet5d)/technical.volume5d)*100:null;
-        const row={...technical,...flow,...valuation,pe:valuation.pe,pb:valuation.pb,dividendYield:valuation.dividendYield,trustFlowPct5d,foreignFlowPct5d,signal:technical.macdSignal,price,changePct:quote.changePct,volume:quote.volume,asOf:quote.timestamp||technical.asOf||null,priceVsEma20Pct:price!==null&&technical.ema20?((price/technical.ema20)-1)*100:null,priceVsEma60Pct:price!==null&&technical.ema60?((price/technical.ema60)-1)*100:null};
+        const row={...technical,...flow,...valuation,pe:valuation.pe,pb:valuation.pb,dividendYield:valuation.dividendYield,trustFlowPct5d,foreignFlowPct5d,signal:technical.macdSignal,price,quoteIsLive:livePrice!==null,changePct:quote.changePct??technical.dailyChangePct,volume:quote.volume??technical.latestVolume,asOf:quote.timestamp||technical.asOf||null,priceVsEma20Pct:price!==null&&technical.ema20?((price/technical.ema20)-1)*100:null,priceVsEma60Pct:price!==null&&technical.ema60?((price/technical.ema60)-1)*100:null};
         row.scorecard=scoreStock({...row,asOf:row.asOf,maxAgeMs:36*60*60*1000,fearGreed:sentiment.fearGreed,advanceDecline:sentiment.advanceDecline??advanceDecline,futuresChangePct:futures.changePct});
         data[symbol]=row;
       }
