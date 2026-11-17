@@ -7,6 +7,8 @@ const CHANNELS = [
   {id:'ebc57',name:'57 東森財經新聞',kind:'youtube',channel:'UCuzqko_GKcj9922M1gUo__w',url:'https://www.youtube.com/@57ETFN/live',note:'官方 24 小時財經新聞直播'},
   {id:'sbn',name:'SBN 全球財經台',kind:'youtube',channel:'UCtNL3hNIPMvwYufr1VKLi1Q',url:'https://www.youtube.com/@SBN1688/live',note:'官方 24 小時財經直播'},
   {id:'ustv-biz',name:'非凡商業台',kind:'youtube',channel:'UCLHsQL4YChylDX-06BCuNQA',url:'https://www.youtube.com/@ustvbiz/live',note:'官方財經節目與直播'},
+  {id:'global-money',name:'寰宇財經新聞',kind:'youtube',channel:'UCSZwcE1d1SAGyc1yvQGSOjQ',url:'https://www.youtube.com/@globalmoneytv/live',note:'官方財經頻道；依節目時段提供直播'},
+  {id:'tvbs-finance',name:'TVBS 財經',kind:'youtube',channel:'UCYDaGPmMfSXViITpPYDKIcw',url:'https://www.youtube.com/channel/UCYDaGPmMfSXViITpPYDKIcw/live',note:'官方財經節目頻道；非保證 24 小時直播'},
   {id:'set-inews',name:'三立財經 iNEWS',kind:'external',url:'https://d3uri6atc3b03q.cloudfront.net/live/691',note:'官方直播頁；若無法嵌入請外開播放'},
   {id:'ustv-news',name:'非凡新聞台',kind:'external',url:'https://news.ustv.com.tw/livevideo',note:'官方新聞直播頁；若無法嵌入請外開播放'}
 ]; 
