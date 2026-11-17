@@ -52,6 +52,17 @@ async function safeLoad(key, ttl, loader, fallback) {
   return job;
 }
 async function mapLimit(items,limit,worker){const out=new Array(items.length);let next=0;await Promise.all(Array.from({length:Math.min(limit,items.length)},async()=>{while(true){const i=next++;if(i>=items.length)return;out[i]=await worker(items[i],i);}}));return out;}
+function currentTwseRows(rows){
+  const latest=new Map();
+  for(const row of rows){
+    const symbol=String(row.stock_id||'');
+    if(!/^[0-9]{4,6}$/.test(symbol)||String(row.type||'').toLowerCase()!=='twse')continue;
+    if(['大盤','Index','所有證券'].includes(String(row.industry_category||'')))continue;
+    const previous=latest.get(symbol);
+    if(!previous||String(row.date||'')>=String(previous.date||''))latest.set(symbol,row);
+  }
+  return [...latest.values()].map(row=>({symbol:String(row.stock_id),name:row.stock_name||row.stock_id,sector:row.industry_category||'未分類',exchange:'TWSE'}));
+}
 function validateSymbol(s){return /^[0-9A-Z]{2,10}$/.test(s||'');}
 function rateLimit(req){const ip=req.socket.remoteAddress||'unknown';const t=Date.now();let a=RATE.get(ip)||[];a=a.filter(x=>t-x<60000);if(a.length>=480)return false;a.push(t);RATE.set(ip,a);return true;}
 async function route(req,res){
@@ -62,15 +73,15 @@ async function route(req,res){
   if(u.pathname==='/api/market/universe'){
     const result=await safeLoad('universe',TTL.universe,async()=>{
       const rows=await finmind('TaiwanStockInfo');
-      const data=rows.filter(x=>x.stock_id&&/^[0-9]{4,6}$/.test(String(x.stock_id))).map(x=>({symbol:String(x.stock_id),name:x.stock_name||x.stock_id,sector:x.industry_category||'未分類',exchange:x.type||'TW'}));
-      return {data,source:'FinMind TaiwanStockInfo',timestamp:now()};
+      const data=currentTwseRows(rows);
+      return {data,source:'FinMind TaiwanStockInfo (current TWSE listings only)',timestamp:now()};
     },e=>({data:[],source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
   }
   if(u.pathname==='/api/market/snapshot'){
     const result=await safeLoad('snapshot',TTL.snapshot,async()=>{
       if(FUGLE_API_KEY){
-        const markets=['TSE','OTC','ESB','TIB'];
+        const markets=['TSE'];
         const payloads=await Promise.all(markets.map(async market=>{const u=new URL(FUGLE_BASE+'/snapshot/quotes/'+market);return fetchJson(u.toString(),8000,{'X-API-KEY':FUGLE_API_KEY});}));
         const data={};for(const payload of payloads){for(const row of (payload.data||[])){if(!row.symbol)continue;const stamp=Number(row.lastUpdated);data[String(row.symbol)]={symbol:String(row.symbol),name:row.name||String(row.symbol),price:Number.isFinite(Number(row.lastPrice??row.closePrice))&&Number(row.lastPrice??row.closePrice)>0?Number(row.lastPrice??row.closePrice):null,changePct:Number.isFinite(Number(row.changePercent))?Number(row.changePercent):null,volume:Number(row.tradeVolume),timestamp:Number.isFinite(stamp)&&stamp>0?new Date(stamp/1000).toISOString():now(),market:payload.market};}}
         return {data,source:'Fugle market-wide snapshot quotes (TSE + OTC; upstream refresh every 5 seconds)',timestamp:now(),delayed:false};
@@ -120,6 +131,9 @@ async function route(req,res){
         return {data,historyAsOf:dates.at(-1),historyDateCount:dates.length,historyCount:Object.keys(data).length};
       },e=>({data:{},error:e.message,historyCount:0}));
       if(base.error)throw new Error(base.error);
+      const listed=await safeLoad('universe',TTL.universe,async()=>({data:currentTwseRows(await finmind('TaiwanStockInfo')),source:'FinMind TaiwanStockInfo (current TWSE listings only)',timestamp:now()}),e=>({data:[],error:e.message}));
+      if(listed.error||!listed.data?.length)throw new Error(listed.error||'無法取得證交所上市股票清單');
+      const twseSymbols=new Set(listed.data.map(x=>x.symbol));
       const perResult=await safeLoad('all-market-per',6*60*60*1000,async()=>{
         const rows=await finmind('TaiwanStockPER',{start_date:base.historyAsOf},20000);
         const data={};
@@ -129,6 +143,7 @@ async function route(req,res){
       const quotes=stale('snapshot')?.data||{},flows=stale('flows')?.data||{},sentiment=stale('sentiment')?.data||{},futures=stale('futures')?.data||{},data={};
       const fiveDay=Object.values(base.data||{}).map(x=>Number(x.return5dPct)).filter(Number.isFinite),adv=fiveDay.filter(v=>v>0).length,dec=fiveDay.filter(v=>v<0).length,advanceDecline=adv/Math.max(1,dec);
       for(const [symbol,technical] of Object.entries(base.data||{})){
+        if(!twseSymbols.has(symbol))continue;
         const quote=quotes[symbol]||{},flow=flows[symbol]||{},valuation=perResult.data?.[symbol]||{},price=quote.price!=null&&Number.isFinite(Number(quote.price))&&Number(quote.price)>0?Number(quote.price):null;
         const trustFlowPct5d=Number.isFinite(Number(flow.trustNet5d))&&technical.volume5d>0?(Number(flow.trustNet5d)/technical.volume5d)*100:null;
         const foreignFlowPct5d=Number.isFinite(Number(flow.foreignNet5d))&&technical.volume5d>0?(Number(flow.foreignNet5d)/technical.volume5d)*100:null;
@@ -136,7 +151,7 @@ async function route(req,res){
         row.scorecard=scoreStock({...row,asOf:row.asOf,maxAgeMs:180000,fearGreed:sentiment.fearGreed,advanceDecline:sentiment.advanceDecline??advanceDecline,futuresChangePct:futures.changePct});
         data[symbol]=row;
       }
-      return {data,source:'FinMind all-market daily history + live quote overlay',timestamp:now(),scannedCount:Object.keys(data).length,historyAsOf:base.historyAsOf,advanceDecline};
+      return {data,source:'FinMind TWSE-listed daily history + TSE live quote overlay',timestamp:now(),scannedCount:Object.keys(data).length,historyAsOf:base.historyAsOf,advanceDecline};
     },e=>({data:{},source:'unavailable',timestamp:now(),scannedCount:0,error:e.message}));
     if(result.stale&&result.data){const safeData={};for(const [symbol,row] of Object.entries(result.data)){const card=row?.scorecard||{};safeData[symbol]={...row,scorecard:{...card,direction:'觀望',status:'insufficient-data',fresh:false,reasons:[...(card.reasons||[]),'全市場掃描快取已過期，暫停方向判斷']}};}return json(res,200,{...result,data:safeData});}
     return json(res,200,result);
