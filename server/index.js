@@ -117,7 +117,7 @@ function parseCsvLine(line){
   out.push(value);return out;
 }
 async function tdccShareholdingDistribution(){
-  const csv=await fetchText('https://smart.tdcc.com.tw/opendata/getOD.ashx?id=1-5',20000,{'Accept':'text/csv,text/plain,*/*'});
+  const csv=await fetchText('https://opendata.tdcc.com.tw/getOD.ashx?id=1-5',20000,{'Accept':'text/csv,text/plain,*/*'});
   const lines=csv.replace(/^\uFEFF/,'').split(/\r?\n/).filter(x=>x.trim());
   if(lines.length<2)throw new Error('TDCC 集保戶股權分散資料為空');
   const head=parseCsvLine(lines[0]).map(x=>x.trim());
