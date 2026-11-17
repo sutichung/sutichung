@@ -1,35 +1,57 @@
-# 泰丞・台股 AI 智慧操盤中樞（前端更新版）
+# 泰丞・台股 AI 智慧操盤中樞
 
-## 本次更新
-- 非凡新聞官方直播頁面嵌入（若官方網站禁止 iframe，仍可點連結開啟）。
-- 上市／上櫃全市場清單掃描、搜尋、排序。
-- 1 秒輪詢前端資料服務；畫面同時顯示來源時間戳，避免把舊行情誤認為新行情。
-- 以真實歷史 OHLCV 計算 EMA5/20/60、RSI(14)、MACD、KD-K、ATR、支撐壓力與量比。
-- 台指期、法人買賣超、大戶持股級距、融資融券、散戶情緒與市場廣度面板。
-- AI 多空分數附上可檢查的理由；資料不足時不硬算、不用假數字補值。
+此 repository 包含 React 前端與 Node.js 後端 API 骨架。系統採「資料不足就不判斷」原則；沒有授權即時行情、全市場指標掃描、法人籌碼或台指期來源時，相關欄位會明確顯示缺資料，不會用假數字補齊。
 
-## 安裝
-在 React + Vite 專案中以此檔案取代 `src/App.jsx`。此畫面需要後端提供以下 API：
+## 專案技術
+- 前端：Create React App / React 18（不是 Vite）。
+- 後端：Node.js 18+ 原生 HTTP 與 fetch，無額外伺服器依賴。
+- 指標：EMA 5/20/60、RSI(14)、MACD、KD-K、ATR、20 日支撐壓力、量比。
+- 風控工具：資料時間戳檢查、OHLC 合法性檢查、信心門檻、樣本外交易筆數與最大回撤門檻。
+- 測試：Node.js 內建 node:test。
 
-| API | 回傳格式 | 說明 |
-|---|---|---|
-| `GET /api/market/universe` | `{ data: [{symbol,name,sector,exchange,indicators:{rsi,trend,macd,macdSignal,volumeRatio}}] }` | 全部上市＋上櫃股票清單；掃描清單每檔需由後端提供已計算指標摘要 |
-| `GET /api/market/snapshot` | `{ data: {"2330": {price,changePct,volume,timestamp}}, source, timestamp }` | 即時行情快照 |
-| `GET /api/market/history/:symbol?interval=1d&limit=120` | `{ data: [{time,open,high,low,close,volume}] }` | 歷史 K 線；至少 60 根才計算 EMA60 |
-| `GET /api/market/institutional-flows` | `{ data: {"2330": {foreignNet,trustNet,dealerNet,largeHolderPct,marginChange,shortChange,asOf}} }` | 法人、持股級距、融資融券 |
-| `GET /api/market/futures` | `{ data: {last,changePct,openInterestChange,asOf}, source, timestamp }` | 台指期行情及未平倉資訊 |
-| `GET /api/market/sentiment` | `{ data: {fearGreed,label,retailBias,advanceDecline,asOf} }` | 自訂市場情緒模型及市場廣度 |
+## 啟動
+1. 安裝 Node.js 18 或更新版本。
+2. 複製環境設定：`cp .env.example .env`，填入可用資料供應商設定。
+3. 安裝前端依賴：`npm install`。
+4. 終端機 A 啟動後端：`npm run server`（預設 http://localhost:8787）。
+5. 終端機 B 啟動前端：`npm start`（CRA dev server 透過 package.json proxy 連後端）。
+6. 測試：`npm run test:server`；正式前端建置：`npm run build`。
 
-以上欄位是前後端資料契約。後端必須自行接資料供應商、處理交易日／盤中時段、快取、速率限制、資料時間戳與錯誤狀態。不可將前端每秒輪詢誤稱為上游逐筆即時行情。
+部署時需讓反向代理將 /api 路由轉給 Node 後端；不可將 FinMind Token 或其他 API 金鑰放在瀏覽器環境變數。
 
-## 建議資料來源
-- 非凡新聞官方直播頁：<https://news.ustv.com.tw/livevideo>
-- TWSE 官方 OpenAPI：<https://openapi.twse.com.tw/>
-- TPEx 官方 OpenAPI：<https://www.tpex.org.tw/openapi/>
-- TAIFEX 官方 OpenAPI：<https://openapi.taifex.com.tw/>
-- FinMind 文件：<https://finmind.github.io/v3/>
+## API
+- `GET /api/health`：服務與供應商設定狀態。
+- `GET /api/market/universe`：FinMind TaiwanStockInfo 股票清單（需 FINMIND_TOKEN）。
+- `GET /api/market/snapshot`：授權即時行情服務；需 MARKET_REALTIME_URL。
+- `GET /api/market/scan`：全市場指標摘要服務；需 MARKET_SCAN_URL。回傳 `{data: {"2330": {rsi,trend,macd,signal,volumeRatio}}}`。
+- `GET /api/market/history/:symbol?interval=1d&limit=120`：FinMind TaiwanStockPrice 日 K 歷史資料（需 FINMIND_TOKEN）。
+- `GET /api/market/institutional-flows`：法人、大戶級距、融資融券；需 MARKET_FLOWS_URL。
+- `GET /api/market/futures`：台指期行情與未平倉；需 MARKET_FUTURES_URL。
+- `GET /api/market/sentiment`：市場恐懼貪婪與市場廣度；需 MARKET_SENTIMENT_URL。
 
-TWSE／TPEx／TAIFEX 公開資料不等於所有商品的即時逐筆授權行情。FinMind 亦有不同資料集與方案限制。正式逐秒行情、即時五檔與期貨逐筆資料，請確認資料商授權、延遲規則、API 配額與商用條款。Token/API Key 應放在後端環境變數，絕不可寫進 React 前端。
+自訂 URL 必須回傳 JSON，資料契約範例見下方：
+- 行情：`{source, timestamp, data: {"2330": {price, changePct, volume, timestamp}}}`
+- 全市場掃描：`{source, timestamp, data: {"2330": {rsi, trend, macd, signal, volumeRatio}}}`
+- 籌碼：`{source, timestamp, data: {"2330": {foreignNet, trustNet, dealerNet, institutionalNet, largeHolderPct, marginChange, shortChange, asOf}}}`
+- 台指期：`{source, timestamp, data: {last, changePct, openInterestChange, asOf}}`
+- 情緒：`{source, timestamp, data: {fearGreed, label, retailBias, advanceDecline, asOf}}`
 
-## 交易判斷模型說明
-目前分數是透明的規則式研究評分，不是已驗證的預測模型。大戶／法人資料常為日資料或特定時間更新，不能假裝逐秒更新。要提升預測能力，下一步應加入歷史回測、樣本外驗證、交易成本、滑價、停損與風險報酬分析，並追蹤訊號命中率及最大回撤。
+## 資料來源與限制
+- FinMind API 文件：<https://finmind.github.io/>
+- TWSE OpenAPI：<https://openapi.twse.com.tw/>
+- TPEx OpenAPI：<https://www.tpex.org.tw/openapi/>
+- TAIFEX OpenAPI：<https://openapi.taifex.com.tw/>
+- 非凡新聞官方直播：<https://news.ustv.com.tw/livevideo>
+
+FinMind 日 K 資料不是逐筆即時行情。前端每秒輪詢只代表每秒向本系統詢問一次，不代表供應商每秒有新成交。正式逐秒／逐筆報價、即時期貨、全市場逐股掃描與法人籌碼需要有相應授權及 API 配額。新聞 iframe 可能受官方網站 CSP/X-Frame-Options 限制，系統保留官方頁面連結作為備援。
+
+## 降低預測錯誤率的防呆原則
+1. 資料時間戳過期、欄位缺漏、OHLC 不合理、歷史不足 60 根時，不產生有效訊號。
+2. 缺少行情／籌碼來源時顯示「未設定」或「資料不足」，不以隨機值、固定值或手動預設值偽裝成即時資料。
+3. 目前畫面多空分數屬規則式研究評分，不是勝率或預測機率。
+4. 正式發布預測前，必須做 walk-forward 樣本外回測、計入手續費／稅／滑價，至少 100 筆樣本外交易，並檢查最大回撤；不足門檻一律觀望。
+5. 追蹤命中率、Precision、Recall、Brier score、最大回撤及不同市場 regime 的表現；定期重新校準，不能用訓練集準確率宣稱預測能力。
+6. 大戶持股、法人買賣超及融資融券多為日資料或延遲資料，不應標成逐秒更新。
+
+## 安全提醒
+API Key 僅放後端環境變數；不要提交 .env、Token、券商帳密或個人憑證。此專案不會自動下單，也不是投資建議。
