@@ -127,7 +127,7 @@ async function route(req,res){
       const quotes=stale('snapshot')?.data||{},data={};
       for(const [symbol,technical] of Object.entries(base.data||{})){
         const quote=quotes[symbol]||{},price=quote.price!=null&&Number.isFinite(Number(quote.price))&&Number(quote.price)>0?Number(quote.price):null;
-        const row={...technical,price,changePct:quote.changePct,volume:quote.volume,asOf:quote.timestamp||null,priceVsEma20Pct:price!==null&&technical.ema20?((price/technical.ema20)-1)*100:null,priceVsEma60Pct:price!==null&&technical.ema60?((price/technical.ema60)-1)*100:null};
+        const row={...technical,signal:technical.macdSignal,price,changePct:quote.changePct,volume:quote.volume,asOf:quote.timestamp||null,priceVsEma20Pct:price!==null&&technical.ema20?((price/technical.ema20)-1)*100:null,priceVsEma60Pct:price!==null&&technical.ema60?((price/technical.ema60)-1)*100:null};
         row.scorecard=scoreStock({...row,asOf:row.asOf,maxAgeMs:180000});
         data[symbol]=row;
       }
