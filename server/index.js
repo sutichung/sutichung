@@ -401,7 +401,7 @@ async function route(req,res){
     if(!loginAllowed(ip))return json(res,429,{error:'登入嘗試過多，請 15 分鐘後再試。'});
     const body=await readJsonBody(req),username=String(body.username||''),password=String(body.password||'');
     const supplied=crypto.scryptSync(password,SESSION_SECRET.slice(0,16),64);
-    const validUser=crypto.timingSafeEqual(Buffer.from(username.padEnd(ADMIN_USERNAME.length,'\\0').slice(0,ADMIN_USERNAME.length)),Buffer.from(ADMIN_USERNAME));
+    const userBuffer=Buffer.from(username),adminBuffer=Buffer.from(ADMIN_USERNAME);const validUser=userBuffer.length===adminBuffer.length&&crypto.timingSafeEqual(userBuffer,adminBuffer);
     const validPassword=crypto.timingSafeEqual(supplied,ADMIN_PASSWORD_DIGEST);
     if(!validUser||!validPassword)return json(res,401,{error:'帳號或密碼錯誤'});
     const token=crypto.randomBytes(32).toString('base64url'),expiresAt=Date.now()+SESSION_TTL_MS;
