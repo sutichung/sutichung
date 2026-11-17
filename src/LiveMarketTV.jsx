@@ -28,13 +28,12 @@ export default function LiveMarketTV(){
     <b style={{fontSize:12}}>{item.name}</b><small style={{display:'block',color:'#91a1b8',fontSize:10,marginTop:4}}>{item.kind==='youtube'?'YouTube 即時直播':item.kind==='hls'?'HLS 有聲播放':'官方直播外連'}</small>
    </button>)}
   </div>
-  {channel.kind==='hls'?<HlsLivePlayer key={channel.id} src={channel.src} title={channel.name}/>:channel.kind==='youtube'?
-   <iframe key={channel.id} title={channel.name+' 官方直播'} src={'https://www.youtube.com/embed/live_stream?channel='+encodeURIComponent(channel.channel)+'&autoplay=0&playsinline=1&rel=0'} referrerPolicy="strict-origin-when-cross-origin" style={{width:'100%',aspectRatio:'16/9',border:0,background:'#000',borderRadius:8}} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen/>:
-   <div style={{background:'#080d18',borderRadius:8,padding:20,textAlign:'center',minHeight:150,display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',gap:10}}>
+  {channel.kind==='hls'?<HlsLivePlayer key={channel.id} src={channel.src} title={channel.name}/>:
+   <div style={{background:'#080d18',borderRadius:8,padding:20,textAlign:'center',minHeight:170,display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',gap:10}}>
     <div style={{fontSize:15,fontWeight:700}}>{channel.name}</div>
-    <div style={{fontSize:12,color:'#cbd5e1',lineHeight:1.7}}>此頻道提供官方直播頁，來源不開放穩定的第三方嵌入，請從官方頁播放。</div>
+    <div style={{fontSize:12,color:'#cbd5e1',lineHeight:1.7}}>{channel.kind==='youtube'?'免 YouTube API Key：直接開啟頻道官方 /live 頁面播放。YouTube 官方嵌入播放器需要具體影片 ID；不使用未文件化、可能失效的頻道直播 iframe。':'此頻道提供官方直播頁，來源不開放穩定的第三方嵌入，請從官方頁播放。'}</div>
     <a href={openUrl} target="_blank" rel="noreferrer" style={{display:'inline-block',background:'#2563eb',color:'#fff',borderRadius:8,padding:'10px 16px',textDecoration:'none'}}>直接觀看官方直播（含聲音）↗</a>
    </div>}
-  <div style={{fontSize:11,color:'#91a1b8',lineHeight:1.7,marginTop:8}}>{channel.note}。YouTube 頻道嵌入不需 Data API Key；但頻道未開播、影片禁止嵌入或 YouTube 改變播放器規則時，站內可能無法播放，請改用官方直播入口。瀏覽器需由使用者按播放才能發出聲音。系統不擷取或轉播未授權影音。</div>
+  <div style={{fontSize:11,color:'#91a1b8',lineHeight:1.7,marginTop:8}}>{channel.note}。YouTube 頻道官方 /live 連結不需 Data API Key；站內嵌入播放需要具體影片 ID，需 API 查詢或人工更新影片 ID。為避免使用未文件化且可能失效的頻道 iframe，預設改為官方頁外開。瀏覽器需由使用者按播放才能發出聲音。系統不擷取或轉播未授權影音。</div>
  </section>;
 }
