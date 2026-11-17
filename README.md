@@ -28,6 +28,9 @@
 - `GET /api/market/institutional-flows`：法人、大戶級距、融資融券；需 MARKET_FLOWS_URL。
 - `GET /api/market/futures`：台指期行情與未平倉；需 MARKET_FUTURES_URL。
 - `GET /api/market/sentiment`：市場恐懼貪婪與市場廣度；需 MARKET_SENTIMENT_URL。
+- `GET /api/market/news`：授權新聞標題、摘要與連結；需 MARKET_NEWS_URL。
+
+全市場掃描資料每檔可提供 `trend, macd, signal, rsi, volumeRatio, institutionalNet, foreignNet, trustNet, dealerNet, marginChange, shortChange`；亦可提供全市場 `fearGreed, advanceDecline, futuresChangePct`。後端會回傳 `scorecard`（0–100 多空方向分數、信心覆蓋率、方向與原因）。分數是透明規則式研究排序，不是勝率；時間戳過期或覆蓋率不足時只顯示觀望。
 
 自訂 URL 必須回傳 JSON，資料契約範例見下方：
 - 行情：`{source, timestamp, data: {"2330": {price, changePct, volume, timestamp}}}`
