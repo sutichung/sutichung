@@ -42,23 +42,25 @@ function scoreStock(input={}) {
   }
 
   const inst=finite(input.institutionalNet)?[Number(input.institutionalNet)]:['foreignNet','trustNet','dealerNet'].filter(k=>finite(input[k])).map(k=>Number(input[k]));
-  if(inst.length) add(12,Math.sign(inst.reduce((a,b)=>a+b,0)),'法人合計買超','法人合計賣超');
+  if(inst.length) add(11,Math.sign(inst.reduce((a,b)=>a+b,0)),'法人合計買超','法人合計賣超');
 
   if(finite(input.marginChange)) {
     const m=Number(input.marginChange);
     const aligned=trend.includes('bull')||trend.includes('多頭');
-    add(5,m>0?(aligned?-0.5:-1):m<0?(aligned?0.5:0):0,'融資變化與趨勢配合','融資增加，留意散戶槓桿風險');
+    add(4,m>0?(aligned?-0.5:-1):m<0?(aligned?0.5:0):0,'融資變化與趨勢配合','融資增加，留意散戶槓桿風險');
   }
   if(finite(input.shortChange)) {
     const s=Number(input.shortChange);
-    add(4,s>0?0.5:s<0?-0.25:0,'融券增加，留意軋空可能','融券減少，軋空動能下降');
+    add(3,s>0?0.5:s<0?-0.25:0,'融券增加，留意軋空可能','融券減少，軋空動能下降');
   }
   if(finite(input.fearGreed)) {
     const f=Number(input.fearGreed);
-    if(f<=20)add(6,1,'市場極度恐懼，列入逆向觀察','');
-    else if(f>=80)add(6,-1,'','市場過度樂觀，留意反轉');
-    else {covered+=6;reasons.push('市場情緒未達極端');}
+    if(f<=20)add(5,1,'市場極度恐懼，列入逆向觀察','');
+    else if(f>=80)add(5,-1,'','市場過度樂觀，留意反轉');
+    else {covered+=5;reasons.push('市場情緒未達極端');}
   }
+  if(finite(input.largeHolderChangePct)) add(2,Number(input.largeHolderChangePct)>0?1:Number(input.largeHolderChangePct)<0?-1:0,'大戶持股比例增加','大戶持股比例下降');
+  if(finite(input.retailBias)) {const rb=Number(input.retailBias);if(rb<=20)add(2,1,'散戶情緒極度偏空，列入逆向觀察','');else if(rb>=80)add(2,-1,'','散戶情緒極度偏多，留意反轉');else covered+=2;}
   if(finite(input.advanceDecline)) {
     const breadth=Number(input.advanceDecline);
     add(5,breadth>1.2?1:breadth<0.8?-1:0,'市場上漲家數廣度較佳','市場下跌家數廣度較差');
