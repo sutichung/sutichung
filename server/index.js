@@ -478,6 +478,23 @@ async function route(req,res){
     const result=await safeLoad('fundamentals:'+symbol,6*60*60*1000,async()=>{
       const listed=await safeLoad('universe',TTL.universe,twseListedUniverse);
       const company=(listed.data||[]).find(x=>x.symbol===symbol)||{symbol,name:symbol,sector:'未分類',exchange:'未知'};
+      let issuerProfile=null;
+      if(company.exchange==='TWSE'){
+        try{
+          const issuerRows=await safeLoad('twse-issuer-basic',TTL.universe,()=>fetchJson('https://openapi.twse.com.tw/v1/opendata/t187ap03_L',12000),()=>[]);
+          issuerProfile=(issuerRows||[]).find(row=>String(row['公司代號']||row.Code||'').trim()===symbol)||null;
+        }catch(_){}
+      }
+      const officialCompany={
+        ...company,
+        businessDescription:issuerProfile?.['主要經營業務']||issuerProfile?.['營業項目']||issuerProfile?.['公司簡介']||null,
+        address:issuerProfile?.['住址']||null,
+        website:issuerProfile?.['網址']||issuerProfile?.['公司網址']||null,
+        chairman:issuerProfile?.['董事長']||null,
+        establishedDate:issuerProfile?.['成立日期']||null,
+        capital:issuerProfile?.['實收資本額']||null,
+        mopsUrl:'https://mops.twse.com.tw/mops/web/t05st03'
+      };
       if(!FINMIND_TOKEN)throw new Error('未設定 FINMIND_TOKEN；公司財報、月營收與股利資料暫不可用');
       const startDate='2018-01-01';
       const [income,balance,cash,revenue,dividends]=await Promise.all([
@@ -515,7 +532,7 @@ async function route(req,res){
       const debtRatio=balanceSummary?.totalAssets>0&&balanceSummary?.totalLiabilities!=null?balanceSummary.totalLiabilities/balanceSummary.totalAssets*100:null;
       const currentRatio=balanceSummary?.currentLiabilities>0&&balanceSummary?.currentAssets!=null?balanceSummary.currentAssets/balanceSummary.currentLiabilities:null;
       const dividendHistory=(dividends||[]).slice(-12);
-      return {company,profile:{description:null,descriptionNote:'目前公司清單僅提供公司名稱與產業分類；詳細營業項目需以公開資訊觀測站公司基本資料／年報為準。',mopsUrl:'https://mops.twse.com.tw/mops/web/t05st03'},financials:{incomeAsOf:latestIncome,balanceAsOf:latestBalance,cashAsOf:latestCash,income:incomeSummary,balance:balanceSummary,cash:cashSummary,debtRatio,currentRatio,monthlyRevenue,dividends:dividendHistory},source:'FinMind 財報／月營收／股利資料；公司清單 TWSE／TPEx',timestamp:now(),periodType:'財報為季資料；月營收為月資料'};
+      return {company:officialCompany,profile:{description:officialCompany.businessDescription,descriptionNote:officialCompany.businessDescription?'公司業務簡介取自證交所公開公司基本資料。':'官方公司基本資料未提供可用的營業項目欄位；請以公開資訊觀測站公司基本資料／年報為準。',mopsUrl:officialCompany.mopsUrl},financials:{incomeAsOf:latestIncome,balanceAsOf:latestBalance,cashAsOf:latestCash,income:incomeSummary,balance:balanceSummary,cash:cashSummary,debtRatio,currentRatio,monthlyRevenue,dividends:dividendHistory},source:'FinMind 財報／月營收／股利資料；公司清單 TWSE／TPEx',timestamp:now(),periodType:'財報為季資料；月營收為月資料'};
     },e=>({error:e.message,company:null,financials:null,source:'unavailable',timestamp:now()}));
     return json(res,result.error?503:200,result);
   }
