@@ -47,7 +47,7 @@
 - 非凡新聞台官方直播：<https://news.ustv.com.tw/livevideo>
 - 非凡商業台官方財經直播：<https://biz.ustv.com.tw/livevideo>
 
-Fugle 全市場快照上游每五秒更新一次；前端每秒輪詢只代表每秒向本系統詢問一次，不代表上游每秒有新成交。FinMind 日 K、法人、融資融券與恐懼貪婪資料屬日資料，不應標成逐秒更新。全市場日 K、法人與融資融券批次查詢需 FinMind Backer 以上；FinMind 方案及資料授權請見官方 [方案價格](https://finmind.github.io/Pricing/) 與 [商業使用規範](https://finmind.github.io/CommercialUse/)。Fugle 全市場快照需 Developer 或 Advanced 方案，官方快照更新頻率為五秒，方案與價格請見 [Fugle 方案](https://developer.fugle.tw/docs/pricing/)。即時期貨與主力分點資料仍需另有相應授權。前端提供非凡商業台（財經 24 小時直播）與非凡新聞台兩個官方直播來源切換；官方網站可能限制第三方 iframe 嵌入，若播放器空白可開啟官方頁面。
+Fugle 全市場快照上游每五秒更新一次；前端每秒輪詢只代表每秒向本系統詢問一次，不代表上游每秒有新成交。FinMind 日 K、法人、融資融券與恐懼貪婪資料屬日資料，不應標成逐秒更新。FinMind 官方免費方案列有 PER/PBR、個股法人買賣超、融資融券與月營收等資料集；但全市場批次查詢的可用範圍、請求額度與速率仍以實際 API 權限及回應為準。系統不會自動升級或付費；遇到權限不足即顯示資料不足並停止使用該因子。PER/PBR 資料約於交易日 18:00 更新，不是盤中即時估值。請見官方 [方案價格](https://finmind.github.io/Pricing/)、[PER/PBR 資料說明](https://finmind.github.io/v3/tutor/TaiwanMarket/Technical/) 與 [商業使用規範](https://finmind.github.io/CommercialUse/)。Fugle 全市場快照需 Developer 或 Advanced 方案，官方快照更新頻率為五秒，方案與價格請見 [Fugle 方案](https://developer.fugle.tw/docs/pricing/)。即時期貨與主力分點資料仍需另有相應授權。前端提供非凡商業台（財經 24 小時直播）與非凡新聞台兩個官方直播來源切換；官方網站可能限制第三方 iframe 嵌入，若播放器空白可開啟官方頁面。
 
 ## 降低預測錯誤率的防呆原則
 1. 資料時間戳過期、欄位缺漏、OHLC 不合理、歷史不足 60 根時，不產生有效訊號。
