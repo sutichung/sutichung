@@ -357,8 +357,9 @@ async function route(req,res){
         const payloads=settled.filter(x=>x.status==='fulfilled').map(x=>x.value);
         if(!payloads.length)throw new Error('Fugle 上市與上櫃快照均無法取得：'+settled.map(x=>x.reason?.message||'unknown').join('；'));
         const data={};for(const payload of payloads){for(const row of (payload.data||[])){if(!row.symbol)continue;const stamp=Number(row.lastUpdated);const quoteTime=Number.isFinite(stamp)&&stamp>0?new Date(stamp/1000).toISOString():null;
-        const delayed=!quoteTime||Date.now()-Date.parse(quoteTime)>5*60*1000;
-        data[String(row.symbol)]={symbol:String(row.symbol),name:row.name||String(row.symbol),price:Number.isFinite(Number(row.lastPrice??row.closePrice))&&Number(row.lastPrice??row.closePrice)>0?Number(row.lastPrice??row.closePrice):null,changePct:Number.isFinite(Number(row.changePercent))?Number(row.changePercent):null,volume:Number(row.tradeVolume),timestamp:quoteTime,market:payload.market,source:'Fugle snapshot quotes',delayed,quoteType:delayed?'stale-snapshot':'realtime'};}}
+        const lastPrice=Number(row.lastPrice),hasLastTrade=!row.isTrial&&Number.isFinite(lastPrice)&&lastPrice>0;
+        const delayed=!hasLastTrade||!quoteTime||Date.now()-Date.parse(quoteTime)>5*60*1000;
+        data[String(row.symbol)]={symbol:String(row.symbol),name:row.name||String(row.symbol),price:hasLastTrade?lastPrice:null,changePct:hasLastTrade&&Number.isFinite(Number(row.changePercent))?Number(row.changePercent):null,volume:Number(row.tradeVolume),timestamp:quoteTime,market:payload.market,source:'Fugle snapshot quotes',delayed,quoteType:row.isTrial?'trial':!hasLastTrade?'no-trade':delayed?'stale-snapshot':'realtime'};}}
         const quoteRows=Object.values(data),delayedCount=quoteRows.filter(x=>x.delayed).length,freshCount=quoteRows.length-delayedCount;
         const returnedMarkets=payloads.map(x=>x.market),unavailableMarkets=markets.filter(m=>!returnedMarkets.includes(m));
         return {data,source:'Fugle 上市 TSE + 上櫃 OTC 行情快照（各市場獨立回報；逐檔依來源時間戳分級）',timestamp:now(),delayed:quoteRows.length>0&&freshCount===0,mixedFreshness:delayedCount>0&&freshCount>0,delayedCount,freshCount,quoteCount:quoteRows.length,markets:returnedMarkets,unavailableMarkets};
