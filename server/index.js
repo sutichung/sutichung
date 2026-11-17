@@ -9,10 +9,12 @@ const { scoreStock } = require('./lib/scoring');
 const PORT = Number(process.env.PORT || 8787);
 const FINMIND_BASE = process.env.FINMIND_BASE || 'https://api.finmindtrade.com/api/v4/data';
 const FINMIND_TOKEN = process.env.FINMIND_TOKEN || '';
+const FUGLE_API_KEY = process.env.FUGLE_API_KEY || '';
+const FUGLE_BASE = process.env.FUGLE_BASE_URL || 'https://api.fugle.tw/marketdata/v1.0/stock';
 const CACHE = new Map();
 const PENDING = new Map();
 const RATE = new Map();
-const TTL = { universe: 6*60*60*1000, snapshot: 1000, history: 5*60*1000, flows: 60*1000, futures: 1000, sentiment: 15000, news: 60000 };
+const TTL = { universe: 6*60*60*1000, snapshot: 5000, history: 5*60*1000, flows: 60*1000, futures: 1000, sentiment: 15000, news: 60000 };
 const now = () => new Date().toISOString();
 const json = (res, status, body) => { res.writeHead(status, {'content-type':'application/json; charset=utf-8','cache-control':'no-store'}); res.end(JSON.stringify(body)); };
 function cached(key, ttl) { const x=CACHE.get(key); return x && Date.now()-x.time<ttl ? x.value : null; }
@@ -54,7 +56,7 @@ function rateLimit(req){const ip=req.socket.remoteAddress||'unknown';const t=Dat
 async function route(req,res){
   const u=new URL(req.url,'http://localhost');
   if(req.method!=='GET'){return json(res,405,{error:'method_not_allowed'});}
-  if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',providers:{realtime:!!process.env.MARKET_REALTIME_URL,scan:!!process.env.MARKET_SCAN_URL,flows:!!process.env.MARKET_FLOWS_URL,futures:!!process.env.MARKET_FUTURES_URL,sentiment:!!process.env.MARKET_SENTIMENT_URL,news:!!process.env.MARKET_NEWS_URL},mode:process.env.NODE_ENV==='production'?'production':'development'});
+  if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',providers:{fugle:!!FUGLE_API_KEY,realtime:!!process.env.MARKET_REALTIME_URL,scan:!!process.env.MARKET_SCAN_URL,flows:!!process.env.MARKET_FLOWS_URL,futures:!!process.env.MARKET_FUTURES_URL,sentiment:!!process.env.MARKET_SENTIMENT_URL,news:!!process.env.MARKET_NEWS_URL},mode:process.env.NODE_ENV==='production'?'production':'development'});
   if(u.pathname==='/api/market/universe'){
     const result=await safeLoad('universe',TTL.universe,async()=>{
       const rows=await finmind('TaiwanStockInfo');
@@ -65,7 +67,13 @@ async function route(req,res){
   }
   if(u.pathname==='/api/market/snapshot'){
     const result=await safeLoad('snapshot',TTL.snapshot,async()=>{
-      const x=await external('MARKET_REALTIME_URL','未設定授權即時行情供應商 MARKET_REALTIME_URL');
+      if(FUGLE_API_KEY){
+        const markets=['TSE','OTC'];
+        const payloads=await Promise.all(markets.map(async market=>{const u=new URL(FUGLE_BASE+'/snapshot/quotes/'+market);u.searchParams.set('type','COMMONSTOCK');return fetchJson(u.toString(),{timeoutMs:8000,headers:{'X-API-KEY':FUGLE_API_KEY}});}));
+        const data={};for(const payload of payloads){for(const row of (payload.data||[])){if(!row.symbol)continue;const stamp=Number(row.lastUpdated);data[String(row.symbol)]={symbol:String(row.symbol),name:row.name||String(row.symbol),price:Number(row.closePrice),changePct:Number(row.changePercent),volume:Number(row.tradeVolume),timestamp:Number.isFinite(stamp)&&stamp>0?new Date(stamp/1000).toISOString():now(),market:payload.market};}}
+        return {data,source:'Fugle market-wide snapshot quotes (TSE + OTC; upstream refresh every 5 seconds)',timestamp:now(),delayed:false};
+      }
+      const x=await external('MARKET_REALTIME_URL','未設定授權即時行情供應商；可設定 FUGLE_API_KEY 或 MARKET_REALTIME_URL');
       return {data:x.data||{},source:x.source||'Configured realtime provider',timestamp:x.timestamp||now(),delayed:!!x.delayed};
     },e=>({data:{},source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
