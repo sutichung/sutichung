@@ -151,14 +151,21 @@ async function route(req,res){
     const result=await safeLoad('flows',TTL.flows,async()=>{
       if(process.env.MARKET_FLOWS_URL){const x=await external('MARKET_FLOWS_URL','');return {data:x.data||{},source:x.source||'Configured flow provider',timestamp:x.timestamp||now()};}
       if(!FINMIND_TOKEN)throw new Error('未設定 FINMIND_TOKEN 或 MARKET_FLOWS_URL');
-      const d=new Date();d.setDate(d.getDate()-10);const start=d.toISOString().slice(0,10);
-      const [inst,margin]=await Promise.all([finmind('TaiwanStockInstitutionalInvestorsBuySell',{start_date:start},30000),finmind('TaiwanStockMarginPurchaseShortSale',{start_date:start},30000)]);
+      const dates=await finmind('TaiwanStockTradingDate',{},15000);
+      const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date());
+      const recent=dates.map(x=>String(x.date||'')).filter(x=>x&&x<today).sort().slice(-2);
+      if(recent.length<2)throw new Error('無足夠交易日資料計算籌碼變化');
+      const [inst,marginLatest,marginPrevious]=await Promise.all([
+        finmind('TaiwanStockInstitutionalInvestorsBuySell',{start_date:recent[1]},30000),
+        finmind('TaiwanStockMarginPurchaseShortSale',{start_date:recent[1]},30000),
+        finmind('TaiwanStockMarginPurchaseShortSale',{start_date:recent[0]},30000)
+      ]);
       const data={},latestInst=new Map();
-      for(const r of inst){const symbol=String(r.stock_id||'');if(!validateSymbol(symbol))continue;const prev=latestInst.get(symbol);if(!prev||String(r.date)>String(prev.date))latestInst.set(symbol,{date:r.date,rows:[r]});else if(String(r.date)===String(prev.date))prev.rows.push(r);}
-      for(const [symbol,group] of latestInst){const x={asOf:group.date,foreignNet:0,trustNet:0,dealerNet:0,institutionalNet:0};for(const r of group.rows){const net=Number(r.buy||0)-Number(r.sell||0);x.institutionalNet+=net;const name=String(r.name||'').toLowerCase();if(name.includes('foreign'))x.foreignNet+=net;else if(name.includes('trust')||name.includes('investment'))x.trustNet+=net;else if(name.includes('dealer'))x.dealerNet+=net;}data[symbol]=x;}
-      const grouped=new Map();for(const r of margin){const symbol=String(r.stock_id||'');if(!validateSymbol(symbol))continue;if(!grouped.has(symbol))grouped.set(symbol,[]);grouped.get(symbol).push(r);}
-      for(const [symbol,rows] of grouped){rows.sort((a,b)=>String(a.date).localeCompare(String(b.date)));const last=rows.at(-1),prev=rows.at(-2);const x=data[symbol]||{asOf:last.date};if(prev){x.marginChange=Number(last.MarginPurchaseTodayBalance||0)-Number(prev.MarginPurchaseTodayBalance||0);x.shortChange=Number(last.ShortSaleTodayBalance||0)-Number(prev.ShortSaleTodayBalance||0);}x.asOf=x.asOf||last.date;data[symbol]=x;}
-      return {data,source:'FinMind all-market institutional investors + margin/short-sale daily data',timestamp:now(),asOf:[...latestInst.values()].map(x=>x.date).sort().at(-1)||null};
+      for(const r of inst){const symbol=String(r.stock_id||'');if(!validateSymbol(symbol))continue;const prev=latestInst.get(symbol);if(!prev)latestInst.set(symbol,{rows:[r]});else prev.rows.push(r);}
+      for(const [symbol,group] of latestInst){const x={asOf:recent[1],foreignNet:0,trustNet:0,dealerNet:0,institutionalNet:0};for(const r of group.rows){const net=Number(r.buy||0)-Number(r.sell||0);x.institutionalNet+=net;const name=String(r.name||'').toLowerCase();if(name.includes('foreign'))x.foreignNet+=net;else if(name.includes('trust')||name.includes('investment'))x.trustNet+=net;else if(name.includes('dealer'))x.dealerNet+=net;}data[symbol]=x;}
+      const previousBySymbol=new Map(marginPrevious.map(r=>[String(r.stock_id||''),r]));
+      for(const r of marginLatest){const symbol=String(r.stock_id||'');if(!validateSymbol(symbol))continue;const prev=previousBySymbol.get(symbol);const x=data[symbol]||{asOf:recent[1]};if(prev){x.marginChange=Number(r.MarginPurchaseTodayBalance||0)-Number(prev.MarginPurchaseTodayBalance||0);x.shortChange=Number(r.ShortSaleTodayBalance||0)-Number(prev.ShortSaleTodayBalance||0);}data[symbol]=x;}
+      return {data,source:'FinMind all-market institutional investors + margin/short-sale daily data',timestamp:now(),asOf:recent[1]};
     },e=>({data:{},source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
   }
