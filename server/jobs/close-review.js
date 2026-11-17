@@ -9,6 +9,7 @@ async function get(endpoint){
  return response.json();
 }
 (async()=>{
+ await get('/api/market/snapshot');
  const [scan,news]=await Promise.all([get('/api/market/scan'),get('/api/market/news')]);
  const rows=Object.entries(scan.data||{}).map(([symbol,row])=>({symbol,...row,scorecard:row.scorecard||null}));
  const usable=rows.filter(x=>x.scorecard&&x.scorecard.status==='research-ready');
