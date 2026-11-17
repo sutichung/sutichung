@@ -88,7 +88,7 @@
 
 ## YouTube 免 API Key 播放備援
 
-財經直播中心已改用已知官方頻道 ID 建立頻道直播播放器，不再呼叫 YouTube Data API 搜尋直播影片，因此不需要 `YOUTUBE_API_KEY`。頻道未開播、直播不允許嵌入或 YouTube 調整播放器規則時，仍需點「開啟官方直播」在 YouTube 官方頁觀看。這是降低 API 依賴的備援，不保證所有頻道每個時段都可內嵌。
+財經直播中心不再呼叫 YouTube Data API 搜尋直播影片，因此不需要 `YOUTUBE_API_KEY`；YouTube 頻道以官方 `/live` 連結外開。站內嵌入播放需要當次直播影片 ID，並非穩定的免 API 頻道嵌入方式。授權 HLS 來源仍可用 hls.js 在站內播放。
 
 YouTube 官方播放器文件：https://developers.google.com/youtube/player_parameters
 
