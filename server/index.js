@@ -106,6 +106,39 @@ function archiveDates(days=120){
   for(let i=0;i<days;i++){const d=new Date();d.setUTCHours(0,0,0,0);d.setUTCDate(d.getUTCDate()-i);if(d.getUTCDay()!==0&&d.getUTCDay()!==6)out.push(d.toISOString().slice(0,10));}
   return out;
 }
+async function fetchText(url,timeoutMs=12000,extraHeaders={}){
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);
+  try{const r=await fetch(url,{signal:controller.signal,headers:{'User-Agent':'TaiwanStockDashboard/1.0',...extraHeaders}});if(!r.ok)throw new Error('upstream_http_'+r.status);return await r.text();}
+  finally{clearTimeout(timer);}
+}
+function parseCsvLine(line){
+  const out=[];let value='',quoted=false;
+  for(let i=0;i<line.length;i++){const ch=line[i];if(ch==='"'){if(quoted&&line[i+1]==='"'){value+='"';i++;}else quoted=!quoted;}else if(ch===','&&!quoted){out.push(value);value='';}else value+=ch;}
+  out.push(value);return out;
+}
+async function tdccShareholdingDistribution(){
+  const csv=await fetchText('https://smart.tdcc.com.tw/opendata/getOD.ashx?id=1-5',20000,{'Accept':'text/csv,text/plain,*/*'});
+  const lines=csv.replace(/^\\uFEFF/,'').split(/\\r?\\n/).filter(x=>x.trim());
+  if(lines.length<2)throw new Error('TDCC 集保戶股權分散資料為空');
+  const head=parseCsvLine(lines[0]).map(x=>x.trim());
+  const idx={date:head.findIndex(x=>/日期|date/i.test(x)),symbol:head.findIndex(x=>/代號|code/i.test(x)),level:head.findIndex(x=>/分級|級距|level/i.test(x)),proportion:head.findIndex(x=>/比例|占比|proportion/i.test(x))};
+  if(Object.values(idx).some(x=>x<0)){idx.date=0;idx.symbol=1;idx.level=2;idx.proportion=5;}
+  const byDate={};
+  for(const line of lines.slice(1)){
+    const row=parseCsvLine(line);const symbol=String(row[idx.symbol]||'').trim();if(!/^[0-9A-Z]{4,10}$/.test(symbol))continue;
+    const rawDate=String(row[idx.date]||'').replace(/[^0-9]/g,''),date=rawDate.length===7?String(Number(rawDate.slice(0,3))+1911)+rawDate.slice(3):rawDate;
+    if(date.length!==8)continue;
+    const level=Number(row[idx.level]),pct=Number(String(row[idx.proportion]||'').replace(/,/g,'').replace(/%/g,''));
+    if(!Number.isFinite(level)||!Number.isFinite(pct)||level<1||level>17)continue;
+    const key=symbol+'|'+date,x=byDate[key]||(byDate[key]={symbol,date,largeHolderPct:0,retailHolderPct:0});
+    if(level>=12&&level<=15)x.largeHolderPct+=pct;
+    if(level>=1&&level<=5)x.retailHolderPct+=pct;
+  }
+  const latest={};
+  for(const x of Object.values(byDate))if(!latest[x.symbol]||x.date>latest[x.symbol].date)latest[x.symbol]=x;
+  if(!Object.keys(latest).length)throw new Error('TDCC 集保股權分散 CSV 欄位無法解析');
+  return {data:latest,asOf:Object.values(latest)[0].date,source:'TDCC 集保戶股權分散開放資料（每週更新）'};
+}
 async function fetchOpenArchive(kind,date){
   const base=process.env.OPEN_DATA_ARCHIVE_URL||'https://raw.githubusercontent.com/88jiayu/tw-chip-open-data/main/data/official';
   const doc=await fetchJson(base+'/'+kind+'/'+date+'.json',12000,{'User-Agent':'TaiwanStockDashboard/1.0','Accept':'application/json'});
@@ -166,7 +199,15 @@ async function twseInstitutionalFlows(){
       }
     }
   }catch(_){}
-  return {data,source:'TWSE T86 三大法人 + TWSE Open Data 歷史融資融券（開放資料歸檔）',timestamp:now(),asOf:valid.at(-1).date,days:valid.map(x=>x.date),marginAsOf};
+  let tdccAsOf=null;
+  try{
+    const tdcc=await tdccShareholdingDistribution();tdccAsOf=tdcc.asOf;
+    for(const [symbol,holder] of Object.entries(tdcc.data||{})){
+      const x=data[symbol]||(data[symbol]={asOf:valid.at(-1).date});
+      x.largeHolderPct=holder.largeHolderPct;x.retailHolderPct=holder.retailHolderPct;x.tdccAsOf=holder.date;
+    }
+  }catch(_){}
+  return {data,source:'TWSE T86 三大法人 + TWSE/TDCC 開放資料（法人、融資融券、集保股權分散）',timestamp:now(),asOf:valid.at(-1).date,days:valid.map(x=>x.date),marginAsOf,tdccAsOf};
 }
 async function openSourceMarketHistory(){
   const dates=archiveDates(120);
