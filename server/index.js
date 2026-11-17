@@ -208,18 +208,37 @@ async function twseInstitutionalFlows(){
     x.foreignNet5d+=foreign;x.trustNet5d+=r.trust;x.dealerNet5d+=dealer;x.institutionalNet5d+=total;
     if(day.date===valid.at(-1).date){x.asOf=day.date;x.foreignNet=foreign;x.trustNet=r.trust;x.dealerNet=dealer;x.institutionalNet=total;}
   }
+  let tpexInstitutionalAsOf=null;
+  try{
+    const docs=await recentOpenArchive('inst_tpex',5);
+    tpexInstitutionalAsOf=docs.at(-1)?.trade_date||null;
+    for(const doc of docs){
+      const fields=doc.fields||[],ix={foreign:fields.indexOf('foreign_net'),trust:fields.indexOf('trust_net'),dealer:fields.indexOf('dealer_net'),total:fields.indexOf('total_net')};
+      if(Object.values(ix).some(i=>i<0))continue;
+      for(const [symbol,values] of Object.entries(doc.rows||{})){
+        const x=data[symbol]||(data[symbol]={asOf:doc.trade_date,foreignNet:0,trustNet:0,dealerNet:0,foreignNet5d:0,trustNet5d:0,dealerNet5d:0,institutionalNet:0,institutionalNet5d:0});
+        const foreign=Number(values?.[ix.foreign]),trust=Number(values?.[ix.trust]),dealer=Number(values?.[ix.dealer]),total=Number(values?.[ix.total]);
+        if(![foreign,trust,dealer,total].every(Number.isFinite))continue;
+        x.foreignNet5d=(x.foreignNet5d||0)+foreign;x.trustNet5d=(x.trustNet5d||0)+trust;x.dealerNet5d=(x.dealerNet5d||0)+dealer;x.institutionalNet5d=(x.institutionalNet5d||0)+total;
+        if(doc.trade_date===tpexInstitutionalAsOf){x.asOf=doc.trade_date;x.foreignNet=foreign;x.trustNet=trust;x.dealerNet=dealer;x.institutionalNet=total;x.exchange='TPEx';}
+      }
+    }
+  }catch(_){}
   let marginAsOf=null;
   try{
-    const margins=await recentOpenArchive('margin_twse',2);
-    if(margins.length){
+    const markets=await Promise.all([recentOpenArchive('margin_twse',2),recentOpenArchive('margin_tpex',2)]);
+    for(let marketIndex=0;marketIndex<markets.length;marketIndex++){
+      const margins=markets[marketIndex];
+      if(!margins.length)continue;
       const latest=margins.at(-1),previous=margins.at(-2);
-      marginAsOf=latest.trade_date;
+      if(marketIndex===0)marginAsOf=latest.trade_date;
       for(const [symbol,values] of Object.entries(latest.rows)){
         const old=previous?.rows?.[symbol];
-        const x=data[symbol]||(data[symbol]={asOf:valid.at(-1).date});
+        const x=data[symbol]||(data[symbol]={asOf:latest.trade_date});
         const margin=Number(values?.[0]),short=Number(values?.[1]);
         if(Number.isFinite(margin)){x.marginBalance=margin;if(old&&Number.isFinite(Number(old[0])))x.marginChange=margin-Number(old[0]);}
         if(Number.isFinite(short)){x.shortBalance=short;if(old&&Number.isFinite(Number(old[1])))x.shortChange=short-Number(old[1]);}
+        if(marketIndex===1)x.marginAsOf=latest.trade_date;
       }
     }
   }catch(_){}
@@ -231,7 +250,7 @@ async function twseInstitutionalFlows(){
       x.largeHolderPct=holder.largeHolderPct;x.retailHolderPct=holder.retailHolderPct;x.tdccAsOf=holder.date;
     }
   }catch(_){}
-  return {data,source:'TWSE T86 三大法人 + TWSE/TDCC 開放資料（法人、融資融券、集保股權分散）',timestamp:now(),asOf:valid.at(-1).date,days:valid.map(x=>x.date),marginAsOf,tdccAsOf};
+  return {data,source:'TWSE T86 + TPEx 官方歸檔三大法人 + TWSE/TPEx 融資融券 + TDCC 集保資料',timestamp:now(),asOf:valid.at(-1).date,days:valid.map(x=>x.date),tpexInstitutionalAsOf,marginAsOf,tdccAsOf};
 }
 async function openSourceMarketHistory(){
   const dates=archiveDates(120);
