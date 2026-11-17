@@ -281,7 +281,7 @@ async function route(req,res){
       safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],error:e.message}))
     ]);
     const flowRows=Object.values(flows.data||{});
-    return json(res,200,{ok:!history.error&&history.historyCount>0,source:history.source||'open data archive',historyAsOf:history.historyAsOf,historyDays:history.historyDateCount||0,historyStocks:history.historyCount||0,listedCount:listed.data?.length||0,institutionalStocks:flowRows.filter(x=>x.institutionalNet!=null).length,marginStocks:flowRows.filter(x=>x.marginChange!=null||x.shortChange!=null).length,institutionalAsOf:flows.asOf||null,marginAsOf:flows.marginAsOf||null,errors:[history.error,flows.error,listed.error].filter(Boolean),serverTime:now()});
+    return json(res,200,{ok:!history.error&&history.historyCount>0,source:history.source||'open data archive',historyAsOf:history.historyAsOf,historyDays:history.historyDateCount||0,historyStocks:history.historyCount||0,listedCount:listed.data?.length||0,institutionalStocks:flowRows.filter(x=>x.institutionalNet!=null).length,marginStocks:flowRows.filter(x=>x.marginChange!=null||x.shortChange!=null).length,tdccStocks:flowRows.filter(x=>x.largeHolderPct!=null).length,institutionalAsOf:flows.asOf||null,marginAsOf:flows.marginAsOf||null,tdccAsOf:flows.tdccAsOf||null,errors:[history.error,flows.error,listed.error].filter(Boolean),serverTime:now()});
   }
   if(u.pathname==='/api/market/scan'){
     const result=await safeLoad('scan',TTL.scan,async()=>{
