@@ -41,8 +41,7 @@ function scoreStock(input={}) {
     else covered+=6;
   }
 
-  const instKeys=['institutionalNet','foreignNet','trustNet','dealerNet'];
-  const inst=instKeys.filter(k=>finite(input[k])).map(k=>Number(input[k]));
+  const inst=finite(input.institutionalNet)?[Number(input.institutionalNet)]:['foreignNet','trustNet','dealerNet'].filter(k=>finite(input[k])).map(k=>Number(input[k]));
   if(inst.length) add(12,Math.sign(inst.reduce((a,b)=>a+b,0)),'法人合計買超','法人合計賣超');
 
   if(finite(input.marginChange)) {
