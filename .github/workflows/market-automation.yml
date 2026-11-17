@@ -22,6 +22,7 @@ jobs:
           MARKET_APP_URL: ${{ secrets.MARKET_APP_URL }}
         run: |
           test -n "$MARKET_APP_URL" || { echo "Set GitHub Actions secret MARKET_APP_URL to the deployed app URL"; exit 1; }
+          curl --fail --silent --show-error --max-time 45 "$MARKET_APP_URL/api/market/snapshot" -o /tmp/snapshot.json
           curl --fail --silent --show-error --max-time 45 "$MARKET_APP_URL/api/market/scan" -o /tmp/scan.json
           node -e "const x=require('/tmp/scan.json'); console.log('Scanned symbols:', x.scannedCount ?? Object.keys(x.data||{}).length, 'source:', x.source||'unknown')"
   close-review:
