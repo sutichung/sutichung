@@ -6,6 +6,7 @@ const { URL } = require('node:url');
 const { indicators } = require('./lib/indicators');
 const { scoreStock } = require('./lib/scoring');
 const { getTradingReadiness } = require('./lib/trading-readiness');
+const { buildAiCommittee } = require('./lib/agents');
 
 const PORT = Number(process.env.PORT || 8787);
 const FINMIND_BASE = process.env.FINMIND_BASE || 'https://api.finmindtrade.com/api/v4/data';
@@ -238,6 +239,27 @@ async function openSourceMarketHistory(){
 
 function validateSymbol(s){return /^[0-9A-Z]{2,10}$/.test(s||'');}
 function rateLimit(req){const ip=req.socket.remoteAddress||'unknown';const t=Date.now();let a=RATE.get(ip)||[];a=a.filter(x=>t-x<60000);if(a.length>=480)return false;a.push(t);RATE.set(ip,a);return true;}
+async function loadStockHistory(symbol){
+  let data=[],source='';
+  if(FINMIND_TOKEN){
+    const d=new Date();d.setDate(d.getDate()-260);const start=d.toISOString().slice(0,10);
+    const rows=await finmind('TaiwanStockPrice',{data_id:symbol,start_date:start});
+    data=rows.map(x=>({time:x.date,open:Number(x.open),high:Number(x.max),low:Number(x.min),close:Number(x.close),volume:Number(x.Trading_Volume)})).filter(x=>[x.open,x.high,x.low,x.close,x.volume].every(Number.isFinite)).slice(-240);
+    source='FinMind TaiwanStockPrice（日資料，非逐筆即時）';
+  }else{
+    const months=[];for(let i=0;i<8;i++){const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-i);months.push(d.toISOString().slice(0,7)+'-01');}
+    const pages=await mapLimit(months,3,async month=>{
+      const date=month.replace(/-/g,'').slice(0,6)+'01';
+      const url='https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date='+date+'&stockNo='+encodeURIComponent(symbol)+'&response=json';
+      const payload=await fetchJson(url,12000,{'User-Agent':'Mozilla/5.0','Referer':'https://www.twse.com.tw/','Accept':'application/json'});
+      return (payload.data||[]).map(r=>{const parts=String(r[0]||'').split('/');const day=parts.length===3?String(Number(parts[0])+1911)+'-'+String(parts[1]).padStart(2,'0')+'-'+String(parts[2]).padStart(2,'0'):'';const n=v=>Number(String(v??'').replace(/,/g,'').trim());return {time:day,volume:n(r[1]),open:n(r[3]),high:n(r[4]),low:n(r[5]),close:n(r[6])};}).filter(x=>x.time&&[x.open,x.high,x.low,x.close,x.volume].every(Number.isFinite));
+    });
+    data=pages.flat().sort((a,b)=>a.time.localeCompare(b.time)).slice(-240);source='TWSE 官方 STOCK_DAY 月日線（日資料，非逐筆即時）';
+    if(data.length<20)throw new Error('TWSE 個股歷史日線不足 20 根');
+  }
+  if(!data.length)throw new Error('沒有可供分析的歷史K線');
+  return {data,source,timestamp:now(),asOf:data.at(-1).time,indicators:indicators(data)};
+}
 async function route(req,res){
   const u=new URL(req.url,'http://localhost');
   if(req.method!=='GET'){return json(res,405,{error:'method_not_allowed'});}
@@ -357,6 +379,17 @@ async function route(req,res){
       return {data,source:(base.source||'FinMind')+' + TWSE 即時行情／公開估值／籌碼',timestamp:now(),scannedCount:Object.keys(data).length,historyAsOf:base.historyAsOf,historyCount:base.historyCount||Object.keys(base.data||{}).length,advanceDecline};
     },e=>({data:{},source:'unavailable',timestamp:now(),scannedCount:0,error:e.message}));
     if(result.stale&&result.data){const safeData={};for(const [symbol,row] of Object.entries(result.data)){const card=row?.scorecard||{};safeData[symbol]={...row,scorecard:{...card,direction:'觀望',status:'insufficient-data',fresh:false,reasons:[...(card.reasons||[]),'全市場掃描快取已過期，暫停方向判斷']}};}return json(res,200,{...result,data:safeData});}
+    return json(res,200,result);
+  }
+  if(u.pathname.startsWith('/api/market/agents/')){
+    const symbol=decodeURIComponent(u.pathname.split('/').pop());
+    if(!validateSymbol(symbol))return json(res,400,{error:'invalid_symbol'});
+    const load=()=>buildAiCommittee(symbol,{
+      getHistory:s=>safeLoad('history:'+s,TTL.history,()=>loadStockHistory(s),e=>({data:[],error:e.message})),
+      quotes:stale('snapshot')?.data||{},scan:stale('scan')?.data||{},flows:stale('flows')?.data||{},
+      quoteSource:stale('snapshot')?.source||'未取得報價來源',env:process.env
+    });
+    const result=u.searchParams.get('refresh')==='1'?await load():await safeLoad('agents:'+symbol,10*60*1000,load,e=>({symbol,agents:['gemini','grok','deepseek'].map(provider=>({provider,status:'error',message:e.message})),consensus:null,analysisTime:now()}));
     return json(res,200,result);
   }
   if(u.pathname.startsWith('/api/market/history/')){
