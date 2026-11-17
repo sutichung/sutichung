@@ -23,8 +23,11 @@ jobs:
           MARKET_APP_URL: ${{ secrets.MARKET_APP_URL }}
         run: |
           test -n "$MARKET_APP_URL" || { echo "Set GitHub Actions secret MARKET_APP_URL to the deployed app URL"; exit 1; }
-          curl --fail --silent --show-error --max-time 180 "$MARKET_APP_URL/api/market/snapshot" -o /tmp/snapshot.json
-          curl --fail --silent --show-error --max-time 45 "$MARKET_APP_URL/api/market/scan" -o /tmp/scan.json
+          curl --fail --silent --show-error --max-time 45 "$MARKET_APP_URL/api/market/snapshot" -o /tmp/snapshot.json
+          curl --fail --silent --show-error --max-time 45 "$MARKET_APP_URL/api/market/institutional-flows" -o /tmp/flows.json
+          curl --fail --silent --show-error --max-time 45 "$MARKET_APP_URL/api/market/futures" -o /tmp/futures.json
+          curl --fail --silent --show-error --max-time 45 "$MARKET_APP_URL/api/market/sentiment" -o /tmp/sentiment.json
+          curl --fail --silent --show-error --max-time 180 "$MARKET_APP_URL/api/market/scan" -o /tmp/scan.json
           node -e "const x=require('/tmp/scan.json'); console.log('Scanned symbols:', x.scannedCount ?? Object.keys(x.data||{}).length, 'source:', x.source||'unknown')"
   close-review:
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '40 5 * * 1-5'
