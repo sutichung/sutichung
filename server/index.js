@@ -78,7 +78,7 @@ async function route(req,res){
       if(FUGLE_API_KEY){
         const markets=['TSE','OTC','ESB','TIB'];
         const payloads=await Promise.all(markets.map(async market=>{const u=new URL(FUGLE_BASE+'/snapshot/quotes/'+market);return fetchJson(u.toString(),8000,{'X-API-KEY':FUGLE_API_KEY});}));
-        const data={};for(const payload of payloads){for(const row of (payload.data||[])){if(!row.symbol)continue;const stamp=Number(row.lastUpdated);data[String(row.symbol)]={symbol:String(row.symbol),name:row.name||String(row.symbol),price:Number.isFinite(Number(row.closePrice))&&Number(row.closePrice)>0?Number(row.closePrice):null,changePct:Number.isFinite(Number(row.changePercent))?Number(row.changePercent):null,volume:Number(row.tradeVolume),timestamp:Number.isFinite(stamp)&&stamp>0?new Date(stamp/1000).toISOString():now(),market:payload.market};}}
+        const data={};for(const payload of payloads){for(const row of (payload.data||[])){if(!row.symbol)continue;const stamp=Number(row.lastUpdated);data[String(row.symbol)]={symbol:String(row.symbol),name:row.name||String(row.symbol),price:Number.isFinite(Number(row.lastPrice??row.closePrice))&&Number(row.lastPrice??row.closePrice)>0?Number(row.lastPrice??row.closePrice):null,changePct:Number.isFinite(Number(row.changePercent))?Number(row.changePercent):null,volume:Number(row.tradeVolume),timestamp:Number.isFinite(stamp)&&stamp>0?new Date(stamp/1000).toISOString():now(),market:payload.market};}}
         return {data,source:'Fugle market-wide snapshot quotes (TSE + OTC; upstream refresh every 5 seconds)',timestamp:now(),delayed:false};
       }
       const x=await external('MARKET_REALTIME_URL','未設定授權即時行情供應商；可設定 FUGLE_API_KEY 或 MARKET_REALTIME_URL');
