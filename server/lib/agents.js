@@ -76,6 +76,25 @@ async function buildAiCommittee(symbol, options) {
       freshness: quote.delayed ? (quote.quoteType === 'daily-close' ? 'historical-daily-close' : 'delayed-snapshot') : quote.timestamp ? 'timestamped-source-quote' : 'historical-daily-close',
       exchange: quote.market === 'OTC' ? 'TPEx' : technical.exchange || null
     },
+    company:{
+      sector:technical.sector||null,
+      businessDescription:options.fundamentals?.company?.businessDescription||null,
+      businessDescriptionNote:options.fundamentals?.company?.businessDescriptionNote||null
+    },
+    financials:options.fundamentals?.financials?{
+      incomeAsOf:options.fundamentals.financials.incomeAsOf||null,
+      balanceAsOf:options.fundamentals.financials.balanceAsOf||null,
+      cashAsOf:options.fundamentals.financials.cashAsOf||null,
+      eps:options.fundamentals.financials.income?.eps??null,
+      grossMargin:options.fundamentals.financials.grossMargin??null,
+      operatingMargin:options.fundamentals.financials.operatingMargin??null,
+      netMargin:options.fundamentals.financials.netMargin??null,
+      debtRatio:options.fundamentals.financials.debtRatio??null,
+      currentRatio:options.fundamentals.financials.currentRatio??null,
+      operatingCashFlow:options.fundamentals.financials.cash?.operatingCashFlow??null,
+      cashFlowPeriodBasis:options.fundamentals.financials.cash?.periodBasis||null,
+      valuation:options.fundamentals.financials.valuation||null
+    }:null,
     dailyKlineAsOf: history.asOf || last.time, historySource: history.source,
     latestCandles: history.data.slice(-30),
     technical: {
