@@ -1,5 +1,7 @@
 'use strict';
 const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
 const { URL } = require('node:url');
 const { indicators } = require('./lib/indicators');
 
@@ -94,6 +96,24 @@ async function route(req,res){
   if(u.pathname==='/api/market/sentiment'){
     const result=await safeLoad('sentiment',TTL.sentiment,async()=>{const x=await external('MARKET_SENTIMENT_URL','未設定市場情緒資料供應商 MARKET_SENTIMENT_URL');return {data:x.data||null,source:x.source||'Configured sentiment provider',timestamp:x.timestamp||now()};},e=>({data:null,source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
+  }
+  // In production, serve the compiled React app from the same origin as the API.
+  if (process.env.NODE_ENV === 'production') {
+    const root = path.resolve(__dirname, '..', 'build');
+    const requested = decodeURIComponent(u.pathname === '/' ? '/index.html' : u.pathname);
+    const file = path.resolve(root, '.' + requested);
+    if (file === root || file.startsWith(root + path.sep)) {
+      try {
+        const stat = fs.statSync(file);
+        if (stat.isFile()) {
+          const types = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.json':'application/json; charset=utf-8', '.svg':'image/svg+xml', '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.ico':'image/x-icon', '.woff2':'font/woff2' };
+          res.writeHead(200, { 'content-type': types[path.extname(file)] || 'application/octet-stream', 'x-content-type-options':'nosniff', 'cache-control': path.basename(file) === 'index.html' ? 'no-cache' : 'public, max-age=31536000, immutable' });
+          return fs.createReadStream(file).pipe(res);
+        }
+      } catch (_) { /* SPA routes fall back to index.html. */ }
+      const index = path.join(root, 'index.html');
+      if (fs.existsSync(index)) { res.writeHead(200, { 'content-type':'text/html; charset=utf-8', 'cache-control':'no-cache', 'x-content-type-options':'nosniff' }); return fs.createReadStream(index).pipe(res); }
+    }
   }
   return json(res,404,{error:'not_found'});
 }
