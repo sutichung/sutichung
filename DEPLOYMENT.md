@@ -14,7 +14,7 @@
 部署成功取得 Render 網址後：
 1. 開啟 GitHub repository → Settings → Secrets and variables → Actions。
 2. 新增 Repository secret：名稱 `MARKET_APP_URL`，值為 Render 網址（例如 `https://你的服務.onrender.com`，不要加 `/api`）。
-3. `.github/workflows/market-automation.yml` 會在台灣交易時段每 5 分鐘暖機行情並掃描，13:40 產生收盤研究報告。
+3. `.github/workflows/market-automation.yml` 會在台灣交易時段每 5 分鐘暖機行情並掃描；儀表板本身每 5 秒更新一次，13:40 產生收盤研究報告。
 4. 收盤報告上傳為 GitHub Actions Artifact，保存 90 天；下一個交易日的收盤排程會讀取前一份報告，比較多空排名與新快照，輸出方向性命中率及假設成本後報酬，也保存 90 天。
 
 GitHub Actions 的排程有可能延遲；請在 Actions 頁確認 workflow 已啟用。這個流程會存檔及產生研究排名，尚未代表模型已自動再訓練。
