@@ -382,7 +382,26 @@ function isAdminUser(user){return !!(user&&user.email&&SUPABASE_ADMIN_EMAIL&&Str
 
 async function route(req,res){
   const u=new URL(req.url,'http://localhost');
-  if(u.pathname==='/api/auth/config'&&req.method==='GET')return json(res,200,{configured:SUPABASE_CONFIGURED,registrationEnabled:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY});
+  if(u.pathname==='/api/auth/config'&&req.method==='GET')return json(res,200,{configured:SUPABASE_CONFIGURED,registrationEnabled:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY,oauthProviders:['apple','facebook'],phoneOtp:true});
+  const oauthMatch=u.pathname.match(/^\\/api\\/auth\\/oauth\\/(apple|facebook)$/);
+  if(oauthMatch&&req.method==='GET'){
+    if(!SUPABASE_CONFIGURED)return json(res,503,{error:'Supabase 尚未設定'});
+    const origin=(req.headers['x-forwarded-proto']||'https')+'://'+(req.headers['x-forwarded-host']||req.headers.host);
+    const target=new URL(SUPABASE_URL+'/auth/v1/authorize');target.searchParams.set('provider',oauthMatch[1]);target.searchParams.set('redirect_to',origin+'/');
+    res.writeHead(302,{Location:target.toString(),'Cache-Control':'no-store'});return res.end();
+  }
+  if(u.pathname==='/api/auth/phone/start'&&req.method==='POST'){
+    if(!SUPABASE_CONFIGURED)return json(res,503,{error:'會員服務尚未設定'});
+    try{const body=await readRequestJson(req),phone=String(body.phone||'').trim();if(!/^\\+[1-9]\\d{7,14}$/.test(phone))return json(res,400,{error:'請使用含國碼的手機格式，例如 +886912345678'});
+      await supabaseRequest('/auth/v1/otp',{method:'POST',body:{phone,create_user:true}});return json(res,200,{ok:true,message:'SMS OTP sent'});
+    }catch(e){return json(res,e.status||502,{error:e.message});}
+  }
+  if(u.pathname==='/api/auth/phone/verify'&&req.method==='POST'){
+    if(!SUPABASE_CONFIGURED)return json(res,503,{error:'會員服務尚未設定'});
+    try{const body=await readRequestJson(req),phone=String(body.phone||'').trim(),token=String(body.token||'').trim();if(!/^\\+[1-9]\\d{7,14}$/.test(phone)||!/^\\d{4,8}$/.test(token))return json(res,400,{error:'手機號碼或簡訊驗證碼格式錯誤'});
+      const data=await supabaseRequest('/auth/v1/verify',{method:'POST',body:{phone,token,type:'sms'}});return json(res,200,{access_token:data.access_token,refresh_token:data.refresh_token,expires_in:data.expires_in,user:data.user});
+    }catch(e){return json(res,e.status||401,{error:e.message});}
+  }
   if(u.pathname==='/api/auth/signup'&&req.method==='POST'){
     if(!SUPABASE_CONFIGURED)return json(res,503,{error:'會員系統尚未設定'});
     try{const body=await readRequestJson(req);if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(body.email||''))||String(body.password||'').length<10)return json(res,400,{error:'請輸入有效 Email，密碼至少 10 個字元'});
