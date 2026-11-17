@@ -116,7 +116,7 @@ async function twseListedUniverse(){
     }catch(error){
       try{
         const csv=await fetchText('https://mopsfin.twse.com.tw/opendata/t187ap03_O.csv',12000,{'Accept':'text/csv,text/plain,*/*'});
-        const lines=csv.replace(/^\\uFEFF/,'').split(/\\r?\\n/).filter(x=>x.trim());
+        const lines=csv.replace(/^\uFEFF/,'').split(/\r?\n/).filter(x=>x.trim());
         if(lines.length>1){
           const headers=parseCsvLine(lines[0]).map(x=>x.trim());
           const codeIndex=headers.findIndex(x=>/公司代號|證券代號/.test(x)),nameIndex=headers.findIndex(x=>/公司簡稱/.test(x)),sectorIndex=headers.findIndex(x=>/產業別/.test(x));
