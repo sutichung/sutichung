@@ -31,7 +31,7 @@ async function runAgent(provider, prompt, env) {
   const system = '你是台灣股票市場獨立研究分析員。只能根據提供的行情、K線與籌碼數據判讀；不可捏造新聞、即時報價或未提供的資料。不要輸出隱藏思維鏈，只回傳可公開的結論、可核對依據、看多理由、看空理由、風險與失效條件。若資料不足，direction 必須為「中性」，confidence 降低。score 是方向強度評分，不是勝率或機率。只輸出 JSON，欄位：direction(看多/看空/中性),score(0-100),confidence(0-100),summary,bullReasons(最多4項),bearReasons(最多4項),logic(最多5項),risks(最多3項),invalidation,scenarios。scenarios 必須是 JSON 物件，含 bullish/neutral/bearish 三種劇本；每種包含 trigger(觸發條件)、action(應對)、targetPrice(可由提供資料合理推導才填數字，否則 null)、stopPrice(可合理推導才填數字，否則 null)、risk(主要風險)。不得捏造目標價或停損價，資料不足時填 null 並說明。';
   let raw = '', actualModel = config.model, engine = provider.toUpperCase(), primaryError = null;
   const useOpenRouter = async () => {
-    const model = env.OPENROUTER_MODEL || 'openrouter/free';
+    const model = env['OPENROUTER_' + provider.toUpperCase() + '_MODEL'] || env.OPENROUTER_MODEL || 'openrouter/free';
     const result = await postJson('https://openrouter.ai/api/v1/chat/completions', {
       model,
       messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }],
