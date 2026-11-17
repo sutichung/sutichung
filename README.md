@@ -26,6 +26,7 @@
 - `GET /api/market/snapshot`：優先使用 Fugle TSE/OTC 全市場快照（`FUGLE_API_KEY`），否則使用 `MARKET_REALTIME_URL`。
 - `GET /api/market/scan`：優先使用 FinMind 全市場日 K + Fugle 即時快照計算所有股票分數；FinMind 方案不足時可改接 `MARKET_SCAN_URL`。回傳每檔 `scorecard`。
 - `GET /api/market/history/:symbol?interval=1d&limit=120`：FinMind TaiwanStockPrice 日 K 歷史資料（需 FINMIND_TOKEN）。
+- `GET /api/market/fundamentals/:symbol`：單檔公司基本資料、損益表、資產負債表、現金流量表、近 24 個月營收年增率、股利資料與負債／流動比率；財報資料需 FINMIND_TOKEN，官方公司基本資料可獨立顯示。
 - `GET /api/market/institutional-flows`：優先使用 FinMind 全市場三大法人與融資融券日資料（需 Backer 以上權限），否則使用 `MARKET_FLOWS_URL`。
 - `GET /api/market/futures`：優先使用 FinMind TX 期貨日資料（非即時），若要即時期貨需 `MARKET_FUTURES_URL` 或另接有授權的即時供應商。
 - `GET /api/market/sentiment`：優先使用 FinMind CNN Fear & Greed（日資料，需 Backer 以上），否則使用 `MARKET_SENTIMENT_URL`。
