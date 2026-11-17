@@ -1,44 +1,29 @@
-# 部署指南（Render / GitHub Actions）
+# 部署與實盤驗收（Render / GitHub Actions）
 
-## Render Blueprint
-目前已在 Render 建立 Blueprint 設定並產生待審核的首次同步計畫；尚未建立正式服務或上線。請先開啟 [Render Blueprint 計畫](https://dashboard.render.com/blueprint/exs-dbu3qhdckfvc73b15l60)，確認服務為 Free Docker Web Service，再按 Apply。這一步不會替你購買行情方案。
+## 目前部署狀態
+- Render Web Service：`taiwan-stock-hunter-o3tt`
+- 網址：https://taiwan-stock-hunter-o3tt.onrender.com
+- Git 分支：`main`；Render 自動部署已設定為 commit 觸發。
+- 目前使用 Render Free、單一 Oregon instance。免費服務可能休眠，不提供盤中 SLA、固定低延遲或不中斷保證。
+- GitHub Actions 的前端 build、伺服器測試與 Docker build 必須全部成功；Render 必須部署到最新 main commit 並通過 /api/health，才可視為部署完成。
+- Render 目前部署版本可能落後於 GitHub main；請以 Render Deploys 顯示的 commit SHA 為準，不可只看 GitHub push 成功就宣稱上線。
 
-首次同步完成後，進入 Render 服務的 Environment，安全地填入：
-- `FINMIND_TOKEN`：FinMind token。全市場日 K、全市場法人／融資資料需要 Backer 以上方案。
-- `FUGLE_API_KEY`：Fugle API Key。TSE/OTC 全市場快照需要 Developer 或 Advanced 方案，上游快照每五秒更新。
-- 可選：`MARKET_REALTIME_URL`、`MARKET_SCAN_URL`、`MARKET_FLOWS_URL`、`MARKET_FUTURES_URL`、`MARKET_SENTIMENT_URL`、`MARKET_NEWS_URL`，只在你有合法授權的替代供應商時設定。
+## 資料來源與密鑰
+API Key 只放 Render Environment，不可放前端、GitHub 程式碼或聊天內容。
+- `FUGLE_API_KEY`：若帳戶已有合法授權，供即時快照使用。不要為本專案自動購買或升級方案。
+- `FINMIND_TOKEN`：若已有可用權限，供日 K、法人、融資融券及估值資料使用。
+- 可選 `MARKET_REALTIME_URL`、`MARKET_SCAN_URL`、`MARKET_FLOWS_URL`、`MARKET_FUTURES_URL`、`MARKET_SENTIMENT_URL`、`MARKET_NEWS_URL`，只可接入合法授權且符合後端 JSON 契約的資料來源。
+- 沒有設定或授權不足時，系統應顯示缺資料；不得用假價格、固定值或過期快取冒充即時行情。
 
-不要把任何金鑰貼在聊天、GitHub 程式碼、Issue 或 README；直接在 Render Environment 輸入即可。沒有設定金鑰時，系統會顯示缺資料，不會產生假行情。
+## GitHub Actions
+在 Repository → Settings → Secrets and variables → Actions 設定 `MARKET_APP_URL`，值為 Render 網址，不加 `/api`。排程工作會掃描並保存收盤研究報告；GitHub 排程可能延遲，不可作為即時下單觸發器。
 
-## GitHub 自動掃描與收盤報告
-部署成功取得 Render 網址後：
-1. 開啟 GitHub repository → Settings → Secrets and variables → Actions。
-2. 新增 Repository secret：名稱 `MARKET_APP_URL`，值為 Render 網址（例如 `https://你的服務.onrender.com`，不要加 `/api`）。
-3. `.github/workflows/market-automation.yml` 會在台灣交易時段每 5 分鐘暖機行情並掃描；儀表板本身每 5 秒更新一次，13:40 產生收盤研究報告。
-4. 收盤報告上傳為 GitHub Actions Artifact，保存 90 天；下一個交易日的收盤排程會讀取前一份報告，比較多空排名與新快照，輸出方向性命中率及假設成本後報酬，也保存 90 天。
+## 實盤交易鎖定
+目前系統是市場資料監控與研究評分介面，並非已完成的券商交易終端。
+- `GET /api/trading/readiness` 會列出目前阻擋實盤下單的項目。
+- `executionEnabled` 固定為 `false`；目前沒有券商委託、取消、成交回報及庫存／資金對帳功能。
+- 解除鎖定前，必須完成券商 API 整合、安全憑證管理、持久化委託與稽核紀錄、單筆／單日／總曝險限額、停損與熔斷、斷線與重送冪等處理，以及計入手續費、證交稅、滑價和融券限制的樣本外驗證。
+- 不可將規則式 0–100 分數稱為勝率或預測機率。資料過期、缺漏或服務異常時必須停止輸出可執行交易指令。
 
-GitHub Actions 的排程有可能延遲；請在 Actions 頁確認 workflow 已啟用。這個流程會存檔及產生研究排名，尚未代表模型已自動再訓練。
-
-## 行情方案與授權注意
-- Fugle 官方文件列出快照行情功能僅供 Developer / Advanced 方案，快照資料每五秒更新。Developer 方案目前標示 NT$1,499/月、Advanced NT$2,999/月；Basic 免費方案不含快照行情。請自行在官方頁面確認最新方案與授權。
-- FinMind 全市場日 K、法人、融資融券批次資料需要 Backer 以上；官方目前標示 Backer NT$699/月、Sponsor NT$999/月、Sponsor Pro NT$3,330/月。Free / Backer / Sponsor 僅限非商業用途；商業 AI／App 需要 Sponsor Pro，但 Sponsor Pro 也不代表可把即時資料直接公開顯示，須遵守官方資料授權。
-- 本專案的 Render Web Service 目前規劃使用 Free 方案，適合先驗證，不是正式交易系統的 SLA 保證。資料庫、長駐 WebSocket worker、模型訓練與持久化學習尚未配置；這些若採付費資源，必須先檢視費用再啟用。
-
-## Docker 本機啟動
-```bash
-docker build -t taiwan-stock-hunter .
-docker run --rm -p 8787:8787 --env-file .env taiwan-stock-hunter
-```
-
-## Windows PowerShell 本機開發
-```powershell
-Copy-Item .env.example .env
-# 用記事本編輯 .env，填入 FinMind Token 與 Fugle API Key
-npm install
-# 終端機一：
-npm run server
-# 終端機二：
-npm start
-```
-
-正式環境使用 Dockerfile，Node 同時提供 React 靜態頁面與 /api。API Key 僅放 Render Environment，不要提交到 GitHub 或前端環境變數。
+## 不付費原則
+本專案不會自動升級 Render、購買行情方案或啟用付費資源。若免費資料源無法提供所需的即時性或授權，必須明確顯示限制，而不是假裝已具備實盤能力。
