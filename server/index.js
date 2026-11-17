@@ -157,7 +157,9 @@ async function route(req,res){
       if(!FINMIND_TOKEN)throw new Error('未設定 FINMIND_TOKEN 或 MARKET_FLOWS_URL');
       const dates=await finmind('TaiwanStockTradingDate',{},15000);
       const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date());
-      const recent=dates.map(x=>String(x.date||'')).filter(x=>x&&x<today).sort().slice(-5);
+      const localTime=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Taipei',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date());
+      const includeToday=localTime>='20:30';
+      const recent=dates.map(x=>String(x.date||'')).filter(x=>x&&x<=today&&(includeToday||x<today)).sort().slice(-5);
       if(recent.length<5)throw new Error('近五個交易日資料不足，暫停法人籌碼評分');
       const latestDate=recent.at(-1),previousDate=recent.at(-2);
       const [inst,marginLatest,marginPrevious]=await Promise.all([
