@@ -34,7 +34,7 @@ async function finmind(dataset, extra={}, timeoutMs=8000) {
 }
 async function finmindEndpoint(endpoint, extra={}, timeoutMs=8000) {
   if(!FINMIND_TOKEN) throw new Error('未設定 FINMIND_TOKEN');
-  const u=new URL(FINMIND_BASE);u.pathname=u.pathname.replace(/\\/data\\/?$/,'/'+endpoint);
+  const u=new URL(FINMIND_BASE);u.pathname=u.pathname.replace(/\/data\/?$/,'/'+endpoint);
   for(const [k,v] of Object.entries(extra))if(v!==undefined&&v!==null&&v!=='')u.searchParams.set(k,String(v));
   const payload=await fetchJson(u.toString(),timeoutMs,{Authorization:'Bearer '+FINMIND_TOKEN});
   if(payload.status!==200&&payload.status!==undefined)throw new Error('FinMind status '+payload.status);
