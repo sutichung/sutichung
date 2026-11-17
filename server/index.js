@@ -1,5 +1,6 @@
 'use strict';
 const http = require('node:http');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { URL } = require('node:url');
@@ -16,6 +17,44 @@ const FUGLE_BASE = process.env.FUGLE_BASE_URL || 'https://api.fugle.tw/marketdat
 const CACHE = new Map();
 const PENDING = new Map();
 const RATE = new Map();
+const AUTH_SESSIONS = new Map();
+const LOGIN_ATTEMPTS = new Map();
+const AUTH_COOKIE = '__Host-ts_session';
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || '';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
+const SESSION_SECRET = process.env.SESSION_SECRET || '';
+const AUTH_CONFIGURED = !!(ADMIN_USERNAME && ADMIN_PASSWORD.length >= 12 && SESSION_SECRET.length >= 32);
+const ADMIN_PASSWORD_DIGEST = AUTH_CONFIGURED ? crypto.scryptSync(ADMIN_PASSWORD, SESSION_SECRET.slice(0, 16), 64) : null;
+function cookieValue(req,name){
+  const raw=String(req.headers.cookie||'');
+  for(const part of raw.split(';')){const i=part.indexOf('=');if(i>0&&part.slice(0,i).trim()===name)return decodeURIComponent(part.slice(i+1).trim());}
+  return '';
+}
+function sessionValid(req){
+  const token=cookieValue(req,AUTH_COOKIE),record=AUTH_SESSIONS.get(token);
+  if(!token||!record)return false;
+  if(record.expiresAt<Date.now()){AUTH_SESSIONS.delete(token);return false;}
+  return true;
+}
+function setSessionCookie(res,token,maxAge){
+  res.setHeader('Set-Cookie',AUTH_COOKIE+'='+encodeURIComponent(token)+'; Path=/; Max-Age='+maxAge+'; HttpOnly; Secure; SameSite=Strict');
+}
+function originAllowed(req){
+  const origin=req.headers.origin;
+  if(!origin)return true;
+  try{return new URL(origin).host===req.headers.host;}catch(_){return false;}
+}
+function loginAllowed(ip){
+  const nowMs=Date.now(),items=(LOGIN_ATTEMPTS.get(ip)||[]).filter(t=>nowMs-t<15*60*1000);
+  if(items.length>=8){LOGIN_ATTEMPTS.set(ip,items);return false;}
+  items.push(nowMs);LOGIN_ATTEMPTS.set(ip,items);return true;
+}
+async function readJsonBody(req){
+  let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>8192)throw new Error('request_body_too_large');}
+  try{return raw?JSON.parse(raw):{};}catch(_){throw new Error('invalid_json');}
+}
+
 const TTL = { universe: 6*60*60*1000, snapshot: 10000, scan: 10000, history: 5*60*1000, flows: 30*60*1000, futures: 5*60*1000, sentiment: 30*60*1000, news: 5*60*1000 };
 const now = () => new Date().toISOString();
 const json = (res, status, body) => { res.writeHead(status, {'content-type':'application/json; charset=utf-8','cache-control':'no-store'}); res.end(JSON.stringify(body)); };
@@ -354,8 +393,31 @@ async function loadStockHistory(symbol){
 
 async function route(req,res){
   const u=new URL(req.url,'http://localhost');
+  if(u.pathname==='/api/auth/status'&&req.method==='GET')return json(res,200,{authenticated:sessionValid(req),configured:AUTH_CONFIGURED,username:AUTH_CONFIGURED?ADMIN_USERNAME:null});
+  if(u.pathname==='/api/auth/login'&&req.method==='POST'){
+    if(!originAllowed(req))return json(res,403,{error:'origin_not_allowed'});
+    if(!AUTH_CONFIGURED)return json(res,503,{error:'登入尚未啟用：請在 Render 設定 ADMIN_USERNAME、ADMIN_PASSWORD（至少 12 字元）及 SESSION_SECRET（至少 32 字元）。'});
+    const ip=req.socket.remoteAddress||'unknown';
+    if(!loginAllowed(ip))return json(res,429,{error:'登入嘗試過多，請 15 分鐘後再試。'});
+    const body=await readJsonBody(req),username=String(body.username||''),password=String(body.password||'');
+    const supplied=crypto.scryptSync(password,SESSION_SECRET.slice(0,16),64);
+    const validUser=crypto.timingSafeEqual(Buffer.from(username.padEnd(ADMIN_USERNAME.length,'\\0').slice(0,ADMIN_USERNAME.length)),Buffer.from(ADMIN_USERNAME));
+    const validPassword=crypto.timingSafeEqual(supplied,ADMIN_PASSWORD_DIGEST);
+    if(!validUser||!validPassword)return json(res,401,{error:'帳號或密碼錯誤'});
+    const token=crypto.randomBytes(32).toString('base64url'),expiresAt=Date.now()+SESSION_TTL_MS;
+    AUTH_SESSIONS.set(token,{expiresAt,username:ADMIN_USERNAME});
+    setSessionCookie(res,token,Math.floor(SESSION_TTL_MS/1000));
+    return json(res,200,{authenticated:true,expiresAt:new Date(expiresAt).toISOString()});
+  }
+  if(u.pathname==='/api/auth/logout'&&req.method==='POST'){
+    if(!originAllowed(req))return json(res,403,{error:'origin_not_allowed'});
+    AUTH_SESSIONS.delete(cookieValue(req,AUTH_COOKIE));
+    setSessionCookie(res,'',0);
+    return json(res,200,{authenticated:false});
+  }
   if(req.method!=='GET'){return json(res,405,{error:'method_not_allowed'});}
   if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),providers:{finmind:!!FINMIND_TOKEN,fugle:!!FUGLE_API_KEY,youtubeApiKeyConfigured:!!process.env.YOUTUBE_API_KEY,youtubeLiveResolver:!!process.env.YOUTUBE_API_KEY,gemini:!!process.env.GEMINI_API_KEY,grok:!!process.env.XAI_API_KEY,deepseek:!!process.env.DEEPSEEK_API_KEY,realtime:null,realtimeProviderConfigured:!!(FUGLE_API_KEY||process.env.MARKET_REALTIME_URL),twseMisFallback:true,tpexRealtimeConfigured:!!FUGLE_API_KEY,tpexHistoricalFallback:true,scan:true,flows:true,futures:true,sentiment:true,news:true,openDataArchive:true},mode:process.env.NODE_ENV==='production'?'production':'development'});
+  if(u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/api/auth/')&&!sessionValid(req))return json(res,401,{error:'authentication_required'});
   if(u.pathname==='/api/live/resolve'){
     const channelId=String(u.searchParams.get('channelId')||'');
     if(!/^[A-Za-z0-9_-]{20,40}$/.test(channelId))return json(res,400,{error:'invalid_channel_id'});
