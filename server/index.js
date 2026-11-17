@@ -260,10 +260,31 @@ async function route(req,res){
     if(!validateSymbol(symbol))return json(res,400,{error:'invalid_symbol'});
     const key='history:'+symbol;
     const result=await safeLoad(key,TTL.history,async()=>{
-      const d=new Date();d.setDate(d.getDate()-260);const start=d.toISOString().slice(0,10);
-      const rows=await finmind('TaiwanStockPrice',{data_id:symbol,start_date:start});
-      const data=rows.map(x=>({time:x.date,open:Number(x.open),high:Number(x.max),low:Number(x.min),close:Number(x.close),volume:Number(x.Trading_Volume)})).filter(x=>[x.open,x.high,x.low,x.close,x.volume].every(Number.isFinite)).slice(-240);
-      return {data,indicators:indicators(data),source:'FinMind TaiwanStockPrice（日資料，非逐筆即時）',timestamp:now()};
+      let data=[],source='';
+      if(FINMIND_TOKEN){
+        const d=new Date();d.setDate(d.getDate()-260);const start=d.toISOString().slice(0,10);
+        const rows=await finmind('TaiwanStockPrice',{data_id:symbol,start_date:start});
+        data=rows.map(x=>({time:x.date,open:Number(x.open),high:Number(x.max),low:Number(x.min),close:Number(x.close),volume:Number(x.Trading_Volume)})).filter(x=>[x.open,x.high,x.low,x.close,x.volume].every(Number.isFinite)).slice(-240);
+        source='FinMind TaiwanStockPrice（日資料，非逐筆即時）';
+      }else{
+        const months=[];
+        for(let i=0;i<8;i++){const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-i);months.push(d.toISOString().slice(0,7)+'-01');}
+        const pages=await mapLimit(months,3,async month=>{
+          const date=month.replace(/-/g,'').slice(0,6)+'01';
+          const url='https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date='+date+'&stockNo='+encodeURIComponent(symbol)+'&response=json';
+          const payload=await fetchJson(url,12000,{'User-Agent':'Mozilla/5.0','Referer':'https://www.twse.com.tw/','Accept':'application/json'});
+          return (payload.data||[]).map(r=>{
+            const parts=String(r[0]||'').split('/');
+            const day=parts.length===3?String(Number(parts[0])+1911)+'-'+String(parts[1]).padStart(2,'0')+'-'+String(parts[2]).padStart(2,'0'):'';
+            const n=v=>Number(String(v??'').replace(/,/g,'').trim());
+            return {time:day,volume:n(r[1]),open:n(r[3]),high:n(r[4]),low:n(r[5]),close:n(r[6])};
+          }).filter(x=>x.time&&[x.open,x.high,x.low,x.close,x.volume].every(Number.isFinite));
+        });
+        data=pages.flat().sort((a,b)=>a.time.localeCompare(b.time)).slice(-240);
+        source='TWSE 官方 STOCK_DAY 月日線（日資料，非逐筆即時）';
+        if(data.length<60)throw new Error('證交所個股歷史日線不足 60 根，暫不能計算完整技術指標');
+      }
+      return {data,indicators:indicators(data),source,timestamp:now()};
     },e=>({data:[],indicators:null,source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
   }
