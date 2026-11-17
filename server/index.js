@@ -133,6 +133,7 @@ async function route(req,res){
       }
       return {data,source:'FinMind all-market daily history + live quote overlay',timestamp:now(),scannedCount:Object.keys(data).length,historyAsOf:base.historyAsOf};
     },e=>({data:{},source:'unavailable',timestamp:now(),scannedCount:0,error:e.message}));
+    if(result.stale&&result.data){const safeData={};for(const [symbol,row] of Object.entries(result.data)){const card=row?.scorecard||{};safeData[symbol]={...row,scorecard:{...card,direction:'觀望',status:'insufficient-data',fresh:false,reasons:[...(card.reasons||[]),'全市場掃描快取已過期，暫停方向判斷']}};}return json(res,200,{...result,data:safeData});}
     return json(res,200,result);
   }
   if(u.pathname.startsWith('/api/market/history/')){
