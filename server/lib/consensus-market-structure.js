@@ -74,7 +74,7 @@ function score(f){
 }
 function simulate(bars,fs,start,end,costs,minScore){
   const fee=costs.feeBps/10000,slip=costs.slippageBps/10000,tax=costs.sellTaxBps/10000;
-  let cash=100000,qty=0,entryCost=0,entryIndex=-1,entryScore=0,peak=cash,maxDD=0;
+  let cash=100000,qty=0,entryCost=0,entryIndex=-1,entryScore=0,entryReasons=[],peak=cash,maxDD=0;
   const curve=[cash],trades=[],returns=[];
   for(let i=start;i<end-1;i++){
     const f=fs[i],s=score(f),enter=s.value>=minScore,exit=s.value<1;
@@ -101,6 +101,7 @@ function runConsensusResearch(input, options={}) {
   for(let i=0;i<bars.length;i++){const b=bars[i];if(![b.open,b.high,b.low,b.close,b.volume].every(Number.isFinite)||b.open<=0||b.high<Math.max(b.open,b.close,b.low)||b.low>Math.min(b.open,b.close,b.high)||b.volume<0)return {status:'invalid_data',error:'共識策略收到無效 OHLCV',invalidIndex:i,strategies:[]};}
   const market=options.market||'tw-stock',defaults=market==='crypto'?{feeBps:10,slippageBps:5,sellTaxBps:0,annualization:365}:market==='us-stock'?{feeBps:1,slippageBps:5,sellTaxBps:0,annualization:252}:{feeBps:14.25,slippageBps:10,sellTaxBps:30,annualization:252};
   const costs={...defaults,...options};
+  for(const key of ['feeBps','slippageBps','sellTaxBps'])if(!Number.isFinite(Number(costs[key]))||Number(costs[key])<0||Number(costs[key])>1000)return {status:'invalid_costs',error:'交易成本參數必須介於 0 到 1000 bps',strategies:[]};
   const fs=features(bars,5),split=Math.floor(bars.length*0.6),start=60;
   const periods=[{id:'in_sample',label:'訓練區間',start,end:split},{id:'out_of_sample',label:'樣本外區間',start:split,end:bars.length}].map(p=>({...p,metrics:simulate(bars,fs,p.start,p.end,costs,3.5)}));
   const folds=[],size=Math.floor((bars.length-split)/3);
