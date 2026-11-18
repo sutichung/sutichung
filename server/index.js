@@ -663,17 +663,20 @@ async function route(req,res){
   if(u.pathname==='/api/market/snapshot'){
     const result=await safeLoad('snapshot',TTL.snapshot,async()=>{
       if(FUGLE_API_KEY){
-        const markets=['TSE','OTC'];
-        const settled=await Promise.allSettled(markets.map(async market=>{const u=new URL(FUGLE_BASE+'/snapshot/quotes/'+market);return fetchJson(u.toString(),8000,{'X-API-KEY':FUGLE_API_KEY});}));
+        const markets=['TSE','OTC','ESB','TIB'];
+        const settled=await Promise.allSettled(markets.map(async market=>{const u=new URL(FUGLE_BASE+'/snapshot/quotes/'+market);const payload=await fetchJson(u.toString(),10000,{'X-API-KEY':FUGLE_API_KEY});return {...payload,market:payload.market||market};}));
         const payloads=settled.filter(x=>x.status==='fulfilled').map(x=>x.value);
-        if(!payloads.length)throw new Error('Fugle 上市與上櫃快照均無法取得：'+settled.map(x=>x.reason?.message||'unknown').join('；'));
+        if(!payloads.length)throw new Error('Fugle 上市、上櫃、興櫃與創新板快照均無法取得：'+settled.map(x=>x.reason?.message||'unknown').join('；'));
         const data={};for(const payload of payloads){for(const row of (payload.data||[])){if(!row.symbol)continue;const stamp=Number(row.lastUpdated);const quoteTime=Number.isFinite(stamp)&&stamp>0?new Date(stamp/1000).toISOString():null;
-        const lastPrice=Number(row.lastPrice),hasLastTrade=!row.isTrial&&Number.isFinite(lastPrice)&&lastPrice>0;
-        const delayed=!hasLastTrade||!quoteTime||Date.now()-Date.parse(quoteTime)>5*60*1000;
-        data[String(row.symbol)]={symbol:String(row.symbol),name:row.name||String(row.symbol),price:hasLastTrade?lastPrice:null,changePct:hasLastTrade&&Number.isFinite(Number(row.changePercent))?Number(row.changePercent):null,volume:Number(row.tradeVolume),timestamp:quoteTime,market:payload.market,source:'Fugle snapshot quotes',delayed,quoteType:row.isTrial?'trial':!hasLastTrade?'no-trade':delayed?'stale-snapshot':'realtime'};}}
+        const isIndex=String(row.type||'').toUpperCase()==='INDEX',lastPrice=Number(row.lastPrice),closePrice=Number(row.closePrice);
+        const price=isIndex?(Number.isFinite(closePrice)&&closePrice>0?closePrice:null):(!row.isTrial&&Number.isFinite(lastPrice)&&lastPrice>0?lastPrice:null);
+        const hasPrice=price!==null,delayed=!hasPrice||!quoteTime||!Number.isFinite(Date.parse(quoteTime))||Date.now()-Date.parse(quoteTime)>5*60*1000||Date.parse(quoteTime)-Date.now()>60000;
+        const change=Number(row.changePercent),volume=Number(row.tradeVolume);
+        data[String(row.symbol)]={symbol:String(row.symbol),name:row.name||String(row.symbol),type:row.type||'EQUITY',price,changePct:Number.isFinite(change)?change:null,volume:Number.isFinite(volume)&&volume>=0?volume:null,timestamp:quoteTime,sourceTimestamp:quoteTime,market:payload.market,source:'Fugle snapshot quotes',delayed,quoteType:isIndex?'index-snapshot':row.isTrial?'trial':!hasPrice?'no-trade':delayed?'stale-snapshot':'realtime'};}}
         const quoteRows=Object.values(data),delayedCount=quoteRows.filter(x=>x.delayed).length,freshCount=quoteRows.length-delayedCount;
         const returnedMarkets=payloads.map(x=>x.market),unavailableMarkets=markets.filter(m=>!returnedMarkets.includes(m));
-        return {data,source:'Fugle 上市 TSE + 上櫃 OTC 行情快照（各市場獨立回報；逐檔依來源時間戳分級）',timestamp:now(),delayed:quoteRows.length>0&&freshCount===0,mixedFreshness:delayedCount>0&&freshCount>0,delayedCount,freshCount,quoteCount:quoteRows.length,markets:returnedMarkets,unavailableMarkets};
+        const indexCount=quoteRows.filter(x=>x.type==='INDEX').length;
+        return {data,source:'Fugle TSE／OTC／ESB／TIB 官方行情快照（股票與指數分型；逐檔依來源時間戳分級）',timestamp:now(),delayed:quoteRows.length>0&&freshCount===0,mixedFreshness:delayedCount>0&&freshCount>0,delayedCount,freshCount,quoteCount:quoteRows.length,indexCount,markets:returnedMarkets,unavailableMarkets,coverage:{requestedMarkets:markets.length,returnedMarkets:returnedMarkets.length,partial:unavailableMarkets.length>0}};
       }
       if(process.env.MARKET_REALTIME_URL){
         const x=await external('MARKET_REALTIME_URL','');
