@@ -107,6 +107,7 @@ API Key 僅放後端環境變數；不要提交 .env、Token、券商帳密或�
 
 
 ## 官方行情資料治理規格（V2.0）
+- 備援策略：TWSE／TPEx 官方服務優先，第二層採交易所官方核准／授權通路；美股使用交易所官方 feeds 或 CTA／UTP（後續 CT Plan）正式授權通路。未核准來源不得自動接手；無有效備援時標示 DATA_UNAVAILABLE。細節見規格第 13 節。
 - 正式規範：[官方行情資料來源與資料品質規格](./docs/OFFICIAL_MARKET_DATA_POLICY.md)。
 - 台股優先採 TWSE／TPEx／TAIFEX 官方資料；美股優先採 Nasdaq／NYSE 官方市場資料與 CTA／UTP SIP 授權資料。SEC／FINRA 僅依其資料集用途使用，不得冒充即時報價。
 - **重要：目前 README 所述美股 Yahoo Finance 非官方端點尚未完成替換；FinMind、Fugle 及 MARKET_* 自訂來源也尚須逐一核實資料來源、授權與即時性。** 在官方端點完成申請、接線及驗收前，必須標示非官方／未驗證／延遲或資料不足，不得宣稱已完成官方行情升級。
