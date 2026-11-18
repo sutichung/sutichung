@@ -24,8 +24,6 @@ jobs:
       - name: Refresh full-market scan
         env:
           MARKET_APP_URL: ${{ secrets.MARKET_APP_URL }}
-          ACTIONS_ID_TOKEN_REQUEST_URL: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL }}
-          ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${{ env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
         run: |
           test -n "$MARKET_APP_URL" || { echo "Set GitHub Actions secret MARKET_APP_URL to the deployed app URL"; exit 1; }
           OIDC_TOKEN=$(curl --fail --silent --show-error --get --data-urlencode "audience=taiwan-stock-hunter-automation" "$ACTIONS_ID_TOKEN_REQUEST_URL" -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r '.value')
