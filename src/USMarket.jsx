@@ -4,8 +4,8 @@ import QuantResearch from './QuantResearch';
 
 const API='/api/us';
 const colors={bg:'#080d18',panel:'#111a2b',panel2:'#172338',border:'#293951',text:'#e8eef8',muted:'#91a1b8',blue:'#60a5fa',green:'#34d399',red:'#fb7185',yellow:'#fbbf24'};
-const fmt=(v,d=2)=>Number.isFinite(Number(v))?Number(v).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}):'—';
-const pct=v=>Number.isFinite(Number(v))?(Number(v)>0?'+':'')+fmt(v)+'%':'—';
+const fmt=(v,d=2)=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))?Number(v).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}):'—';
+const pct=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))?(Number(v)>0?'+':'')+fmt(v)+'%':'—';
 async function api(path,signal){const token=localStorage.getItem('ts_access_token')||'',headers={Accept:'application/json'};if(token)headers.Authorization='Bearer '+token;const r=await fetch(API+path,{headers,signal});if(!r.ok)throw new Error((await r.json().catch(()=>({}))).error||('HTTP '+r.status));return r.json();}
 function Box({title,children,right}){return <section style={{background:colors.panel,border:'1px solid '+colors.border,borderRadius:12,padding:13,minWidth:0}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:10,flexWrap:'wrap'}}><b>{title}</b>{right}</div>{children}</section>}
 function Stat({label,value,note,color=colors.text}){return <div style={{background:colors.panel2,borderRadius:8,padding:10,minWidth:0}}><small style={{color:colors.muted}}>{label}</small><div style={{fontSize:18,fontWeight:800,color,marginTop:4,overflowWrap:'anywhere'}}>{value}</div>{note&&<small style={{color:colors.muted}}>{note}</small>}</div>}
