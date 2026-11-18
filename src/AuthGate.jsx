@@ -1,4 +1,5 @@
 import React,{useCallback,useEffect,useState} from 'react';
+import SystemControlCenter from './SystemControlCenter';
 
 const ACCESS='ts_access_token',REFRESH='ts_refresh_token';
 const getToken=()=>localStorage.getItem(ACCESS)||'';
@@ -92,7 +93,11 @@ export default function AuthGate({children}){
     {error&&<div style={styles.error}>{error}</div>}{notice&&<div style={styles.notice}>{notice}</div>}
     <div style={styles.foot}>會員資料由 Supabase Auth 管理；未登入無法讀取市場 API。管理員可建立及停用會員。</div>
   </div></div>;
-  return <><style>{responsiveCss}</style><div className="auth-userbar" style={styles.userbar}><span>{user.email}{isAdmin?' · 管理員':''}</span><button style={styles.smallBtn} onClick={()=>{setPasswordOpen(true);setError('');setNotice('');}}>修改密碼</button>{isAdmin&&<button style={styles.smallBtn} onClick={()=>{setAdminOpen(true);setError('');loadMembers();}}>會員管理</button>}<button style={styles.smallBtn} onClick={logout}>登出</button></div>{adminOpen&&<div style={styles.overlay}><div className="auth-modal" style={styles.modal}>
+  if(window.location.pathname.startsWith('/developer')) {
+    if(!isAdmin) return <div style={styles.center}>此區域僅限授權開發者。<p><a href="/" style={{color:'#60a5fa'}}>返回客戶端</a></p></div>;
+    return <><style>{responsiveCss}</style><div className="auth-userbar" style={styles.userbar}><b>🛠️ 開發者專用控制台</b><button style={styles.smallBtn} onClick={()=>{window.location.href='/';}}>返回客戶端</button><button style={styles.smallBtn} onClick={logout}>登出</button></div><SystemControlCenter/></>;
+  }
+  return <><style>{responsiveCss}</style><div className="auth-userbar" style={styles.userbar}><span>{user.email}{isAdmin?' · 管理員':''}</span><button style={styles.smallBtn} onClick={()=>{setPasswordOpen(true);setError('');setNotice('');}}>修改密碼</button>{isAdmin&&<button style={styles.smallBtn} onClick={()=>{window.location.href='/developer';}}>開發者控制台</button>}{isAdmin&&<button style={styles.smallBtn} onClick={()=>{setAdminOpen(true);setError('');loadMembers();}}>會員管理</button>}<button style={styles.smallBtn} onClick={logout}>登出</button></div>{adminOpen&&<div style={styles.overlay}><div className="auth-modal" style={styles.modal}>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}><h2 style={{margin:0}}>會員管理</h2><button style={styles.smallBtn} onClick={()=>setAdminOpen(false)}>關閉</button></div>
     <form className="auth-create-form" onSubmit={createMember} style={styles.createForm}><input style={styles.input} type="email" placeholder="會員 Email" value={newEmail} onChange={e=>setNewEmail(e.target.value)} required/><input style={styles.input} type="password" minLength={10} placeholder="初始密碼（至少 10 字元）" value={newPassword} onChange={e=>setNewPassword(e.target.value)} required/><button style={styles.submit} disabled={memberBusy}>新增會員</button></form>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'14px 0 8px'}}><b>會員清單</b><button style={styles.smallBtn} onClick={loadMembers}>重新整理</button></div>
