@@ -9,7 +9,8 @@ test('neutral and insufficient-data rows are never mislabeled as bearish',()=>{
   {symbol:'BEAR',scorecard:{status:'research-ready',direction:'偏向賣出／避險',score:28}},
   {symbol:'NEUTRAL',scorecard:{status:'research-ready',direction:'中性觀望',score:50}},
   {symbol:'WAIT',scorecard:{status:'research-ready',direction:'觀望',score:50}},
-  {symbol:'INVALID',scorecard:{status:'insufficient-data',direction:'偏向賣出／避險',score:10}},\n  {symbol:'NULL_SCORE',scorecard:{status:'research-ready',direction:'偏向賣出／避險',score:null}}
+  {symbol:'INVALID',scorecard:{status:'insufficient-data',direction:'偏向賣出／避險',score:10}},
+  {symbol:'NULL_SCORE',scorecard:{status:'research-ready',direction:'偏向賣出／避險',score:null}}
  ];
  const result=buildResearchLists(rows,30);
  assert.deepEqual(result.topBullish.map(x=>x.symbol),['BULL']);
