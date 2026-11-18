@@ -8,7 +8,7 @@ import QuantResearch from './QuantResearch';
 import USMarket from './USMarket';
 
 const API = (process.env.REACT_APP_MARKET_API || '/api/market').replace(/\/$/, '');
-const APP_VERSION = '2026.11.18.42';
+const APP_VERSION = '2026.11.18.43';
 
 const C = { bg:'#080d18', panel:'#111a2b', panel2:'#172338', border:'#293951', text:'#e8eef8', muted:'#91a1b8', blue:'#60a5fa', green:'#34d399', red:'#fb7185', yellow:'#fbbf24' };
 const fmt = (v,d=2) => Number.isFinite(Number(v)) ? Number(v).toLocaleString('zh-TW',{minimumFractionDigits:d,maximumFractionDigits:d}) : '—';
