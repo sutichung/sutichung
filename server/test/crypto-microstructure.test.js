@@ -16,8 +16,7 @@ test('order book computes spread and depth imbalance from valid levels', () => {
   assert.equal(book.bestBidSize, 8);
   assert.equal(book.bestAskSize, 4);
   assert.ok(book.microPrice > book.midPrice, 'larger bid size should pull microprice upward');
-  assert.equal(book.depthBands[0].levels, 5);
-  assert.equal(book.depthBands[0].imbalance, book.obi);
+  assert.deepEqual(book.depthBands, [], 'do not label fewer than five levels as a five-level band');
   assert.equal(book.timestamp, null, 'do not invent an exchange timestamp');
 });
 
@@ -75,4 +74,11 @@ test('trade tape exposes aggressive buy pressure only from known quote notional'
   const buy = trades.filter(x => x.side === 'buy').reduce((s, x) => s + x.quoteValue, 0);
   const sell = trades.filter(x => x.side === 'sell').reduce((s, x) => s + x.quoteValue, 0);
   assert.equal(buy / (buy + sell) * 100, 75);
+});
+
+test('depth bands only report levels actually present in the order book', () => {
+  const bids = Array.from({ length: 20 }, (_, i) => [100 - i, 20 - i]);
+  const asks = Array.from({ length: 20 }, (_, i) => [102 + i, 20 - i]);
+  const book = normalizeBook('test', bids, asks, null, 20);
+  assert.deepEqual(book.depthBands.map(x => x.levels), [5, 10, 20]);
 });
