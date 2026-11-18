@@ -1,15 +1,16 @@
 'use strict';
 const { indicators } = require('./indicators');
-const CACHE=new Map();
+const { createAsyncCache } = require('./market-cache');
+const marketCache=createAsyncCache({maxEntries:500});
 const now=()=>new Date().toISOString();
 async function getJson(url,timeout=14000){
  const r=await fetch(url,{headers:{accept:'application/json','user-agent':'TaiwanStockHunter/1.0'},signal:AbortSignal.timeout(timeout)});
  if(!r.ok)throw new Error('HTTP '+r.status+' '+url);
  return r.json();
 }
-async function cached(key,ttl,loader){const x=CACHE.get(key);if(x&&Date.now()-x.at<ttl)return x.value;const value=await loader();CACHE.set(key,{at:Date.now(),value});return value;}
+async function cached(key,ttl,loader){return marketCache.get(key,ttl,loader);}
 const n=v=>Number.isFinite(Number(v))?Number(v):null;
-function row(exchange,marketType,symbol,baseAsset,quoteAsset,price,changePct,quoteVolume,extra={}){return {id:exchange+':'+marketType+':'+symbol,exchange,marketType,symbol,baseAsset,quoteAsset,price:n(price),changePct:n(changePct),quoteVolume:n(quoteVolume)||0,high24h:n(extra.high24h),low24h:n(extra.low24h),volume:n(extra.volume),timestamp:extra.timestamp||now(),nativeSymbol:extra.nativeSymbol||symbol,nativeType:extra.nativeType||marketType};}
+function row(exchange,marketType,symbol,baseAsset,quoteAsset,price,changePct,quoteVolume,extra={}){return {id:exchange+':'+marketType+':'+symbol,exchange,marketType,symbol,baseAsset,quoteAsset,price:n(price),changePct:n(changePct),quoteVolume:n(quoteVolume)||0,high24h:n(extra.high24h),low24h:n(extra.low24h),volume:n(extra.volume),timestamp:extra.timestamp||now(),sourceTimestamp:extra.sourceTimestamp||null,nativeSymbol:extra.nativeSymbol||symbol,nativeType:extra.nativeType||marketType};}
 async function binanceMarkets(){
  const [si,st,fi,ft]=await Promise.all([getJson('https://api.binance.com/api/v3/exchangeInfo'),getJson('https://api.binance.com/api/v3/ticker/24hr'),getJson('https://fapi.binance.com/fapi/v1/exchangeInfo'),getJson('https://fapi.binance.com/fapi/v1/ticker/24hr')]);
  const sm=new Map(st.map(x=>[x.symbol,x])),fm=new Map(ft.map(x=>[x.symbol,x]));
@@ -42,9 +43,9 @@ async function coinbaseMarkets(){
  const products=await getJson('https://api.exchange.coinbase.com/products?limit=1000');
  const active=products.filter(x=>x.status==='online'&&!x.trading_disabled);
  const top=active.slice(0,80);
- const quotes=await Promise.allSettled(top.map(x=>getJson('https://api.exchange.coinbase.com/products/'+encodeURIComponent(x.id)+'/ticker',9000)));
- const map=new Map();quotes.forEach((x,i)=>{if(x.status==='fulfilled')map.set(top[i].id,x.value);});
- return active.map(x=>{const q=map.get(x.id)||{};return row('Coinbase','spot',x.id.replace('-',''),x.base_currency,x.quote_currency,q.price,null,0,{volume:q.volume,nativeSymbol:x.id,nativeType:'spot'});});
+ const quotes=await mapLimit(top,6,async product=>getJson('https://api.exchange.coinbase.com/products/'+encodeURIComponent(product.id)+'/ticker',9000));
+ const map=new Map();quotes.forEach((quote,i)=>{if(quote&&!quote.error)map.set(top[i].id,quote);});
+ return active.map(x=>{const q=map.get(x.id)||{};const price=n(q.price),baseVolume=n(q.volume),sourceTimestamp=q.time&&Number.isFinite(Date.parse(q.time))?new Date(q.time).toISOString():null;return row('Coinbase','spot',x.id.replace('-',''),x.base_currency,x.quote_currency,price,null,price!==null&&baseVolume!==null?price*baseVolume:0,{volume:baseVolume,sourceTimestamp,nativeSymbol:x.id,nativeType:'spot'});});
 }
 async function krakenMarkets(){
  const pairs=await getJson('https://api.kraken.com/0/public/AssetPairs');
