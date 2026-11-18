@@ -12,7 +12,7 @@ const state = {
   lastCompletedAt: null, lastError: null, seen: new Map()
 };
 const now = () => new Date().toISOString();
-const num = v => Number.isFinite(Number(v)) ? Number(v) : null;
+const num = v => v === null || v === undefined || v === '' ? null : Number.isFinite(Number(v)) ? Number(v) : null;
 function marketState(market) {
   return state.byMarket[market] || (state.byMarket[market] = {enqueued:0,completed:0,failed:0,queued:0});
 }
