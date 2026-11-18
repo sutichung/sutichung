@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import CandleChart from './CandleChart';
 import LiveMarketTV from './LiveMarketTV';
 import MarketCalendar from './MarketCalendar';
-import SmartScreener from './SmartScreener';
+import SignalRadar from './SignalRadar';
 import MarketOverview from './MarketOverview';
 import QuantResearch from './QuantResearch';
 import USMarket from './USMarket';
@@ -12,7 +12,7 @@ import GlobalFinance from './GlobalFinance';
 import GlobalIntelligence from './GlobalIntelligence';
 
 const API = (process.env.REACT_APP_MARKET_API || '/api/market').replace(/\/$/, '');
-const APP_VERSION = '2026.11.18.52';
+const APP_VERSION = '2026.11.18.53';
 
 const C = { bg:'#080d18', panel:'#111a2b', panel2:'#172338', border:'#293951', text:'#e8eef8', muted:'#91a1b8', blue:'#60a5fa', green:'#34d399', red:'#fb7185', yellow:'#fbbf24' };
 const fmt = (v,d=2) => Number.isFinite(Number(v)) ? Number(v).toLocaleString('zh-TW',{minimumFractionDigits:d,maximumFractionDigits:d}) : '—';
@@ -125,7 +125,7 @@ export default function App(){
   {futures?.nightSession?.last!=null?<><div style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:8}}><Metric label="夜盤最新成交" value={fmt(futures.nightSession.last,0)} color={futures.nightSession.changePct>=0?C.red:C.green} note={futures.nightSession.changePct!=null?signed(futures.nightSession.changePct):'漲跌幅未提供'}/><Metric label="夜盤高／低" value={fmt(futures.nightSession.high,0)+' / '+fmt(futures.nightSession.low,0)}/><Metric label="夜盤成交量（口）" value={futures.nightSession.volume!=null?fmt(futures.nightSession.volume,0):'—'}/><Metric label="相對日盤最新價" value={futures.daySession?.last!=null?fmt(futures.nightSession.last-futures.daySession.last,0):'—'} note={futures.daySession?.last!=null?'日盤 '+fmt(futures.daySession.last,0):'日盤價格未取得'}/></div><small style={{display:'block',color:C.muted,marginTop:9}}>合約 {futures.nightSession.symbol||futures.contractDate||'TXF1!'}｜夜盤資料時間 {futures.nightSession.timestamp?new Date(futures.nightSession.timestamp).toLocaleString('zh-TW'):'來源未提供'}｜來源 {futures.nightSessionSource||futures.source||'未提供'}{futures.nightSession.isTrial?'｜注意：目前為試撮資料，禁止當作正式成交價':''}</small></>:<div style={{padding:12,background:C.panel2,borderRadius:8,color:C.muted,fontSize:12,lineHeight:1.8}}>目前沒有可用的夜盤正式成交價。{futures?.nightSessionError||'可能尚未開盤、期權 API 權限未開通，或上游尚未回傳資料。'}<br/>不以日盤收盤價冒充夜盤即時價；免付費的 TAIFEX OpenAPI 僅提供日資料，不能冒充夜盤即時價；交易所網站可人工查詢盤後報表。<a href="https://www.taifex.com.tw/enl/eng3/futDailyMarketReport" target="_blank" rel="noreferrer" style={{color:C.blue}}>開啟 TAIFEX 官方期貨日報／盤後報表 ↗</a><br/>若要站內即時夜盤成交價，仍須具期權權限的行情商或期貨商授權 API。<small style={{display:'block',marginTop:6}}>目前期貨資料來源：{futures?.source||'尚未取得'}｜{futures?.frequency==='daily'?'目前僅有日資料':'夜盤尚未取得有效報價'}</small></div>}
  </Panel>
 <Panel title="📡 智能市場總覽｜選股雷達與排行"><div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10}}><div style={{background:C.panel2,padding:10,borderRadius:9}}><b>市場雷達・強勢股</b>{marketMovers.slice(0,5).map(x=><button key={x.symbol} onClick={()=>setSelected(x.symbol)} style={{display:"flex",justifyContent:"space-between",width:"100%",background:"transparent",color:C.text,border:0,padding:7}}>{x.symbol} {x.name}<b style={{color:C.red}}>{signed(x.changePct)}</b></button>)}</div><div style={{background:C.panel2,padding:10,borderRadius:9}}><b>市場雷達・弱勢股</b>{marketMovers.slice(-5).reverse().map(x=><button key={x.symbol} onClick={()=>setSelected(x.symbol)} style={{display:"flex",justifyContent:"space-between",width:"100%",background:"transparent",color:C.text,border:0,padding:7}}>{x.symbol} {x.name}<b style={{color:C.green}}>{signed(x.changePct)}</b></button>)}</div><div style={{background:C.panel2,padding:10,borderRadius:9}}><b>法人近五日買超</b>{institutionalLeaders.slice(0,5).map(x=><button key={x.symbol} onClick={()=>setSelected(x.symbol)} style={{display:"flex",justifyContent:"space-between",width:"100%",background:"transparent",color:C.text,border:0,padding:7}}>{x.symbol} {x.name}<b>{fmt(x.institutionalNet5d,0)}</b></button>)}</div><div style={{background:C.panel2,padding:10,borderRadius:9}}><b>成交量排行</b>{volumeLeaders.slice(0,5).map(x=><button key={x.symbol} onClick={()=>setSelected(x.symbol)} style={{display:"flex",justifyContent:"space-between",width:"100%",background:"transparent",color:C.text,border:0,padding:7}}>{x.symbol} {x.name}<b>{fmt(x.volume,0)}</b></button>)}</div></div><small style={{display:"block",color:C.muted,marginTop:8}}>法人及成交量榜單只在來源資料有效時顯示。個人銀行資產／庫存需本人券商授權；當沖專用排行需獨立成交額或週轉率資料，未取得前不以成交量冒充。</small></Panel>
- <SmartScreener stocks={rows} selected={selected} onSelect={setSelected}/>
+ <SignalRadar stocks={rows} selected={selected} onSelect={setSelected}/>
  <QuantResearch candles={history} symbol={selected} source={historyMeta.source} asOf={historyMeta.asOf}/>
  <Panel title="⭐ 每日 AI 看好股｜全市場量化初篩" right={<small style={{color:C.muted}}>依最新可用掃描結果排序；不是保證獲利訊號</small>}>
   <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10,fontSize:11}}><span style={{color:C.green}}>偏多買進 {signalCounts.buy}</span><span style={{color:C.yellow}}>中立觀望 {signalCounts.neutral}</span><span style={{color:C.red}}>偏空賣出／避險 {signalCounts.sell}</span><span style={{color:C.muted}}>資料不足 {signalCounts.insufficient}</span></div>
