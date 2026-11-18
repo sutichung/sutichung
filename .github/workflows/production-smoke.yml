@@ -15,7 +15,7 @@ permissions:
   id-token: write
 concurrency:
   group: taiwan-production-smoke
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   verify-live-data:
     runs-on: ubuntu-latest
@@ -25,7 +25,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Wait for the exact Render commit to become live
+      - id: wait-live
+        name: Wait for the exact Render commit to become live
         env:
           EXPECTED_COMMIT: ${{ github.sha }}
           MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
@@ -33,12 +34,14 @@ jobs:
           set -euo pipefail
           CURRENT_MAIN=$(git ls-remote "https://github.com/$GITHUB_REPOSITORY.git" refs/heads/main | cut -f1)
           if [ "$CURRENT_MAIN" != "$EXPECTED_COMMIT" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "Skipping stale commit $EXPECTED_COMMIT; main is now $CURRENT_MAIN"
             exit 0
           fi
           for attempt in $(seq 1 36); do
             CURRENT_MAIN=$(git ls-remote "https://github.com/$GITHUB_REPOSITORY.git" refs/heads/main | cut -f1)
             if [ "$CURRENT_MAIN" != "$EXPECTED_COMMIT" ]; then
+              echo "skip=true" >> "$GITHUB_OUTPUT"
               echo "Skipping stale commit $EXPECTED_COMMIT; main advanced to $CURRENT_MAIN"
               exit 0
             fi
@@ -46,6 +49,7 @@ jobs:
               ACTUAL_COMMIT=$(node -e "const h=require('/tmp/health.json');process.stdout.write(h.commit||'')")
               if [ "$ACTUAL_COMMIT" = "$EXPECTED_COMMIT" ]; then
                 node -e "const h=require('/tmp/health.json');if(!h.ok||h.branch!=='main')process.exit(1)"
+                echo "skip=false" >> "$GITHUB_OUTPUT"
                 echo "Render is serving expected commit $ACTUAL_COMMIT"
                 exit 0
               fi
@@ -56,22 +60,31 @@ jobs:
           echo "Render did not activate expected commit $EXPECTED_COMMIT within six minutes" >&2
           exit 1
       - name: Verify official Taiwan and multi-exchange crypto data from Render
+        if: steps.wait-live.outputs.skip != 'true'
         env:
           MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
+          EXPECTED_COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
           OIDC_TOKEN=$(curl --fail --silent --show-error --get --data-urlencode "audience=taiwan-stock-hunter-automation" "$ACTIONS_ID_TOKEN_REQUEST_URL" -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r '.value')
           test -n "$OIDC_TOKEN" && test "$OIDC_TOKEN" != "null" || { echo "Unable to obtain GitHub Actions OIDC token"; exit 1; }
           echo "::add-mask::$OIDC_TOKEN"
           AUTH_HEADER="Authorization: Bearer $OIDC_TOKEN"
-          curl --fail --silent --show-error --max-time 180 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/market" -o /tmp/market.json
-          curl --fail --silent --show-error --max-time 120 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/crypto/market" -o /tmp/crypto.json
-          curl --fail --silent --show-error --max-time 90 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/crypto/risk/BTCUSDT?type=perpetual&exchange=Binance" -o /tmp/crypto-risk.json
-          curl --fail --silent --show-error --max-time 45 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/providers" -o /tmp/providers.json
+          echo "Checking official Taiwan market source"
+          curl --fail --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 180 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/market" -o /tmp/market.json
+          echo "Checking multi-exchange crypto market data"
+          curl --fail --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 120 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/crypto/market" -o /tmp/crypto.json
+          echo "Checking live crypto risk radar and order-book snapshots"
+          curl --fail --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 90 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/crypto/risk/BTCUSDT?type=perpetual&exchange=Binance" -o /tmp/crypto-risk.json
+          echo "Checking provider and firewall diagnostics"
+          curl --fail --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 45 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/providers" -o /tmp/providers.json
+          echo "Checking that Render did not switch to a different commit during the smoke run"
+          curl --fail --silent --show-error --retry 2 --retry-all-errors --retry-delay 3 --max-time 15 "$MARKET_APP_URL/api/health" -o /tmp/health-after.json
           mkdir -p reports
           node - <<'NODE'
           const fs = require('node:fs');
           const health = JSON.parse(fs.readFileSync('/tmp/health.json', 'utf8'));
+          const healthAfter = JSON.parse(fs.readFileSync('/tmp/health-after.json', 'utf8'));
           const market = JSON.parse(fs.readFileSync('/tmp/market.json', 'utf8'));
           const crypto = JSON.parse(fs.readFileSync('/tmp/crypto.json', 'utf8'));
           const cryptoRisk = JSON.parse(fs.readFileSync('/tmp/crypto-risk.json', 'utf8'));
@@ -126,6 +139,7 @@ jobs:
           fs.writeFileSync('reports/production-smoke.json', JSON.stringify(report, null, 2) + '\n');
           console.log(JSON.stringify(report, null, 2));
           if (!report.application.ok) throw new Error('production_health_not_ok');
+          if (healthAfter.commit !== process.env.EXPECTED_COMMIT) throw new Error('deployment_changed_during_production_smoke');
           if (!report.taiwan.ok || report.taiwan.listedCount < 1) throw new Error('official_taiwan_market_source_unavailable');
           if (!report.crypto.ok) throw new Error('all_crypto_exchange_market_data_unavailable');
           if (report.cryptoRiskRadar.status !== 'ok' || report.cryptoRiskRadar.candleCount < 22) throw new Error('crypto_risk_radar_candles_unavailable');
