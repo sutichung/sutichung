@@ -53,6 +53,8 @@ async function fetchMicrostructure({ exchange = 'Binance', symbol, marketType = 
   if (!/^[A-Z0-9-]{2,30}$/.test(safeSymbol)) throw new Error('invalid_symbol');
   const levels = Math.min(50, Math.max(5, Number(depth) || 10));
   const base = safeSymbol.replace(/(USDT|USDC|USD|BTC|ETH)$/, '');
+  const quoteCurrency = base ? safeSymbol.slice(base.length) : '';
+  const whaleClassificationAvailable = ['USD','USDT','USDC','BUSD','FDUSD','TUSD'].includes(quoteCurrency);
   let book, trades, source;
   if (exchange === 'Binance') {
     const host = marketType === 'perpetual' ? 'https://fapi.binance.com' : 'https://api.binance.com';
@@ -88,8 +90,6 @@ async function fetchMicrostructure({ exchange = 'Binance', symbol, marketType = 
   } else {
     throw new Error('unsupported_exchange');
   }
-  const quoteCurrency = base ? safeSymbol.slice(base.length) : '';
-  const whaleClassificationAvailable = ['USD','USDT','USDC','BUSD','FDUSD','TUSD'].includes(quoteCurrency);
   const largeTrades = trades.filter(x => x.large === true);
   const buyValue = trades.filter(x => x.side === 'buy').reduce((s, x) => s + (x.quoteValue || 0), 0);
   const sellValue = trades.filter(x => x.side === 'sell').reduce((s, x) => s + (x.quoteValue || 0), 0);
