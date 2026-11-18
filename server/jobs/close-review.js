@@ -15,7 +15,7 @@ async function oidcToken(){
 async function get(endpoint){
  const token=await oidcToken();
  const response=await fetch(base+endpoint,{headers:{accept:'application/json',authorization:'Bearer '+token},signal:AbortSignal.timeout(120000)});
- if(!response.ok) throw new Error(endpoint+' returned HTTP '+response.status);
+ if(!response.ok){let detail='';try{const payload=await response.json();detail=String(payload.error||payload.message||'').slice(0,160);}catch(_){}throw new Error(endpoint+' returned HTTP '+response.status+(detail?' ('+detail+')':''));}
  return response.json();
 }
 (async()=>{
