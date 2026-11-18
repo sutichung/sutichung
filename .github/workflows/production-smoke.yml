@@ -66,6 +66,7 @@ jobs:
           AUTH_HEADER="Authorization: Bearer $OIDC_TOKEN"
           curl --fail --silent --show-error --max-time 180 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/market" -o /tmp/market.json
           curl --fail --silent --show-error --max-time 120 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/crypto/market" -o /tmp/crypto.json
+          curl --fail --silent --show-error --max-time 90 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/crypto/risk/BTCUSDT?type=perpetual&exchange=Binance" -o /tmp/crypto-risk.json
           curl --fail --silent --show-error --max-time 45 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/providers" -o /tmp/providers.json
           mkdir -p reports
           node - <<'NODE'
@@ -73,6 +74,7 @@ jobs:
           const health = JSON.parse(fs.readFileSync('/tmp/health.json', 'utf8'));
           const market = JSON.parse(fs.readFileSync('/tmp/market.json', 'utf8'));
           const crypto = JSON.parse(fs.readFileSync('/tmp/crypto.json', 'utf8'));
+          const cryptoRisk = JSON.parse(fs.readFileSync('/tmp/crypto-risk.json', 'utf8'));
           const providers = JSON.parse(fs.readFileSync('/tmp/providers.json', 'utf8'));
           const exchangeChecks = (providers.checks || []).filter(x => ['binance','bybit','okx','coinbase','kraken'].includes(x.id));
           const providerFailures = (providers.checks || []).filter(x => ['auth_error','permission_error','rate_limited','timeout','error','upstream_error','http_error','endpoint_error'].includes(x.status));
@@ -101,6 +103,15 @@ jobs:
               exchanges: crypto.exchanges || []
             },
             cryptoProviderChecks: exchangeChecks,
+            cryptoRiskRadar: {
+              status: cryptoRisk.status || 'unavailable',
+              microstructureStatus: cryptoRisk.microstructureStatus || 'unknown',
+              candleCount: Number(cryptoRisk.candleCount || 0),
+              coverage: cryptoRisk.coverage || {},
+              source: cryptoRisk.source || null,
+              asOf: cryptoRisk.asOf || null,
+              scenarios: (cryptoRisk.scenarios || []).map(x => ({ id: x.id, score: x.score, name: x.name }))
+            },
             providerFailures,
             usOfficialEntitlement: officialUs,
             warnings: [
@@ -114,6 +125,8 @@ jobs:
           if (!report.application.ok) throw new Error('production_health_not_ok');
           if (!report.taiwan.ok || report.taiwan.listedCount < 1) throw new Error('official_taiwan_market_source_unavailable');
           if (!report.crypto.ok) throw new Error('all_crypto_exchange_market_data_unavailable');
+          if (report.cryptoRiskRadar.status !== 'ok' || report.cryptoRiskRadar.candleCount < 22) throw new Error('crypto_risk_radar_candles_unavailable');
+          if (report.cryptoRiskRadar.microstructureStatus !== 'connected' || report.cryptoRiskRadar.coverage.orderBook !== true || report.cryptoRiskRadar.coverage.tradeTape !== true) throw new Error('crypto_risk_orderbook_or_trade_tape_unavailable');
           if (report.providerFailures.length) throw new Error('one_or_more_configured_providers_failed');
           NODE
       - uses: actions/upload-artifact@v4
