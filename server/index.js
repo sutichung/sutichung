@@ -554,7 +554,7 @@ async function route(req,res){
     const result=await safeLoad('crypto-news',300000,cryptoMarket.loadNews,e=>({data:[],source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
   }
-  if(u.pathname.startsWith('/api/research/strategies/')){
+  if(u.pathname.startsWith('/api/research/strategies/')||u.pathname.startsWith('/api/market/research/strategies/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase();
     const market=u.searchParams.get('market')||'tw-stock';
     if(!['tw-stock','us-stock','crypto'].includes(market))return json(res,400,{status:'invalid_market',error:'market must be tw-stock, us-stock or crypto'});
