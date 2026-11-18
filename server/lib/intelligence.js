@@ -30,7 +30,7 @@ function buildOverview({marketNews=[],cryptoNews=[],fx=null,firewall=null,regist
   const news=[...normalize(marketNews,'台灣證券交易所／FinMind','exchange_or_provider'),...normalize(cryptoNews,'加密貨幣新聞來源','media')];
   const grouped=new Map();
   for(const item of news){
-    const key=item.title.toLowerCase().normalize('NFKC').replace(/[^\\p{L}\\p{N}]+/gu,'').slice(0,120);
+    const key=item.title.toLowerCase().normalize('NFKC').replace(/[^\p{L}\p{N}]+/gu,'').slice(0,120);
     if(!key)continue;
     const current=grouped.get(key);
     if(!current){grouped.set(key,{...item,sources:[{name:item.source,url:item.url,publishedAt:item.publishedAt}],sourceCount:1});continue;}
