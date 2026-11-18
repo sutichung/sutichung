@@ -24,3 +24,26 @@ test('daily health report fails closed when application health is not ok', () =>
   assert.equal(report.application.ok, false);
   assert.equal(report.providerSummary.failing, 0);
 });
+
+test('daily health report preserves firewall counters and raises threshold warnings', () => {
+  const report = buildHealthReport(
+    { ok: true, mode: 'production' },
+    { checks: [], security: {
+      requests: 1000, blocked: 80, probes: 55, rateLimited: 12,
+      byRule: { api: 100, authentication: 12 },
+      lastEventAt: '2026-11-18T06:00:00.000Z',
+      scope: 'per-instance in-memory counters; resets on restart'
+    } }
+  );
+  assert.equal(report.security.status, 'observed');
+  assert.equal(report.security.blockedRatePct, 8);
+  assert.equal(report.security.rateLimited, 12);
+  assert.deepEqual(report.security.warnings, ['elevated_rate_limiting', 'elevated_probe_activity']);
+  assert.match(report.security.scope, /resets on restart/);
+});
+
+test('daily health report marks missing firewall telemetry instead of inventing zero activity', () => {
+  const report = buildHealthReport({ ok: true }, { checks: [] });
+  assert.equal(report.security.status, 'unavailable');
+  assert.equal(report.security.reason, 'firewall_telemetry_not_returned');
+});
