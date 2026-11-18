@@ -40,10 +40,15 @@ async function loadFx() {
         if (lines.length < 2) throw new Error('empty_csv');
         const header = lines[0].split(',');
         const values = lines[lines.length-1].split(',');
+        const currencyIndex = header.indexOf('CURRENCY');
+        const denominatorIndex = header.indexOf('CURRENCY_DENOM');
         const dateIndex = header.indexOf('TIME_PERIOD');
         const rateIndex = header.indexOf('OBS_VALUE');
+        const returnedCurrency = values[currencyIndex];
+        const denominator = values[denominatorIndex];
         const date = values[dateIndex];
         const rate = Number(values[rateIndex]);
+        if (returnedCurrency !== currency || denominator !== 'EUR') throw new Error('series_currency_mismatch');
         if (!date || !Number.isFinite(rate) || rate <= 0) throw new Error('invalid_observation');
         rows.push({currency,rate,asOf:date});
       } catch (error) { errors.push({currency,message:String(error.message||error)}); }
