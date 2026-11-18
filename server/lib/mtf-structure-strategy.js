@@ -12,7 +12,9 @@ function validate(rows,label){
   let last=-Infinity;
   for(let i=0;i<rows.length;i++){
     const b=rows[i],t=timeMs(b.time??b.openTime);
-    const vals=[b.open,b.high,b.low,b.close,b.volume].map(Number);
+    const raw=[b.open,b.high,b.low,b.close,b.volume];
+    if(raw.some(v=>v===null||v===undefined||v===''))throw new Error(label+' OHLCV 欄位缺漏，位置 '+i);
+    const vals=raw.map(Number);
     if(!Number.isFinite(t)||t<=last)throw new Error(label+' 時間必須有效、遞增且不可重複');
     const [o,h,l,c,v]=vals;
     if(!vals.every(Number.isFinite)||o<=0||h<=0||l<=0||c<=0||v<0||h<Math.max(o,c,l)||l>Math.min(o,c,h))throw new Error(label+' OHLCV 格式錯誤，位置 '+i);
@@ -21,6 +23,9 @@ function validate(rows,label){
 }
 function dailyTrendMap(daily, intradayTimes){
   const closes=daily.map(x=>Number(x.close)),out=Array(intradayTimes.length).fill(0);
+  if(closes.some(x=>!Number.isFinite(x)||x<=0))throw new Error('日線收盤價缺漏或無效');
+  const executionTimes=intradayTimes.map(timeMs);
+  if(executionTimes.some(x=>!Number.isFinite(x)||x<=0))throw new Error('4h K 線時間缺漏或無效');
   const trends=Array(daily.length).fill(0);
   let sum50=0,sum200=0;
   for(let i=0;i<daily.length;i++){
@@ -31,7 +36,7 @@ function dailyTrendMap(daily, intradayTimes){
   }
   let j=-1;
   for(let i=0;i<intradayTimes.length;i++){
-    const t=timeMs(intradayTimes[i]);
+    const t=executionTimes[i];
     while(j+1<daily.length&&timeMs(daily[j+1].time??daily[j+1].openTime)+DAY<=t)j++;
     out[i]=j>=199?trends[j]:0;
   }
@@ -45,7 +50,7 @@ function buildFeatures(bars){
     tr[i]=Math.max(b.high-b.low,prev?Math.abs(b.high-prev.close):0,prev?Math.abs(b.low-prev.close):0);
     if(i>=13)atr[i]=mean(tr.slice(i-13,i+1));
     if(i>=20){
-      const path=bars.slice(i-19,i+1).reduce((s,x,k,a)=>k?s+Math.abs(x.close-a[k-1].close):s,0);
+      const path=bars.slice(i-20,i+1).reduce((s,x,k,a)=>k?s+Math.abs(x.close-a[k-1].close):s,0);
       er[i]=path?Math.abs(b.close-bars[i-20].close)/path:0;
     }
     if(i>=13){
@@ -86,7 +91,8 @@ function score(f,htf){
   if(f.bullDist!==null&&f.bullDist>-1.8&&f.bullDist<0.4){s+=1.6;reasons.push('接近多頭 OB');}
   if(f.bullDist!==null&&f.bullDist<-3)s-=1;
   if(f.volPct!==null&&f.volPct>0.88){s-=1.7;reasons.push('極端波動防禦');}
-  if(f.volZ!==null&&f.volZ>1.2){s+=0.7;reasons.push('量能確認');}
+  if(f.volZ!==null&&f.volZ>1.2&&htf===1&&f.trend===1){s+=0.7;reasons.push('多頭趨勢量能確認');}
+  else if(f.volZ!==null&&f.volZ>1.2&&(htf===-1||f.trend===-1)){s-=0.7;reasons.push('空頭趨勢量能擴大');}
   if(f.trend===1){s+=0.8;reasons.push('4h 趨勢向上');}
   if(f.structure==='bullish_bos'){s+=0.8;reasons.push('多頭結構突破');}
   return {value:s,reasons};
