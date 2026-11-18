@@ -10,6 +10,7 @@ import CryptoMarket from './CryptoMarket';
 import AntColony from './AntColony';
 import GlobalFinance from './GlobalFinance';
 import GlobalIntelligence from './GlobalIntelligence';
+import SystemControlCenter from './SystemControlCenter';
 
 const API = (process.env.REACT_APP_MARKET_API || '/api/market').replace(/\/$/, '');
 const APP_VERSION = '2026.11.18.53';
@@ -102,6 +103,7 @@ export default function App(){
   <a href="#global-intelligence" style={{flex:'1 0 160px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#332334',border:'1px solid #75465c',color:'#fecdd3',fontWeight:800,fontSize:13}}>🛡️ 全球情報攻防中心</a>
  </nav>
  <AntColony/>
+ <SystemControlCenter/>
  <GlobalFinance/>
  <GlobalIntelligence/>
  <USMarket/>
