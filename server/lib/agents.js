@@ -191,7 +191,7 @@ async function buildAiCommittee(symbol, options) {
     deepseek: '籌碼與風險報酬分析師，重點研判外資投信自營商、融資融券、集保大戶散戶比例、估值 PER/PBR、波動度與風險界線。',
     openai: '獨立總體與交叉驗證分析師，檢查資料時效、指標是否互相矛盾、估值與風險報酬；提出反方論點，不可沿用其他 Agent 結論。'
   };
-  const providers = ['gemini', 'grok', 'deepseek', 'openai'];
+  const providers = ['gemini', 'grok', 'deepseek'];
   const agents = await Promise.all(providers.map(async provider => {
     const prompt = '股票 ' + facts.symbol + ' ' + facts.name + '。你的專長：' + roles[provider] + '\n請只使用以下資料，資料時間不一致時要指出，禁止推測缺漏值。請給出獨立多空評分與可驗證邏輯。\n資料：' + JSON.stringify(facts);
     try { return await runAgent(provider, prompt, options.env || process.env); }
