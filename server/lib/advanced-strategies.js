@@ -85,7 +85,10 @@ function runPeriod(bars,features,id,start,end,costs){
   if(qty>0){
     const last=bars[end-1],fill=last.close*(1-slip),proceeds=qty*fill*(1-fee-tax),pnl=proceeds-entryValue;
     cash+=proceeds;trades.push({pnl,returnPct:entryValue?pnl/entryValue*100:0,holdBars:end-1-entryTime,periodEndClose:true});
-    qty=0;curve.push(cash);
+    qty=0;
+    const priorEquity=curve.length?curve[curve.length-1]:100000;
+    periodReturns.push(priorEquity?cash/priorEquity-1:0);
+    peak=Math.max(peak,cash);maxDD=Math.min(maxDD,cash/peak-1);curve.push(cash);
   }
   const finalEquity=cash,netReturnPct=(finalEquity/100000-1)*100;
   const wins=trades.filter(t=>t.pnl>0),losses=trades.filter(t=>t.pnl<0);
