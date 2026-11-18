@@ -2,7 +2,7 @@
 
 // Evidence-first intelligence layer. It never upgrades a rumor into a fact.
 const TOPICS = [
-  {id:'markets',label:'市場與資金',keywords:['stock','market','股市','成交','資金','法人','funding','volume','etf','傊券','債券']},
+  {id:'markets',label:'市場與資金',keywords:['stock','market','股市','成交','資金','法人','funding','volume','etf','債券']},
   {id:'macro',label:'總體經濟與央行',keywords:['inflation','rate','fed','central bank','cpi','gdp','利率','通膨','央行','經濟']},
   {id:'politics',label:'政治與地緣風險',keywords:['election','war','sanction','tariff','policy','制裁','戰爭','選舉','關稅','政策']},
   {id:'sentiment',label:'市場心理',keywords:['fear','greed','sentiment','panic','情緒','恐慌','貪婪','散戶']},
@@ -17,9 +17,10 @@ function normalize(items,source,kind) {
   return (Array.isArray(items)?items:[]).filter(x=>x&&typeof x==='object').map(x=>({
     title:String(x.title||x.name||'未命名資料').slice(0,300),
     summary:String(x.summary||x.description||'').slice(0,1200),
-    url:String(x.url||x.link||''),
+    url:(()=>{const raw=String(x.url||x.link||'');try{const u=new URL(raw);return ['http:','https:'].includes(u.protocol)?u.toString():'';}catch(_){return '';}})(),
     source:String(x.source||source),
     publishedAt:x.publishedAt||x.date||null,
+    capturedAt:new Date().toISOString(),
     topic:classify({...x,source:x.source||source}),
     evidenceType:kind,
     verification:'single_source_unverified'
@@ -27,8 +28,21 @@ function normalize(items,source,kind) {
 }
 function buildOverview({marketNews=[],cryptoNews=[],fx=null,firewall=null,registry=null}={}) {
   const news=[...normalize(marketNews,'台灣證券交易所／FinMind','exchange_or_provider'),...normalize(cryptoNews,'加密貨幣新聞來源','media')];
-  const seen=new Set();
-  const deduped=news.filter(x=>{const k=x.title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu,'').slice(0,100);if(!k||seen.has(k))return false;seen.add(k);return true;}).sort((a,b)=>String(b.publishedAt||'').localeCompare(String(a.publishedAt||''))).slice(0,100);
+  const grouped=new Map();
+  for(const item of news){
+    const key=item.title.toLowerCase().normalize('NFKC').replace(/[^\\p{L}\\p{N}]+/gu,'').slice(0,120);
+    if(!key)continue;
+    const current=grouped.get(key);
+    if(!current){grouped.set(key,{...item,sources:[{name:item.source,url:item.url,publishedAt:item.publishedAt}],sourceCount:1});continue;}
+    if(!current.sources.some(s=>s.name===item.source)){
+      current.sources.push({name:item.source,url:item.url,publishedAt:item.publishedAt});
+      current.sourceCount=current.sources.length;
+    }
+    if(!current.url&&item.url)current.url=item.url;
+    if(!current.summary&&item.summary)current.summary=item.summary;
+    if(!current.publishedAt&&item.publishedAt)current.publishedAt=item.publishedAt;
+  }
+  const deduped=[...grouped.values()].map(x=>({...x,corroborationStatus:x.sourceCount>1?'multiple_sources_same_headline_unverified':'single_source_unverified'})).sort((a,b)=>(Date.parse(b.publishedAt||'')||0)-(Date.parse(a.publishedAt||'')||0)).slice(0,100);
   const topicCounts=Object.fromEntries(TOPICS.map(t=>[t.id,deduped.filter(x=>x.topic===t.id).length]));
   const sources=[
     {id:'tw_market_news',label:'台灣交易所／FinMind 新聞',status:marketNews.length?'connected':'empty',items:marketNews.length,coverage:'台灣市場公告或供應商新聞；非全網'},
@@ -43,7 +57,7 @@ function buildOverview({marketNews=[],cryptoNews=[],fx=null,firewall=null,regist
   return {
     generatedAt:new Date().toISOString(),
     policy:'Evidence first: separate facts, commentary, inference and unknowns. Single-source items are not verified facts.',
-    summary:{items:deduped.length,topics:topicCounts,verifiedItems:verifiedCount,unverifiedItems:deduped.length},
+    summary:{items:deduped.length,topics:topicCounts,verifiedItems:verifiedCount,corroboratedHeadlines:deduped.filter(x=>x.sourceCount>1).length,unverifiedItems:deduped.length},
     topics:TOPICS.map(t=>({id:t.id,label:t.label,count:topicCounts[t.id]})),
     items:deduped,
     sources,
