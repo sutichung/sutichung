@@ -12,6 +12,7 @@ const muted = { color:'#91a1b8' };
 export default function GlobalFinance() {
   const [registry,setRegistry] = useState(null);
   const [fx,setFx] = useState(null);
+  const [macro,setMacro] = useState(null);
   const [region,setRegion] = useState('全部');
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState('');
@@ -22,16 +23,17 @@ export default function GlobalFinance() {
       // Keep this panel consistent with GlobalIntelligence; otherwise both finance calls return 401.
       const token = localStorage.getItem('ts_access_token') || '';
       const headers = { Accept:'application/json', ...(token ? { Authorization:'Bearer '+token } : {}) };
-      const [r,f] = await Promise.all([
+      const [r,f,m] = await Promise.all([
         fetch('/api/finance/registry',{headers}),
-        fetch('/api/finance/fx',{headers})
+        fetch('/api/finance/fx',{headers}),
+        fetch('/api/finance/macro',{headers})
       ]);
       if(r.status===401 || f.status===401) throw new Error('登入狀態已失效或尚未登入，請重新登入後再同步金融資料。');
       if(!r.ok) throw new Error('全球金融機構目錄讀取失敗：HTTP '+r.status);
       if(!f.ok) throw new Error('ECB 匯率資料讀取失敗：HTTP '+f.status);
-      const [rd,fd] = await Promise.all([r.json(),f.json()]);
-      setRegistry(rd); setFx(fd);
-      if(fd.error) setError(fd.error);
+      const [rd,fd,md] = await Promise.all([r.json(),f.json(),m.json()]);
+      setRegistry(rd); setFx(fd); setMacro(md);
+      if(fd.error || md.error) setError([fd.error,md.error].filter(Boolean).join('；'));
     } catch(e) { setError(e.message || '全球金融資料暫時無法讀取'); }
     finally { setLoading(false); }
   },[]);
@@ -78,6 +80,18 @@ export default function GlobalFinance() {
           </div>:<div style={{fontSize:12,...muted}}>尚未取得官方匯率資料；不顯示估算值。</div>}
           <small style={{display:'block',...muted,marginTop:9}}>來源：{fx?.source||'European Central Bank Data Portal'}<br/>抓取時間：{fx?.fetchedAt?new Date(fx.fetchedAt).toLocaleString('zh-TW'):'—'}｜基準貨幣 EUR；每日參考匯率，非逐筆即時報價</small>
           {fx?.errors?.length>0&&<small style={{display:'block',color:'#fbbf24',marginTop:5}}>部分幣別暫缺：{fx.errors.map(x=>x.currency).join('、')}</small>}
+        </div>
+        <div style={panel}>
+          <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center',marginBottom:8}}><b>📈 全球總體經濟資料</b><small style={muted}>{macro?.status==='connected'?'來源已連線':'來源待修復'}</small></div>
+          <div style={{fontSize:11,...muted,marginBottom:8}}>World Bank Open Data · GDP、通膨、失業率 · 年度／季度資料，非即時行情</div>
+          {macro?.data?.length ? <div style={{display:'grid',gap:7}}>
+            {macro.data.map((v,i)=><div key={v.country+'-'+v.indicator} style={{display:'grid',gridTemplateColumns:'minmax(70px,1fr) minmax(90px,1fr) auto',gap:6,alignItems:'center',fontSize:12,paddingBottom:5,borderBottom:'1px solid #293951'}}>
+              <b>{v.countryName}</b><span>{v.label}</span><strong style={{fontVariantNumeric:'tabular-nums'}}>{Number(v.value).toFixed(2)}{v.unit}</strong><small style={{gridColumn:'1/-1',...muted}}>資料年度：{v.year} · {v.source}</small>
+            </div>)}
+          </div>:<div style={{fontSize:12,color:'#fbbf24'}}>目前沒有取得總體經濟觀測值。系統會顯示來源錯誤，不以空白或估算值假裝有資料。</div>}
+          <small style={{display:'block',...muted,marginTop:8}}>已取得 {macro?.summary?.received??0}／{macro?.summary?.requested??0} 筆；抓取時間：{macro?.fetchedAt?new Date(macro.fetchedAt).toLocaleString('zh-TW'):'—'}</small>
+          {macro?.error&&<small style={{display:'block',color:'#fbbf24',marginTop:5}}>來源錯誤：{macro.error}</small>}
+          {macro?.summary?.failed>0&&<small style={{display:'block',color:'#fbbf24',marginTop:5}}>部分資料源未回應：{macro.summary.failed} 筆，其他成功資料仍保留。</small>}
         </div>
         <div style={panel}>
           <b>🔐 銀行帳戶接入閘道</b>
