@@ -97,7 +97,7 @@ jobs:
           const optionalProviderIds = new Set(['finmind','fugle','binance','bybit']);
           const optionalProviderRestrictions = providerFailures.filter(x => optionalProviderIds.has(x.id)).map(x => ({ id:x.id, label:x.label, status:x.status, httpStatus:x.httpStatus, reason:x.httpStatus===451?'region_restricted':x.id==='fugle'?'api_entitlement_or_key_permission':'provider_access_restricted' }));
           const criticalProviderFailures = providerFailures.filter(x => !optionalProviderIds.has(x.id));
-          const ciDependencyAudit = { status:'passed', source:'blocking Backend checks CI audit', runId:Number(process.env.CI_RUN_ID), runtimeScannerStatus:vulnerabilities.status, runtimeScannedPackageCount:Number(vulnerabilities.scannedPackageCount||0), note:Number(vulnerabilities.scannedPackageCount||0)===0?'Production image intentionally excludes node_modules; the triggering CI run passed the blocking npm audit --omit=dev gate.':'Runtime dependency scan also returned package coverage.' };
+          const ciDependencyAudit = { status:'completed', blocking:false, source:'Backend checks npm audit --omit=dev', runId:Number(process.env.CI_RUN_ID), runtimeScannerStatus:vulnerabilities.status, runtimeScannedPackageCount:Number(vulnerabilities.scannedPackageCount||0), note:Number(vulnerabilities.scannedPackageCount||0)===0?'Production image intentionally excludes node_modules; the triggering CI run passed the blocking npm audit --omit=dev gate.':'Runtime dependency scan also returned package coverage.' };
           const listedCount = Number(market.listedCount || 0);
           const quoteCount = Number(market.quoteCount || 0);
           const taiwanConnected = market.ok === true && listedCount > 0;
@@ -148,15 +148,20 @@ jobs:
             optionalProviderRestrictions,
             criticalProviderFailures,
             status: criticalProviderFailures.length ? 'failed' : optionalProviderRestrictions.length ? 'degraded' : 'healthy',
-            dependencyVulnerabilities: { status: vulnerabilities.status, scannedPackageCount: vulnerabilities.scannedPackageCount, vulnerabilityCount: vulnerabilities.vulnerabilityCount, severityCounts: vulnerabilities.severityCounts, productionVulnerabilityCount: vulnerabilities.productionVulnerabilityCount },
+            dependencyVulnerabilities: {
+              status: vulnerabilities.status,
+              scannedPackageCount: Number(vulnerabilities.scannedPackageCount || 0),
+              totalPackageCount: Number(vulnerabilities.totalPackageCount || 0),
+              failedBatchCount: Number(vulnerabilities.failedBatchCount || 0),
+              vulnerabilityCount: Number(vulnerabilities.vulnerabilityCount || 0),
+              severityCounts: vulnerabilities.severityCounts || {},
+              productionVulnerabilityCount: Number(vulnerabilities.productionVulnerabilityCount || 0),
+              error: vulnerabilities.error || null
+            },
             ciDependencyAudit,
             usOfficialEntitlement: officialUs,
-            warnings: [
-              ...(officialUs?.status === 'not_configured' ? ['us_official_equities_feed_not_configured'] : []),
-              ...(quoteCount === 0 ? ['taiwan_market_has_no_live_quotes_at_check_time'] : []),
-              ...((crypto.exchanges || []).some(x => x.status !== 'connected') ? ['some_crypto_exchanges_unavailable'] : []),
-              ...optionalProviderRestrictions.map(x => `optional_provider_${x.id}_${x.reason}`)
-            ]
+            warnings,
+            overallStatus: warnings.length ? 'degraded' : 'healthy'
           };
           fs.writeFileSync('reports/production-smoke.json', JSON.stringify(report, null, 2) + '\n');
           console.log(JSON.stringify(report, null, 2));
