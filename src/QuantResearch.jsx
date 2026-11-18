@@ -58,7 +58,7 @@ export default function QuantResearch({symbol='2330',source='',asOf='',market='t
  const metrics=(x)=>[['交易筆數',x.trades+' 筆'],['勝率',fmt(x.winRatePct,'%')],['淨報酬',fmt(x.netReturnPct,'%')],['最大回撤',fmt(x.maxDrawdownPct,'%')],['Sharpe',fmt(x.sharpe)],['Sortino',fmt(x.sortino)],['Profit Factor',fmt(x.profitFactor)],['單筆期望值',fmt(x.expectancyPct,'%')]];
  return <section style={{...card,marginBottom:12}}>
   <div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',alignItems:'center'}}><b>🧪 策略實驗室｜多策略樣本外驗證</b><small style={{color:'#91a1b8'}}>標的 {targetSymbol}｜{marketType==='tw-stock'?'台股':marketType==='us-stock'?'美股':'加密貨幣'}</small></div>
-  <p style={{fontSize:11,color:'#91a1b8',lineHeight:1.7,margin:'8px 0'}}>借鏡 Pine Script 專案的自動化策略驗證流程，使用 EMA 趨勢、MACD 動能、布林均值回歸、SMA 交叉、唐奇安突破、布林 RSI、SuperTrend 與多維度市場結構共識等透明規則。60% 訓練區間與 40% 樣本外區間分開測試，並將樣本外區間切成三段 Walk-forward；另測半成本與雙倍成本情境。市場結構策略只在右側確認 K 線完成後辨識 Swing；訊號收盤確認、下一根 K 線開盤成交，任何通過都只是研究候選。</p>
+  <p style={{fontSize:11,color:'#91a1b8',lineHeight:1.7,margin:'8px 0'}}>借鏡 Pine Script 專案的自動化策略驗證流程，使用 EMA 趨勢、MACD 動能、布林均值回歸、SMA 交叉、唐奇安突破、布林 RSI、SuperTrend、多維度市場結構共識，以及加密貨幣 4h＋1d 多時間框架策略等透明規則。60% 訓練區間與 40% 樣本外區間分開測試，並將樣本外區間切成三段 Walk-forward；另測半成本與雙倍成本情境。市場結構策略只在右側確認 K 線完成後辨識 Swing；訊號收盤確認、下一根 K 線開盤成交，任何通過都只是研究候選。</p>
   <div style={{...metric,margin:'10px 0',padding:11}}>
    <div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',alignItems:'center'}}><b>📈 真實訊號績效追蹤</b><small style={{color:'#91a1b8'}}>Supabase 私有歷史紀錄｜每 5 分鐘更新</small></div>
    <div style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:7,marginTop:9}}>
@@ -72,7 +72,7 @@ export default function QuantResearch({symbol='2330',source='',asOf='',market='t
    <div style={{display:'flex',gap:8,flexWrap:'wrap',fontSize:11,color:'#91a1b8'}}><span>訓練 {result.split?.trainBars??'—'} 根</span><span>樣本外 {result.split?.outOfSampleBars??'—'} 根</span><span>切分 {result.split?.ratio||'—'}</span><span>策略 {result.strategyCount??result.strategies.length} 種</span><span>成本已納入</span></div>
    {result.strategies.map(strategy=><div key={strategy.id} style={{background:'#172338',border:'1px solid #293951',borderRadius:9,padding:11}}>
     <div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',alignItems:'center'}}><b>{strategy.name}</b><span style={{fontSize:11,color:strategy.validation?.passed?'#34d399':'#fbbf24'}}>{strategy.validation?.passed?'初步樣本外通過・非投資建議':'尚未通過驗證'}</span></div>
-    <div style={{fontSize:11,color:'#91a1b8',margin:'5px 0 9px'}}>{strategy.description}｜進場：{strategy.entry}｜出場：{strategy.exit}</div>
+    <div style={{fontSize:11,color:'#91a1b8',margin:'5px 0 9px'}}>{strategy.description}{strategy.timeframes?`｜週期：${strategy.timeframes.execution} 執行／${strategy.timeframes.trendFilter} 趨勢過濾`:''}｜進場：{strategy.entry||'依策略規則'}｜出場：{strategy.exit||'依策略規則'}</div>
     <div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:8}}>
      {strategy.periods.map(period=><div key={period.id} style={metric}><b style={{fontSize:12}}>{period.label}</b><div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:7,marginTop:8}}>{metrics(period.metrics).map(([k,v])=><div key={k}><small style={label}>{k}</small><div style={{...value,fontSize:15,color:k==='淨報酬'?(Number(period.metrics.netReturnPct)>0?'#34d399':'#fb7185'):'#e8eef8'}}>{v}</div></div>)}</div><small style={{display:'block',marginTop:7,color:'#91a1b8'}}>市場狀態：{period.marketRegime?.regime||'—'}｜區間報酬 {fmt(period.marketRegime?.periodReturnPct,'%')}</small></div>)}
     </div>
