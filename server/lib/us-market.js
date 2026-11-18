@@ -99,4 +99,41 @@ async function loadMarket(){
   return {data,indices,scan:scanned,news,source:'Yahoo Finance Chart 非官方端點；美股涵蓋清單 30 檔大型股／ETF，不代表全市場',timestamp:new Date().toISOString(),market:'US',coverage:{stocks:scanned.length,universe:STOCKS.length,indices:indices.length},disclaimer:'非官方免費端點，可能延遲、限流或中斷；不得作為券商即時報價或下單依據。'};
 }
 
-module.exports={STOCKS,INDICES,getChart,loadMarket,searchSymbols,getNews};
+
+let universeCache={at:0,rows:[],source:null,error:null};
+const UNIVERSE_TTL=24*60*60*1000;
+async function loadUniverse(force=false){
+  if(!force&&universeCache.rows.length&&Date.now()-universeCache.at<UNIVERSE_TTL)return universeCache;
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
+  try{
+    const response=await fetch('https://www.sec.gov/files/company_tickers_exchange.json',{signal:controller.signal,headers:{'User-Agent':'TaiwanStockHunter/1.0 (https://taiwan-stock-hunter-o3tt.onrender.com)','Accept':'application/json'}});
+    if(!response.ok)throw new Error('SEC ticker reference HTTP '+response.status);
+    const payload=await response.json();
+    const fields=payload.fields||[],rows=Array.isArray(payload.data)?payload.data:[];
+    const ix={ticker:fields.indexOf('ticker'),name:fields.indexOf('name'),exchange:fields.indexOf('exchange'),cik:fields.indexOf('cik')};
+    if(ix.ticker<0||ix.name<0||ix.exchange<0||!rows.length)throw new Error('SEC ticker reference schema changed');
+    const seen=new Set(),normalized=[];
+    for(const row of rows){
+      const symbol=String(row[ix.ticker]||'').trim().toUpperCase(),name=String(row[ix.name]||'').trim(),exchange=String(row[ix.exchange]||'').trim();
+      if(!symbol||!name||!exchange||seen.has(symbol)||!(/NASDAQ|NYSE|NYSE AMERICAN|NYSE ARCA|CBOE|BATS|IEX|NYSE NATIONAL/i.test(exchange)))continue;
+      if(!/^[A-Z0-9.-]{1,12}$/.test(symbol))continue;
+      seen.add(symbol);normalized.push({symbol,name,exchange,cik:String(row[ix.cik]||''),type:'EQUITY',source:'SEC company_tickers_exchange.json'});
+    }
+    if(!normalized.length)throw new Error('SEC ticker reference returned no eligible symbols');
+    normalized.sort((a,b)=>a.symbol.localeCompare(b.symbol));
+    universeCache={at:Date.now(),rows:normalized,source:'SEC 官方公司代碼與交易所參考資料',error:null};
+    return universeCache;
+  }catch(error){
+    if(universeCache.rows.length)return {...universeCache,error:'SEC reference refresh failed; serving cached universe: '+error.message};
+    universeCache={...universeCache,error:error.message};throw error;
+  }finally{clearTimeout(timer);}
+}
+async function getUniversePage({query='',exchange='',page=1,limit=100}={}){
+  const cache=await loadUniverse();
+  const q=String(query||'').trim().toLowerCase().slice(0,80),ex=String(exchange||'').trim().toLowerCase();
+  const filtered=cache.rows.filter(x=>(!q||(x.symbol+' '+x.name+' '+x.exchange).toLowerCase().includes(q))&&(!ex||x.exchange.toLowerCase().includes(ex)));
+  const safeLimit=Math.max(10,Math.min(100,Number(limit)||100)),safePage=Math.max(1,Number(page)||1),start=(safePage-1)*safeLimit;
+  return {data:filtered.slice(start,start+safeLimit),page:safePage,limit:safeLimit,total:filtered.length,totalUniverse:cache.rows.length,pages:Math.ceil(filtered.length/safeLimit),source:cache.source,asOf:new Date(cache.at).toISOString(),stale:!!cache.error,error:cache.error||null,coverage:{exchanges:[...new Set(cache.rows.map(x=>x.exchange))].sort()}};
+}
+
+module.exports={STOCKS,INDICES,getChart,loadMarket,searchSymbols,getNews,loadUniverse,getUniversePage};
