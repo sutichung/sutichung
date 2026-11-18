@@ -122,14 +122,14 @@ async function diagnoseProviders(env = process.env) {
   } else checks.push(notConfigured('supabase', 'Supabase Auth API', '缺少 SUPABASE_URL 或 SUPABASE_ANON_KEY'));
   const ai = [
     ['openrouter', 'OpenRouter 模型目錄 API', env.OPENROUTER_API_KEY, 'https://openrouter.ai/api/v1/models'],
-    ['gemini', 'Gemini 模型目錄 API', env.GEMINI_API_KEY, 'https://generativelanguage.googleapis.com/v1beta/models?key=' + encodeURIComponent(env.GEMINI_API_KEY || '')],
+    ['gemini', 'Gemini 模型目錄 API', env.GEMINI_API_KEY, 'https://generativelanguage.googleapis.com/v1beta/models'],
     ['groq', 'Groq 模型目錄 API', env.GROQ_API_KEY, 'https://api.groq.com/openai/v1/models']
   ];
   for (const [id, label, key, endpoint] of ai) {
     if (!key) { checks.push(notConfigured(id, label, 'Render 尚未設定對應 API Key')); continue; }
     checks.push(probe(id, label, async () => {
       const headers = { accept: 'application/json' };
-      if (id !== 'gemini') headers.Authorization = 'Bearer ' + key;
+      if (id === 'gemini') headers['x-goog-api-key'] = key; else headers.Authorization = 'Bearer ' + key;
       const { response, body } = await request(endpoint, { headers });
       if (!response.ok) throw new Error('upstream_http_' + response.status);
       const payload = JSON.parse(body);
