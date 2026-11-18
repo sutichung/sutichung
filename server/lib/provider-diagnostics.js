@@ -91,6 +91,14 @@ async function diagnoseProviders(env = process.env) {
     if (lines.length < 2 || !lines[0].includes('OBS_VALUE')) throw new Error('ECB 回應格式錯誤或沒有觀測值');
     return { httpStatus: response.status, dataCount: lines.length - 1, message: '每日參考匯率端點正常；不是即時外匯報價' };
   }));
+  checks.push(probe('bank-of-canada', '加拿大央行 Valet CAD/USD 每日平均匯率', async () => {
+    const { response, body } = await request('https://www.bankofcanada.ca/valet/observations/FXCADUSD/json?recent=1', { headers: { accept: 'application/json' } });
+    if (!response.ok) throw new Error('upstream_http_' + response.status);
+    const payload = JSON.parse(body);
+    const observation = (payload.observations || []).find(x => x && x.FXCADUSD && x.FXCADUSD.v !== null && x.FXCADUSD.v !== undefined);
+    if (!observation || !observation.d || !(Number(observation.FXCADUSD.v) > 0)) throw new Error('Bank of Canada 回應缺少有效 CAD/USD 觀測值');
+    return { httpStatus: response.status, dataCount: 1, sourceTime: observation.d, message: '每日平均指示性匯率端點正常；非即時報價或收盤價' };
+  }));
   if (env.FINMIND_TOKEN) {
     checks.push(probe('finmind', 'FinMind 資料 API', async () => {
       const url = new URL(env.FINMIND_BASE || 'https://api.finmindtrade.com/api/v4/data');
