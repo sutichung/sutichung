@@ -22,7 +22,6 @@ function normalizeBook(exchange, bids, asks, timestamp, depth = 10) {
   const bid = bidRows[0][0], ask = askRows[0][0];
   if (!(ask > bid)) throw new Error('orderbook_crossed_or_invalid');
   const mid = (bid + ask) / 2;
-  if (ask < bid) throw new Error('orderbook_crossed');
   const bidVolume = bidRows.reduce((sum, x) => sum + x[1], 0);
   const askVolume = askRows.reduce((sum, x) => sum + x[1], 0);
   const total = bidVolume + askVolume;
@@ -30,7 +29,8 @@ function normalizeBook(exchange, bids, asks, timestamp, depth = 10) {
   const weightedBid = weighted(bidRows), weightedAsk = weighted(askRows), weightedTotal = weightedBid + weightedAsk;
   const bestBidSize = bidRows[0][1], bestAskSize = askRows[0][1];
   const microPrice = (ask * bestBidSize + bid * bestAskSize) / (bestBidSize + bestAskSize);
-  const depthBands = [5, 10, 20].map(levels => {
+  const availableLevels = Math.min(bidRows.length, askRows.length);
+  const depthBands = [5, 10, 20].filter(levels => levels <= availableLevels).map(levels => {
     const b = bidRows.slice(0, levels).reduce((sum, x) => sum + x[1], 0);
     const a = askRows.slice(0, levels).reduce((sum, x) => sum + x[1], 0);
     return { levels, bid: b, ask: a, imbalance: b + a > 0 ? (b - a) / (b + a) : null };
