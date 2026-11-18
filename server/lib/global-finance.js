@@ -9,7 +9,7 @@ const INSTITUTIONS = [
   {code:'UK-BOE',name:'Bank of England',country:'英國',region:'歐洲',flag:'🇬🇧',category:'中央銀行／統計資料',capabilities:'政策利率、金融統計',url:'https://www.bankofengland.co.uk/boeapps/database',status:'directory_only'},
   {code:'US-FED',name:'Federal Reserve',country:'美國',region:'北美洲',flag:'🇺🇸',category:'中央銀行／官方資料',capabilities:'利率、金融與總體經濟統計',url:'https://www.federalreserve.gov/data.htm',status:'directory_only'},
   {code:'US-FRED',name:'FRED Economic Data',country:'美國',region:'北美洲',flag:'🇺🇸',category:'官方授權經濟資料庫',capabilities:'經濟時間序列（API 需申請 key）',url:'https://fred.stlouisfed.org',status:'contract_required'},
-  {code:'CA-BOC',name:'Bank of Canada',country:'加拿大',region:'北美洲',flag:'🇨🇦',category:'中央銀行／資料 API',capabilities:'匯率、政策利率、統計',url:'https://www.bankofcanada.ca/rates/',status:'directory_only'},
+  {code:'CA-BOC',name:'Bank of Canada',country:'加拿大',region:'北美洲',flag:'🇨🇦',category:'中央銀行／資料 API',capabilities:'公開每日匯率與金融統計（Valet API）',url:'https://www.bankofcanada.ca/valet/docs',status:'public_data_only'},
   {code:'BR-BCB',name:'Banco Central do Brasil',country:'巴西',region:'南美洲',flag:'🇧🇷',category:'中央銀行／官方資料',capabilities:'匯率、利率、金融統計',url:'https://www.bcb.gov.br/en',status:'directory_only'},
   {code:'AE-CBUAE',name:'Central Bank of the UAE',country:'阿聯酋',region:'中東',flag:'🇦🇪',category:'中央銀行／官方資料',capabilities:'銀行監理、貨幣與金融統計',url:'https://www.centralbank.ae',status:'directory_only'},
   {code:'IN-RBI',name:'Reserve Bank of India',country:'印度',region:'亞洲',flag:'🇮🇳',category:'中央銀行／官方資料',capabilities:'匯率、利率、銀行統計',url:'https://www.rbi.org.in',status:'directory_only'},
@@ -49,9 +49,24 @@ async function loadFx() {
       } catch (error) { errors.push({currency,message:String(error.message||error)}); }
     }
   }
-  await Promise.all(Array.from({length:4},worker));
+  const [,bankOfCanada]=await Promise.all([Promise.all(Array.from({length:4},worker)),loadBankOfCanadaFx()]);
   rows.sort((a,b)=>currencies.indexOf(a.currency)-currencies.indexOf(b.currency));
-  return {rates:rows,errors,base:'EUR',source:'European Central Bank Data Portal · EXR daily reference rates',fetchedAt:new Date().toISOString(),asOf:rows.map(x=>x.asOf).sort().at(-1)||null};
+  return {rates:rows,errors,crossChecks:[bankOfCanada],base:'EUR',source:'European Central Bank Data Portal · EXR daily reference rates',fetchedAt:new Date().toISOString(),asOf:rows.map(x=>x.asOf).sort().at(-1)||null};
+}
+
+async function loadBankOfCanadaFx() {
+  const url='https://www.bankofcanada.ca/valet/observations/FXCADUSD/json?recent=1';
+  try {
+    const response=await fetch(url,{headers:{accept:'application/json'},signal:AbortSignal.timeout(10000)});
+    if(!response.ok)throw new Error('HTTP '+response.status);
+    const payload=await response.json();
+    const observation=(payload?.observations||[]).find(x=>x&&x.FXCADUSD&&x.FXCADUSD.v!==null&&x.FXCADUSD.v!==undefined);
+    const rate=Number(observation?.FXCADUSD?.v);
+    if(!observation?.d||!Number.isFinite(rate)||rate<=0)throw new Error('no_valid_FXCADUSD_observation');
+    return {status:'connected',pair:'CAD/USD',rate,unit:'USD per CAD',asOf:observation.d,series:'FXCADUSD',frequency:'daily_average',indicative:true,source:'Bank of Canada Valet API',url,caveat:'每日平均指示性匯率，非即時報價或收盤價；發布可能有處理延遲。'};
+  } catch(error) {
+    return {status:'unavailable',pair:'CAD/USD',series:'FXCADUSD',source:'Bank of Canada Valet API',url,error:String(error.message||error),frequency:'daily_average',indicative:true};
+  }
 }
 
 
@@ -98,7 +113,7 @@ async function loadMacro() {
 }
 
 function getRegistry() {
-  return {institutions:INSTITUTIONS,jurisdictions:new Set(INSTITUTIONS.map(x=>x.country)).size,publicDataConnectorsImplemented:2,privateAccountConnectors:0,source:'Curated official institution directory',timestamp:new Date().toISOString()};
+  return {institutions:INSTITUTIONS,jurisdictions:new Set(INSTITUTIONS.map(x=>x.country)).size,publicDataConnectorsImplemented:3,privateAccountConnectors:0,source:'Curated official institution directory',timestamp:new Date().toISOString()};
 }
 
-module.exports = {getRegistry,loadFx,loadMacro};
+module.exports = {getRegistry,loadFx,loadBankOfCanadaFx,loadMacro};
