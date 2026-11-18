@@ -61,21 +61,28 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Download previous close report and evaluate outcomes
+      - name: Evaluate one, five and twenty trading-session outcomes
         env:
           GH_TOKEN: ${{ github.token }}
           MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
         run: |
           mkdir -p previous-report reports
-          ARTIFACT_ID=$(curl --fail --silent --show-error -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" | jq -r --arg run "$GITHUB_RUN_ID" '.artifacts | map(select(.name | startswith("taiwan-market-close-review-"))) | map(select((.workflow_run.id|tostring) != $run)) | sort_by(.created_at) | last | .id // empty')
-          if [ -z "$ARTIFACT_ID" ]; then
-            echo "No prior close report yet; first day is archive-only." > reports/outcome-review-first-run.md
-          else
-            curl --fail --location --silent --show-error -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" -o /tmp/previous-report.zip
-            unzip -oq /tmp/previous-report.zip -d previous-report
-            PREVIOUS_REPORT=$(find previous-report -name 'close-review-*.json' | head -n 1)
-            node server/jobs/evaluate-outcomes.js "$PREVIOUS_REPORT"
-          fi
+          curl --fail --silent --show-error -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" -o /tmp/artifacts.json
+          node server/jobs/select-outcome-artifacts.js /tmp/artifacts.json "$GITHUB_RUN_ID" > reports/selected-outcome-horizons.json
+          for horizon in 1d 5d 20d; do
+            case "$horizon" in 1d) sessions=1;; 5d) sessions=5;; 20d) sessions=20;; esac
+            ARTIFACT_ID=$(jq -r --arg h "$horizon" '.selected[] | select(.horizon == $h) | .artifactId' reports/selected-outcome-horizons.json)
+            if [ -z "$ARTIFACT_ID" ] || [ "$ARTIFACT_ID" = "null" ]; then
+              echo "Insufficient historical trading sessions for $horizon; no metric will be fabricated."
+              continue
+            fi
+            mkdir -p "previous-report/$horizon"
+            curl --fail --location --silent --show-error -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" -o "/tmp/$horizon.zip"
+            unzip -oq "/tmp/$horizon.zip" -d "previous-report/$horizon"
+            PREVIOUS_REPORT=$(find "previous-report/$horizon" -name 'close-review-*.json' | head -n 1)
+            if [ -z "$PREVIOUS_REPORT" ]; then echo "Missing close report inside $horizon artifact" >&2; exit 1; fi
+            node server/jobs/evaluate-outcomes.js "$PREVIOUS_REPORT" "$horizon" "$sessions"
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: taiwan-market-outcome-review-${{ github.run_id }}
