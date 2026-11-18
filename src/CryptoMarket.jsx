@@ -1,6 +1,7 @@
 import React,{useCallback,useEffect,useMemo,useState} from 'react';
 import CandleChart from './CandleChart';
 import QuantResearch from './QuantResearch';
+import CryptoSignalRadar from './CryptoSignalRadar';
 const C={bg:'#0b1422',panel:'#111a2b',panel2:'#172338',border:'#293951',text:'#e8eef8',muted:'#91a1b8',blue:'#60a5fa',green:'#34d399',red:'#fb7185',yellow:'#fbbf24'};
 const fmt=(v,d=4)=>Number.isFinite(Number(v))?Number(v).toLocaleString('en-US',{maximumFractionDigits:d}):'—';
 const pct=v=>Number.isFinite(Number(v))?(v>0?'+':'')+fmt(v,2)+'%':'—';
@@ -22,6 +23,7 @@ export default function CryptoMarket(){
  return <section id="crypto-market" style={{margin:'16px 0',padding:14,border:'1px solid '+C.border,borderRadius:14,background:C.bg,color:C.text,fontFamily:'Inter,system-ui,sans-serif'}}>
  <style>{'@media(max-width:760px){#crypto-market .crypto-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important}#crypto-market .crypto-detail{grid-template-columns:repeat(2,minmax(0,1fr))!important}#crypto-market .crypto-row{grid-template-columns:1fr 1fr!important}}'}</style>
  <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center',flexWrap:'wrap'}}><div><div style={{fontSize:21,fontWeight:900}}>₿ 加密貨幣智慧研究中心</div><small style={{color:C.muted}}>交易所市場掃描・技術指標・衍生品・清算風險地圖・AI 多空・新聞・量化回測</small></div><button onClick={refresh} disabled={loading} style={{background:C.blue,color:'#fff',border:0,borderRadius:7,padding:'8px 12px'}}>{loading?'更新中…':'重新掃描'}</button></div>
+ <CryptoSignalRadar rows={rows} techMap={techMap} onSelect={choose}/>
  <div style={{fontSize:11,color:C.muted,margin:'10px 0'}}>資料來源：{market?.source||'連線中'}｜更新：{market?.timestamp?new Date(market.timestamp).toLocaleString('zh-TW'):'—'}｜市場總數 {market?.summary?.total??'—'}｜現貨 {market?.summary?.spot??'—'}｜永續 {market?.summary?.perpetual??'—'}</div><div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>{(market?.exchanges||[]).map(x=><span key={x.name} title={x.error||''} style={{fontSize:11,padding:'5px 8px',borderRadius:20,background:x.status==='connected'?'#12382e':'#39232a',color:x.status==='connected'?C.green:C.red,border:'1px solid '+C.border}}>{x.name} · {x.status==='connected'?'連線':'未連線'} · {x.markets}</span>)}</div>
  {error&&<div role="status" style={{background:'#351b20',color:'#fecdd3',padding:9,borderRadius:8,fontSize:12,marginBottom:10}}>{error}</div>}
  <div className="crypto-stats" style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:8,marginBottom:12}}><Stat label="掃描市場" value={fmt(market?.summary?.total,0)}/><Stat label="現貨市場" value={fmt(market?.summary?.spot,0)}/><Stat label="USDT 永續" value={fmt(market?.summary?.perpetual,0)}/><Stat label="資料來源" value="Binance" note="公開 API，非交易下單"/></div>
