@@ -23,7 +23,7 @@ jobs:
     steps:
       - name: Refresh full-market scan
         env:
-          MARKET_APP_URL: ${{ secrets.MARKET_APP_URL }}
+          MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
         run: |
           test -n "$MARKET_APP_URL" || { echo "Set GitHub Actions secret MARKET_APP_URL to the deployed app URL"; exit 1; }
           OIDC_TOKEN=$(curl --fail --silent --show-error --get --data-urlencode "audience=taiwan-stock-hunter-automation" "$ACTIONS_ID_TOKEN_REQUEST_URL" -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r '.value')
@@ -46,7 +46,7 @@ jobs:
           node-version: 20
       - name: Generate close review archive
         env:
-          MARKET_APP_URL: ${{ secrets.MARKET_APP_URL }}
+          MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
         run: node server/jobs/close-review.js
       - uses: actions/upload-artifact@v4
         with:
@@ -65,7 +65,7 @@ jobs:
       - name: Download previous close report and evaluate outcomes
         env:
           GH_TOKEN: ${{ github.token }}
-          MARKET_APP_URL: ${{ secrets.MARKET_APP_URL }}
+          MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
         run: |
           mkdir -p previous-report reports
           ARTIFACT_ID=$(curl --fail --silent --show-error -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" | jq -r --arg run "$GITHUB_RUN_ID" '.artifacts | map(select(.name | startswith("taiwan-market-close-review-"))) | map(select((.workflow_run.id|tostring) != $run)) | sort_by(.created_at) | last | .id // empty')
