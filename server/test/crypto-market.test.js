@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {buildQuoteRow,mapLimit,normalizeKlines}=require('../lib/crypto-market');
+const {buildQuoteRow,mapLimit,normalizeKlines,getJsonFallback}=require('../lib/crypto-market');
 
 test('crypto quote rows reject missing, zero and invalid prices',()=>{
   assert.equal(buildQuoteRow('Binance','spot','BTCUSDT','BTC','USDT',null,0,0),null);
@@ -82,4 +82,19 @@ test('crypto history excludes the still-forming candle from research data',()=>{
   const candles=normalizeKlines(rows,'Binance','1d',Date.parse('2026-11-18T15:00:00.000Z'));
   assert.equal(candles.length,1);
   assert.equal(candles[0].time,new Date(start-86400000).toISOString());
+});
+
+test('official Binance market-data host is tried before alternate official REST hosts',async()=>{
+ const original=global.fetch;const calls=[];
+ global.fetch=async url=>{
+  calls.push(String(url));
+  if(String(url).includes('data-api.binance.vision'))return {ok:false,status:451,json:async()=>({})};
+  return {ok:true,status:200,json:async()=>({serverTime:1})};
+ };
+ try{
+  const result=await getJsonFallback(['https://data-api.binance.vision/api/v3/time','https://api.binance.com/api/v3/time']);
+  assert.equal(result.base,'https://api.binance.com');
+  assert.equal(result.data.serverTime,1);
+  assert.equal(calls.length,2);
+ }finally{global.fetch=original;}
 });
