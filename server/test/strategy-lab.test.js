@@ -45,18 +45,18 @@ test('strategy lab accepts market-specific fee overrides and never validates no-
 });
 
 test('strategy lab rejects missing volume and missing timestamps instead of coercing them to zero',()=>{
-  const missingVolume=makeCandles(140);missingVolume[100].volume=null;
+  const missingVolume=candles(140);missingVolume[100].volume=null;
   const volumeResult=runStrategyLab(missingVolume,{market:'tw-stock'});
   assert.notEqual(volumeResult.status,'ok');
   assert.match(volumeResult.error,/無效/);
-  const missingTime=makeCandles(140);missingTime[100].time=null;
+  const missingTime=candles(140);missingTime[100].time=null;
   const timeResult=runStrategyLab(missingTime,{market:'tw-stock'});
   assert.notEqual(timeResult.status,'ok');
   assert.match(timeResult.error,/時間/);
 });
 
 test('strategy lab rejects duplicate timestamps even when OHLCV values are valid',()=>{
-  const candles=makeCandles(140);candles[100].time=candles[99].time;
+  const candles=candles(140);candles[100].time=candles[99].time;
   const result=runStrategyLab(candles,{market:'tw-stock'});
   assert.notEqual(result.status,'ok');
   assert.match(result.error,/嚴格遞增/);
