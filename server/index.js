@@ -510,7 +510,7 @@ async function route(req,res){
   }
   if(u.pathname==='/api/crypto/scan'){
     const market=await safeLoad('crypto-market',60000,cryptoMarket.loadMarket,e=>({markets:[],error:e.message}));
-    const offset=Math.max(0,Number(u.searchParams.get('offset'))||0),limit=Math.min(40,Math.max(1,Number(u.searchParams.get('limit'))||25));
+    const offset=Math.max(0,Number(u.searchParams.get('offset'))||0),limit=Math.min(10,Math.max(1,Number(u.searchParams.get('limit'))||8));
     const batch=(market.markets||[]).slice(offset,offset+limit);
     const results=await Promise.all(batch.map(async item=>{
       try{
@@ -550,7 +550,7 @@ async function route(req,res){
       const exchange=u.searchParams.get('exchange')||'Binance',nativeSymbol=u.searchParams.get('nativeSymbol')||symbol;
       const history=await cryptoMarket.getHistory(symbol,type,'1d',exchange,nativeSymbol),derivatives=type==='perpetual'?await cryptoMarket.getDerivatives(symbol,exchange,nativeSymbol):null;
       const quote={symbol,price:history.data.at(-1)?.close,source:history.source,timestamp:history.asOf};
-      const scan={[symbol]:{symbol,scorecard:{status:'research-ready',fresh:true,direction:history.indicators?.trend==='bullish'?'偏向買進':history.indicators?.trend==='bearish'?'偏向賣出':'中立觀望',score:50,confidence:history.indicators?75:0,reasons:['使用 Binance 日 K 技術指標；未接入鏈上／代幣基本面']}}};
+      const scan={[symbol]:{symbol,scorecard:{status:'research-ready',fresh:true,direction:history.indicators?.trend==='bullish'?'偏向買進':history.indicators?.trend==='bearish'?'偏向賣出':'中立觀望',score:50,confidence:history.indicators?75:0,reasons:['使用 '+exchange+' 日 K 技術指標；尚未接入完整鏈上／代幣基本面']}}};
       const result=await buildAiCommittee(symbol,{getHistory:async()=>({data:history.data,indicators:history.indicators,source:history.source,asOf:history.asOf}),quotes:{[symbol]:quote},scan,flows:{},fundamentals:derivatives?{derivatives}:null,quoteSource:history.source,env:process.env});
       return json(res,200,result);
     }catch(e){return json(res,502,{error:e.message});}
