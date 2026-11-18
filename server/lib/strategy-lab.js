@@ -10,19 +10,21 @@ const STRATEGIES = [
   {id:'bb_mean_reversion',name:'布林通道均值回歸',category:'mean_reversion',description:'價格跌破布林下軌且 RSI 超賣後，等待回歸中軌',entry:'收盤低於布林下軌且 RSI < 35',exit:'收盤回到中軌或 RSI >= 55'}
 ];
 
-const finite = x => Number.isFinite(Number(x));
+const finite = x => x!==null&&x!==undefined&&x!==''&&Number.isFinite(Number(x));
 const round = (x,d=2) => Number.isFinite(x) ? Number(x.toFixed(d)) : null;
 
 function validateCandles(input) {
   if (!Array.isArray(input) || input.length < 130) return {ok:false,error:'至少需要 130 根有效 OHLCV K 線（含暖機與樣本外區間）'};
   const rows=input.map(x=>({
     time:x.time??x.openTime??null,
-    open:Number(x.open),high:Number(x.high),low:Number(x.low),close:Number(x.close),volume:Number(x.volume)
+    open:finite(x.open)?Number(x.open):NaN,high:finite(x.high)?Number(x.high):NaN,low:finite(x.low)?Number(x.low):NaN,close:finite(x.close)?Number(x.close):NaN,volume:finite(x.volume)?Number(x.volume):NaN
   }));
   for(let i=0;i<rows.length;i++){
     const x=rows[i];
     if(![x.open,x.high,x.low,x.close,x.volume].every(Number.isFinite)||x.open<=0||x.high<=0||x.low<=0||x.close<=0||x.volume<0||x.high<Math.max(x.open,x.close,x.low)||x.low>Math.min(x.open,x.close,x.high))return {ok:false,error:'OHLCV 含無效價格、成交量或高低價關係錯誤',invalidIndex:i};
-    if(i&&rows[i-1].time&&x.time&&String(x.time)<=String(rows[i-1].time))return {ok:false,error:'K 線時間未嚴格遞增或存在重複時間',invalidIndex:i};
+    const timestamp=Date.parse(x.time||'');
+    if(!Number.isFinite(timestamp)||timestamp<=0)return {ok:false,error:'K 線時間缺漏或格式無效',invalidIndex:i};
+    if(i&&timestamp<=Date.parse(rows[i-1].time))return {ok:false,error:'K 線時間未嚴格遞增或存在重複時間',invalidIndex:i};
   }
   return {ok:true,rows};
 }
