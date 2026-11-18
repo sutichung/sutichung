@@ -20,6 +20,15 @@ async function get(endpoint){
  return response.json();
 }
 (async()=>{
+ const calendar=await get('/api/market/calendar');
+ const todayTaiwan=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date());
+ if(calendar.error||!String(calendar.source||'').includes('TWSE')||!Array.isArray(calendar.events))throw new Error('Official Taiwan market calendar unavailable; close report is withheld to avoid counting an unverified trading day');
+ if(calendar.events.some(event=>event.date===todayTaiwan)){
+  fs.mkdirSync('reports',{recursive:true});
+  fs.writeFileSync(path.join('reports','market-closed-'+todayTaiwan+'.json'),JSON.stringify({marketOpen:false,date:todayTaiwan,source:calendar.source,reason:'official_exchange_calendar_closed'},null,2));
+  process.stdout.write(JSON.stringify({marketOpen:false,date:todayTaiwan,reason:'official_exchange_calendar_closed'}));
+  return;
+ }
  await get('/api/market/snapshot');
  const [flows,futures,sentiment,news]=await Promise.all([get('/api/market/institutional-flows'),get('/api/market/futures'),get('/api/market/sentiment'),get('/api/market/news')]);
  const scan=await get('/api/market/scan');
@@ -52,5 +61,5 @@ async function get(endpoint){
  for(const n of report.news) lines.push(`- [${n.title||n.headline||'新聞'}](${n.url||'#'}) — ${n.source||''}`);
  lines.push('','> '+report.caveat,'');
  fs.writeFileSync(path.join('reports','close-review-'+date+'.md'),lines.join('\n'));
- process.stdout.write(JSON.stringify({scannedCount:rows.length,researchReadyCount:research.researchReadyCount,bullishCount:research.bullishCount,bearishCount:research.bearishCount,neutralCount:research.neutralCount,report:date}));
+ process.stdout.write(JSON.stringify({marketOpen:true,scannedCount:rows.length,researchReadyCount:research.researchReadyCount,bullishCount:research.bullishCount,bearishCount:research.bearishCount,neutralCount:research.neutralCount,report:date}));
 })().catch(error=>{process.stderr.write(error.stack||String(error));process.exit(1);});
