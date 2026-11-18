@@ -188,3 +188,64 @@ html[data-device="phone"] .stock-app .stock-panel:nth-of-type(3){animation-delay
   .stock-app .stock-panel:hover{transform:none!important}
   .stock-app button:active,.stock-app a:active{filter:brightness(1.12)}
 }
+
+
+/* Mobile UX hardening: prevent compressed controls, clipped data and dock overlap. */
+@media (max-width:760px) {
+  html { scroll-padding-top:12px; }
+  body { -webkit-text-size-adjust:100%; }
+  .stock-app { box-sizing:border-box; }
+  .stock-app *, .stock-app *::before, .stock-app *::after { box-sizing:border-box; }
+  .stock-app > header { min-width:0; }
+  .stock-app > header > div:last-child { min-width:0; }
+  .stock-app .stock-panel { min-width:0; }
+  .stock-app .stock-panel > div { min-width:0; }
+  .stock-app .stock-panel [style*="display: grid"],
+  .stock-app .stock-panel [style*="display:grid"] { min-width:0; }
+  .stock-app .stock-panel table { display:block; width:100%; max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; white-space:nowrap; }
+  .stock-app .stock-panel pre,
+  .stock-app .stock-panel code { max-width:100%; overflow-x:auto; }
+  .stock-app .stock-panel img,
+  .stock-app .stock-panel svg { max-width:100%; }
+  .stock-app .stock-panel a { overflow-wrap:anywhere; }
+  .stock-app .stock-panel [style*="grid-template-columns: repeat(5"],
+  .stock-app .stock-panel [style*="grid-template-columns:repeat(5"],
+  .stock-app .stock-panel [style*="grid-template-columns: repeat(6"],
+  .stock-app .stock-panel [style*="grid-template-columns:repeat(6"] {
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:8px!important;
+  }
+  .stock-app .stock-panel [style*="minmax(220px"] {
+    grid-template-columns:1fr!important;
+  }
+  .stock-app .stock-panel [style*="grid-template-columns: 85px 1fr 85px"] {
+    grid-template-columns:64px minmax(0,1fr) 72px!important;
+    gap:6px!important;
+  }
+  .stock-app .stock-panel button,
+  .stock-app .stock-panel a[role="button"] { max-width:100%; }
+  .stock-app .stock-panel input,
+  .stock-app .stock-panel select { width:auto; max-width:100%; min-width:0; }
+  .mobile-market-dock {
+    padding-bottom:calc(7px + env(safe-area-inset-bottom))!important;
+    bottom:0!important;
+    left:8px!important; right:8px!important;
+    border-radius:17px 17px 0 0!important;
+  }
+  .mobile-market-dock a { min-height:50px; }
+  .stock-app { padding-bottom:calc(94px + env(safe-area-inset-bottom))!important; }
+  .stock-app .market-zone-nav { display:none!important; }
+  .stock-app [id] { scroll-margin-top:14px; scroll-margin-bottom:100px; }
+}
+@media (max-width:420px) {
+  .stock-app .stock-panel { padding:12px!important; }
+  .stock-app .stock-panel [style*="grid-template-columns: repeat(2"],
+  .stock-app .stock-panel [style*="grid-template-columns:repeat(2"] { gap:7px!important; }
+  .stock-app .stock-panel button { padding:9px 10px!important; font-size:11px!important; }
+  .mobile-market-dock { left:5px!important; right:5px!important; }
+  .mobile-market-dock a { font-size:10px!important; }
+}
+@media (max-width:350px) {
+  .mobile-market-dock { grid-template-columns:repeat(5,minmax(0,1fr)); gap:0!important; }
+  .mobile-market-dock a { font-size:9px!important; }
+}
