@@ -53,7 +53,6 @@ function buildFeatures(bars){
       const range=Math.max(...bars.slice(i-13,i+1).map(x=>x.high))-Math.min(...bars.slice(i-13,i+1).map(x=>x.low));
       chop[i]=sum>0&&range>0?100*Math.log10(sum/range)/Math.log10(14):null;
     }
-    if(i>=20)trend[i]=mean(bars.slice(i-20,i+1).map(x=>x.close))>mean(bars.slice(i-55,i+1).map(x=>x.close))?1:-1;
     if(i>=54)trend[i]=mean(bars.slice(i-20,i+1).map(x=>x.close))>mean(bars.slice(i-54,i+1).map(x=>x.close))?1:-1;
     if(i>=19){const vs=bars.slice(i-19,i+1).map(x=>x.volume),m=mean(vs),sd=Math.sqrt(mean(vs.map(x=>(x-m)**2)));volZ[i]=sd?(b.volume-m)/sd:0;}
     if(i>=99&&atr[i]!==null){
@@ -98,6 +97,7 @@ function simulate(bars,fs,htf,start,end,costs){
   const trades=[],returns=[];
   for(let i=start;i<end-1;i++){
     const sc=score(fs[i],htf[i]),next=bars[i+1];
+    const prevEquity=cash+qty*bars[i].close;
     if(qty>0&&sc.value<1.8){
       const fill=next.open*(1-slip),proceeds=qty*fill*(1-fee-tax);
       trades.push({pnl:proceeds-entryCost,returnPct:(proceeds/entryCost-1)*100,holdBars:i+1-entryIndex});
@@ -106,9 +106,8 @@ function simulate(bars,fs,htf,start,end,costs){
       const fill=next.open*(1+slip),budget=cash*0.85;
       qty=budget/(fill*(1+fee));entryCost=qty*fill*(1+fee);cash-=entryCost;entryIndex=i+1;
     }
-    const eq=cash+qty*next.close,prior=returns.length?null:100000;
-    const prevEq=qty>0?cash+qty*bars[i].close:cash;
-    returns.push(eq/(prevEq||prior||100000)-1);
+    const eq=cash+qty*next.close;
+    returns.push(prevEquity>0?eq/prevEquity-1:0);
     peak=Math.max(peak,eq);maxDD=Math.min(maxDD,eq/peak-1);
   }
   if(qty>0){const last=bars[end-1],fill=last.close*(1-slip),proceeds=qty*fill*(1-fee-tax);trades.push({pnl:proceeds-entryCost,returnPct:(proceeds/entryCost-1)*100,holdBars:end-1-entryIndex,periodEndClose:true});cash+=proceeds;}
