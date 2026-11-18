@@ -35,12 +35,12 @@ async function bybitCategory(category){
  let cursor='',items=[];
  for(let page=0;page<8;page++){
   const q=new URLSearchParams({category,limit:'1000'});if(cursor)q.set('cursor',cursor);
-  const x=await getJson('https://api.bybit.com/v5/market/instruments-info?'+q);
-  if(x.retCode!==0)throw new Error(x.retMsg||'Bybit instruments error');
+  const result=await getJsonFallback(['https://api.bybit.com','https://api.bytick.com'].map(base=>base+'/v5/market/instruments-info?'+q));
+  const x=result.data;if(x.retCode!==0)throw new Error(x.retMsg||'Bybit instruments error');
   items.push(...(x.result?.list||[]));cursor=x.result?.nextPageCursor||'';if(!cursor)break;
  }
- const t=await getJson('https://api.bybit.com/v5/market/tickers?category='+category);
- if(t.retCode!==0)throw new Error(t.retMsg||'Bybit tickers error');
+ const tickerResult=await getJsonFallback(['https://api.bybit.com','https://api.bytick.com'].map(base=>base+'/v5/market/tickers?category='+category));
+ const t=tickerResult.data;if(t.retCode!==0)throw new Error(t.retMsg||'Bybit tickers error');
  const map=new Map((t.result?.list||[]).map(x=>[x.symbol,x]));
  return items.filter(x=>x.status==='Trading').map(x=>{const q=map.get(x.symbol)||{};return row('Bybit',category==='spot'?'spot':'perpetual',x.symbol,x.baseCoin,x.quoteCoin,q.lastPrice,Number(q.price24hPcnt)*100,q.turnover24h,{high24h:q.highPrice24h,low24h:q.lowPrice24h,volume:q.volume24h,nativeSymbol:x.symbol,nativeType:category});});
 }
@@ -120,7 +120,7 @@ async function getHistory(symbol,marketType='spot',interval='1d',exchange='Binan
 async function ratioFor(exchange,base){
  try{
   if(exchange==='Binance'){const x=await getJson('https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol='+base+'USDT&period=1h&limit=1');const q=x[0];return q?{exchange,longPct:Number(q.longAccount)*100,shortPct:Number(q.shortAccount)*100,ratio:Number(q.longShortRatio),source:'Binance global account ratio'}:null;}
-  if(exchange==='Bybit'){const x=await getJson('https://api.bybit.com/v5/market/account-ratio?category=linear&symbol='+base+'USDT&period=1h&limit=1');const q=x.result?.list?.[0];return q?{exchange,longPct:Number(q.buyRatio)*100,shortPct:Number(q.sellRatio)*100,ratio:Number(q.buyRatio)/Number(q.sellRatio),source:'Bybit account ratio'}:null;}
+  if(exchange==='Bybit'){const result=await getJsonFallback(['https://api.bybit.com','https://api.bytick.com'].map(host=>host+'/v5/market/account-ratio?category=linear&symbol='+base+'USDT&period=1h&limit=1'));const x=result.data;const q=x.result?.list?.[0];return q?{exchange,longPct:Number(q.buyRatio)*100,shortPct:Number(q.sellRatio)*100,ratio:Number(q.buyRatio)/Number(q.sellRatio),source:'Bybit account ratio'}:null;}
   if(exchange==='OKX'){const x=await getJson('https://www.okx.com/api/v5/rubik/stat/contracts/long-short-account-ratio?ccy='+base+'&period=1H');const q=x.data?.[0];return q?{exchange,longPct:Number(q[1])/(1+Number(q[1]))*100,shortPct:100-Number(q[1])/(1+Number(q[1]))*100,ratio:Number(q[1]),source:'OKX contracts long/short ratio'}:null;}
  }catch(e){return {exchange,error:e.message};}
  return {exchange,unavailable:true};
@@ -131,7 +131,7 @@ async function getDerivatives(symbol,exchange='Binance',nativeSymbol=''){
   Promise.all(['Binance','Bybit','OKX'].map(x=>ratioFor(x,base))),
   getJson('https://fapi.binance.com/fapi/v1/premiumIndex?symbol='+base+'USDT').catch(()=>null),
   getJson('https://fapi.binance.com/fapi/v1/openInterest?symbol='+base+'USDT').catch(()=>null),
-  getJson('https://api.bybit.com/v5/market/tickers?category=linear&symbol='+base+'USDT').catch(()=>null),
+  getJsonFallback(['https://api.bybit.com','https://api.bytick.com'].map(host=>host+'/v5/market/tickers?category=linear&symbol='+base+'USDT')).then(x=>x.data).catch(()=>null),
   getJson('https://www.okx.com/api/v5/market/ticker?instId='+base+'-USDT-SWAP').catch(()=>null)
  ]);
  const bq=bybit?.result?.list?.[0],oq=okx?.data?.[0];
