@@ -1,58 +1,48 @@
-import React,{useMemo,useState} from 'react';
+import React,{useEffect,useMemo,useState} from 'react';
 
-const n=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))?Number(v):null;
-const pct=v=>Number.isFinite(v)?(v>=0?'+':'')+v.toFixed(2)+'%':'—';
-function emaSeries(values,period){
- const out=Array(values.length).fill(null);
- if(values.length<period)return out;
- const k=2/(period+1);let v=values.slice(0,period).reduce((a,b)=>a+b,0)/period;
- out[period-1]=v;
- for(let i=period;i<values.length;i++){v=values[i]*k+v*(1-k);out[i]=v;}
- return out;
-}
-function runBacktest(candles,cost){
- if(!Number.isFinite(cost)||cost<0)return {invalidCost:true};
- const rows=(candles||[]).filter(x=>n(x.open)!==null&&n(x.close)!==null&&n(x.high)!==null&&n(x.low)!==null&&n(x.volume)!==null);
- if(rows.length<65)return {insufficient:true,count:rows.length};
- const close=rows.map(x=>Number(x.close)),fast=emaSeries(close,20),slow=emaSeries(close,60);
- const trades=[];let entry=null;
- for(let i=60;i<rows.length-1;i++){
-  const prev=fast[i-1]-slow[i-1],now=fast[i]-slow[i];
-  if(entry===null&&prev<=0&&now>0){const price=Number(rows[i+1].open);if(price>0)entry={price,date:rows[i+1].time};}
-  else if(entry!==null&&prev>=0&&now<0){const price=Number(rows[i+1].open);if(price>0){const gross=(price/entry.price-1)*100;trades.push({entry:entry.price,exit:price,date:rows[i+1].time,gross,net:gross-cost});entry=null;}}
- }
- const wins=trades.filter(t=>t.net>0),losses=trades.filter(t=>t.net<0);
- const grossWin=wins.reduce((s,t)=>s+t.net,0),grossLoss=Math.abs(losses.reduce((s,t)=>s+t.net,0));
- let equity=1,peak=1,mdd=0;
- for(const t of trades){equity*=1+t.net/100;peak=Math.max(peak,equity);mdd=Math.min(mdd,(equity/peak-1)*100);}
- const net=trades.reduce((s,t)=>s+t.net,0);
- return {insufficient:false,bars:rows.length,count:trades.length,wins:wins.length,losses:losses.length,winRate:trades.length?wins.length/trades.length*100:null,expectancy:trades.length?net/trades.length:null,profitFactor:grossLoss?grossWin/grossLoss:grossWin>0?Infinity:null,totalNet:(equity-1)*100,mdd,openPosition:entry,first:rows[0].time,last:rows.at(-1).time,trades:trades.slice(-8)};
-}
-export default function QuantResearch({candles=[],symbol='—',source='',asOf='',market='TW'}) {
- const [commission,setCommission]=useState(market==='US'?'0':market==='CRYPTO'?'0.05':'0.1425');
- const [tax,setTax]=useState(market==='US'||market==='CRYPTO'?'0':'0.30');
- const [slippage,setSlippage]=useState('0.05');
- const inputs=[commission,tax,slippage];
- const validCost=inputs.every(v=>String(v).trim()!==''&&Number.isFinite(Number(v))&&Number(v)>=0&&Number(v)<=10);
- const cost=validCost?(Number(commission)*2)+Number(tax)+(Number(slippage)*2):null;
- const result=useMemo(()=>runBacktest(candles,cost),[candles,cost]);
- const card={background:'#111a2b',border:'1px solid #293951',borderRadius:12,padding:13,minWidth:0};
+const fmt=(v,suffix='')=>Number.isFinite(Number(v))?Number(v).toFixed(2)+suffix:'—';
+const API=(process.env.REACT_APP_MARKET_API||'/api/market').replace(/\\/$/,'');
+export default function QuantResearch({symbol='2330',source='',asOf='',market='tw-stock'}) {
+ const defaults=market==='crypto'?{fee:0.10,tax:0,slippage:0.05}:market==='us-stock'?{fee:0.01,tax:0,slippage:0.05}:{fee:0.1425,tax:0.30,slippage:0.10};
+ const [fee,setFee]=useState(String(defaults.fee)),[tax,setTax]=useState(String(defaults.tax)),[slippage,setSlippage]=useState(String(defaults.slippage));
+ const [result,setResult]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState('');
+ const [reload,setReload]=useState(0);
+ const valid=[fee,tax,slippage].every(x=>x.trim()!==''&&Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=10);
+ const params=useMemo(()=>new URLSearchParams({market,feeBps:String(Number(fee)*100),sellTaxBps:String(Number(tax)*100),slippageBps:String(Number(slippage)*100)}).toString(),[market,fee,tax,slippage]);
+ useEffect(()=>{
+  if(!symbol||!valid){setResult(null);return;}
+  const controller=new AbortController();let alive=true;
+  setLoading(true);setError('');
+  const token=localStorage.getItem('ts_access_token')||'';
+  const headers={Accept:'application/json'};if(token)headers.Authorization='Bearer '+token;
+  fetch(API+'/research/strategies/'+encodeURIComponent(symbol)+'?'+params,{headers,signal:controller.signal})
+   .then(async response=>{const body=await response.json();if(!response.ok&&body.status!=='insufficient_data')throw new Error(body.error||('HTTP '+response.status));return body;})
+   .then(body=>{if(alive){setResult(body);if(body.status!=='ok')setError(body.error||'歷史資料不足，未產生策略績效');}})
+   .catch(e=>{if(alive&&e.name!=='AbortError'){setResult(null);setError(e.message||'策略研究服務暫時無法連線');}})
+   .finally(()=>{if(alive)setLoading(false);});
+  return()=>{alive=false;controller.abort();};
+ },[symbol,params,valid,reload]);
+ const card={background:'#111a2b',border:'1px solid #293951',borderRadius:12,padding:13,minWidth:0,color:'#e8eef8'};
  const metric={background:'#172338',borderRadius:8,padding:10,minWidth:0};
  const label={display:'block',fontSize:11,color:'#91a1b8'};
- const value={fontSize:20,fontWeight:800,marginTop:5,fontVariantNumeric:'tabular-nums'};
- const field=(title,val,set)=> <label style={{display:'grid',gap:5,flex:'1 1 100px',fontSize:11,color:'#91a1b8'}}>{title}<input type="number" min="0" step="0.001" value={val} onChange={e=>set(e.target.value)} style={{width:'100%',boxSizing:'border-box',padding:8,borderRadius:7,border:'1px solid #293951',background:'#172338',color:'#e8eef8'}}/></label>;
- return <section style={{...card,marginBottom:12,color:'#e8eef8'}}>
-  <div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',alignItems:'center'}}><b>🧪 量化研究實驗室｜EMA20／EMA60 趨勢策略</b><small style={{color:'#91a1b8'}}>個股 {symbol}｜歷史日K研究</small></div>
-  <p style={{fontSize:11,color:'#91a1b8',lineHeight:1.7,margin:'8px 0'}}>規則：EMA20 上穿 EMA60 後，下一根日K開盤進場；下穿後，下一根日K開盤出場。只做多、不加碼。此為初步研究樣本，不是完整全市場回測，也未做樣本外／Walk-forward 驗證。</p>
-  <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>{field(market==='US'?'券商佣金（單邊 %）':market==='CRYPTO'?'交易所費率（單邊 %）':'單邊手續費 (%)',commission,setCommission)}{field(market==='US'?'交易相關費用（賣出 %）':market==='CRYPTO'?'其他交易費用（賣出 %）':'賣出交易稅 (%)',tax,setTax)}{field('單邊滑價 (%)',slippage,setSlippage)}</div>
-  <div style={{fontSize:11,color:'#91a1b8',marginBottom:10}}>{market==='US'?'美股佣金／交易費用需依券商自行設定（預設 0 不代表免費）。':market==='CRYPTO'?'加密貨幣預設單邊費率 0.05% 僅為回測假設；請依交易所、VIP 等級及 Maker／Taker 實際費率修改。':'台股成本依實際券商折扣及交易稅設定。'} 本次往返成本假設：{Number.isFinite(cost)?cost.toFixed(4)+'%':'設定無效'}｜資料來源：{source||'未提供'}｜最後日K：{asOf||'日期未提供'}</div>
-  {result.invalidCost?<div style={{...metric,color:'#fb7185'}}>成本參數無效。請輸入 0 至 10% 之間的非負數字；未修正前不計算績效。</div>:result.insufficient?<div style={{...metric,color:'#fbbf24'}}>歷史日K不足 65 根，目前取得 {result.count} 根。資料不足，不產生回測績效。</div>:<>
-   <div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:8}}>
-    {[['完成交易',result.count+' 筆'],['勝率',pct(result.winRate)],['淨期望值',pct(result.expectancy)],['Profit Factor',result.profitFactor===Infinity?'∞':result.profitFactor===null?'—':result.profitFactor.toFixed(2)],['淨資金變化',pct(result.totalNet)],['最大回撤',pct(result.mdd)]].map(([k,v])=><div key={k} style={metric}><small style={label}>{k}</small><div style={{...value,color:k==='淨期望值'?(result.expectancy>0?'#34d399':'#fb7185'):'#e8eef8'}}>{v}</div></div>)}
-   </div>
-   <div style={{marginTop:10,padding:10,borderRadius:8,background:'#172338',fontSize:11,lineHeight:1.7,color:'#cbd5e1'}}>測試區間：{result.first||'—'} 至 {result.last||'—'}；交易 {result.count} 筆、獲利 {result.wins} 筆、虧損 {result.losses} 筆。{result.openPosition?'目前最後一筆訊號仍持有，未將未實現損益混入已平倉統計。':'最後沒有未平倉部位。'}{result.count<30?' 交易樣本少於 30 筆，統計可信度不足。':''}</div>
-   {result.trades.length>0&&<div style={{overflowX:'auto',marginTop:10}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}><thead><tr>{['出場日期','進場價','出場價','毛報酬','淨報酬'].map(x=><th key={x} style={{textAlign:'right',padding:7,borderBottom:'1px solid #293951',color:'#91a1b8'}}>{x}</th>)}</tr></thead><tbody>{result.trades.map((t,i)=><tr key={i}>{[t.date,t.entry.toFixed(2),t.exit.toFixed(2),pct(t.gross),pct(t.net)].map((x,j)=><td key={j} style={{textAlign:'right',padding:7,borderBottom:'1px solid #293951',color:j===4?(t.net>=0?'#fb7185':'#34d399'):'#e8eef8'}}>{x}</td>)}</tr>)}</tbody></table></div>}
-  </>}
-  <small style={{display:'block',marginTop:10,color:'#91a1b8',lineHeight:1.7}}>重要限制：手續費與交易稅為可調假設，需依券商折扣、商品種類及當期規定校正；滑價為使用者假設。這裡使用目前載入的個股歷史日K，未含除權息調整、漲跌停無法成交、成交量容量、融券限制與完整市場倖存者偏差處理。不得單憑此結果投入實盤。</small>
+ const value={fontSize:18,fontWeight:800,marginTop:5,fontVariantNumeric:'tabular-nums'};
+ const field=(title,val,set)=> <label style={{display:'grid',gap:5,flex:'1 1 100px',fontSize:11,color:'#91a1b8'}}>{title}<input type="number" min="0" max="10" step="0.001" value={val} onChange={e=>set(e.target.value)} style={{width:'100%',boxSizing:'border-box',padding:8,borderRadius:7,border:'1px solid #293951',background:'#172338',color:'#e8eef8'}}/></label>;
+ const metrics=(x)=>[['交易筆數',x.trades+' 筆'],['勝率',fmt(x.winRatePct,'%')],['淨報酬',fmt(x.netReturnPct,'%')],['最大回撤',fmt(x.maxDrawdownPct,'%')],['Sharpe',fmt(x.sharpe)],['Sortino',fmt(x.sortino)],['Profit Factor',fmt(x.profitFactor)],['單筆期望值',fmt(x.expectancyPct,'%')]];
+ return <section style={{...card,marginBottom:12}}>
+  <div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',alignItems:'center'}}><b>🧪 策略實驗室｜多策略 Walk-forward 驗證</b><small style={{color:'#91a1b8'}}>標的 {symbol}｜{market==='tw-stock'?'台股':market==='us-stock'?'美股':'加密貨幣'}</small></div>
+  <p style={{fontSize:11,color:'#91a1b8',lineHeight:1.7,margin:'8px 0'}}>借鏡 Pine Script 專案的自動化策略驗證流程，使用 EMA 趨勢、MACD 動能、布林均值回歸三種透明規則。60% 訓練區間與 40% 樣本外區間分開測試，訊號在收盤確認、下一根 K 線開盤成交；未通過樣本外條件不會列為候選。</p>
+  <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>{field('單邊手續費／費率 (%)',fee,setFee)}{field('賣出交易稅 (%)',tax,setTax)}{field('單邊滑價 (%)',slippage,setSlippage)}<button onClick={()=>setReload(x=>x+1)} disabled={loading||!valid} style={{alignSelf:'end',padding:'9px 12px',borderRadius:7,border:'1px solid #315579',background:'#18304b',color:'#bfdbfe',fontWeight:700,cursor:'pointer'}}>重新回測</button></div>
+  <small style={{display:'block',color:'#91a1b8',lineHeight:1.7,marginBottom:10}}>成本為可調假設，依券商折扣、交易所 Maker／Taker、商品稅制調整。預設值不代表你的實際費率。來源：{result?.source||source||'等待歷史行情'}｜最後 K 線：{result?.asOf||asOf||'—'}｜資料筆數：{result?.barCount??'—'}</small>
+  {!valid?<div style={{...metric,color:'#fb7185'}}>成本欄位無效，請輸入 0 至 10% 的數字。</div>:loading?<div style={{...metric,color:'#93c5fd'}}>正在取得歷史行情並執行多策略回測…</div>:error?<div style={{...metric,color:'#fbbf24',lineHeight:1.7}}>{error}<br/>資料不足或上游失效時不會填入模擬績效。</div>:result?.strategies?<div style={{display:'grid',gap:10}}>
+   <div style={{display:'flex',gap:8,flexWrap:'wrap',fontSize:11,color:'#91a1b8'}}><span>訓練 {result.split?.trainBars??'—'} 根</span><span>樣本外 {result.split?.outOfSampleBars??'—'} 根</span><span>切分 {result.split?.ratio||'—'}</span><span>成本已納入</span></div>
+   {result.strategies.map(strategy=><div key={strategy.id} style={{background:'#172338',border:'1px solid #293951',borderRadius:9,padding:11}}>
+    <div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',alignItems:'center'}}><b>{strategy.name}</b><span style={{fontSize:11,color:strategy.validation?.passed?'#34d399':'#fbbf24'}}>{strategy.validation?.passed?'樣本外候選通過':'尚未通過驗證'}</span></div>
+    <div style={{fontSize:11,color:'#91a1b8',margin:'5px 0 9px'}}>{strategy.description}｜進場：{strategy.entry}｜出場：{strategy.exit}</div>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:8}}>
+     {strategy.periods.map(period=><div key={period.id} style={metric}><b style={{fontSize:12}}>{period.label}</b><div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:7,marginTop:8}}>{metrics(period.metrics).map(([k,v])=><div key={k}><small style={label}>{k}</small><div style={{...value,fontSize:15,color:k==='淨報酬'?(Number(period.metrics.netReturnPct)>0?'#34d399':'#fb7185'):'#e8eef8'}}>{v}</div></div>)}</div><small style={{display:'block',marginTop:7,color:'#91a1b8'}}>市場狀態：{period.marketRegime?.regime||'—'}｜區間報酬 {fmt(period.marketRegime?.periodReturnPct,'%')}</small></div>)}
+    </div>
+   </div>)}
+  </div>:<div style={{...metric,color:'#91a1b8'}}>尚未取得可用的策略研究結果。</div>}
+  <small style={{display:'block',marginTop:10,color:'#91a1b8',lineHeight:1.7}}>研究限制：策略結果不是未來報酬保證。使用下一根 K 線開盤成交以避免同根收盤前視偏誤；尚未完整模擬限價排隊、漲跌停、停牌、融券限制、成交量容量與市場微結構。樣本外不足 5 筆交易、淨報酬不正、回撤過大或 Sharpe 不正，均不會列為通過。</small>
  </section>;
 }
