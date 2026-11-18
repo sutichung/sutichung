@@ -12,6 +12,18 @@ function buildHealthReport(health, diagnostics) {
     out[item.status] = (out[item.status] || 0) + 1;
     return out;
   }, {});
+  const rawSecurity = diagnostics.security && typeof diagnostics.security === 'object' ? diagnostics.security : null;
+  const security = rawSecurity ? {
+    status: 'observed', requests: Number(rawSecurity.requests) || 0,
+    blocked: Number(rawSecurity.blocked) || 0, probes: Number(rawSecurity.probes) || 0,
+    rateLimited: Number(rawSecurity.rateLimited) || 0,
+    blockedRatePct: Number(rawSecurity.requests) > 0 ? Math.round((Number(rawSecurity.blocked) || 0) / Number(rawSecurity.requests) * 10000) / 100 : null,
+    byRule: rawSecurity.byRule && typeof rawSecurity.byRule === 'object' ? rawSecurity.byRule : {},
+    lastEventAt: rawSecurity.lastEventAt || null, scope: rawSecurity.scope || 'unknown'
+  } : { status: 'unavailable', reason: 'firewall_telemetry_not_returned' };
+  const securityWarnings = [];
+  if (security.status === 'observed' && security.rateLimited >= 10) securityWarnings.push('elevated_rate_limiting');
+  if (security.status === 'observed' && security.probes >= 50) securityWarnings.push('elevated_probe_activity');
   return {
     generatedAt: new Date().toISOString(),
     application: {
@@ -20,6 +32,7 @@ function buildHealthReport(health, diagnostics) {
       node: health.node || null,
       tradingReadiness: health.trading || null
     },
+    security: { ...security, warnings: securityWarnings },
     providerSummary: {
       total: checks.length,
       connected: counts.connected || 0,
