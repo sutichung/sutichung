@@ -72,3 +72,14 @@ test('crypto candle normalization preserves genuine zero volume while rejecting 
   assert.equal(candles.length,1);
   assert.equal(candles[0].volume,0);
 });
+
+test('crypto history excludes the still-forming candle from research data',()=>{
+  const start=Date.parse('2026-11-18T00:00:00.000Z');
+  const rows=[
+    [String(start-86400000),'100','110','90','105','12'],
+    [String(start),'105','115','100','112','18']
+  ];
+  const candles=normalizeKlines(rows,'Binance','1d',Date.parse('2026-11-18T15:00:00.000Z'));
+  assert.equal(candles.length,1);
+  assert.equal(candles[0].time,new Date(start-86400000).toISOString());
+});
