@@ -15,6 +15,7 @@ const RULES = [
   { match: p => /^\/api\/admin\//.test(p), limit: 60, windowMs: 60 * 1000, name: 'admin_api' },
   { match: p => /^\/api\/market\/agents\//.test(p), limit: 12, windowMs: 60 * 1000, name: 'ai_analysis' },
   { match: p => /^\/api\/market\/scan$/.test(p), limit: 30, windowMs: 60 * 1000, name: 'market_scan' },
+  { match: p => /^\/api\/automation\/research\/outcomes$/.test(p), limit: 20, windowMs: 60 * 1000, name: 'research_outcome_ingest' },
   { match: p => /^\/api\//.test(p), limit: 240, windowMs: 60 * 1000, name: 'api' },
   { match: () => true, limit: 360, windowMs: 60 * 1000, name: 'site' }
 ];
@@ -84,7 +85,8 @@ function applyFirewall(req, res) {
   }
 
   const contentLength = Number(req.headers['content-length'] || 0);
-  if (Number.isFinite(contentLength) && contentLength > 16 * 1024) {
+  const maxBodyBytes = pathname === '/api/automation/research/outcomes' ? 256 * 1024 : 16 * 1024;
+  if (Number.isFinite(contentLength) && contentLength > maxBodyBytes) {
     reject(res, 413, 'request_too_large');
     return false;
   }
