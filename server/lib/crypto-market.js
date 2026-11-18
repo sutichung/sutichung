@@ -16,7 +16,7 @@ async function binanceMarkets(){
  const jobs=await Promise.allSettled([getJson('https://api.binance.com/api/v3/exchangeInfo'),getJson('https://api.binance.com/api/v3/ticker/24hr'),getJson('https://fapi.binance.com/fapi/v1/exchangeInfo'),getJson('https://fapi.binance.com/fapi/v1/ticker/24hr')]);
  const [si,st,fi,ft]=jobs.map(x=>x.status==='fulfilled'?x.value:null);
  const out=[];
- if(si&&st){const sm=new Map(st.map(x=>[x.symbol,x]));out.push(...si.symbols.filter(x=>x.status==='TRADING'&&x.isSpotTradingAllowed!==false).map(x=>{const q=sm.get(x.symbol)||{};return row('Binance','spot',x.symbol,x.baseAsset,x.quoteAsset,q.lastPrice,q.priceChangePercent,q.quoteVolume,{high24h:q.highPrice,low24h:q.lowPrice,volume:q.volume});}));}
+ if(si&&st){const sm=new Map(st.map(x=>[x.symbol,x]));out.push(...si.symbols.filter(x=>x.status==='TRADING'&&x.isSpotTradingAllowed!==false).map(x=>{const q=sm.get(x.symbol)||{};return row('Binance','spot',x.symbol,x.baseAsset,x.quoteAsset,q.lastPrice,q.priceChangePercent,q.quoteVolume,{high24h:q.highPrice,low24h:q.lowPrice,volume:q.volume,sourceTimestamp:q.closeTime?new Date(Number(q.closeTime)).toISOString():null});}));}
  if(fi&&ft){const fm=new Map(ft.map(x=>[x.symbol,x]));out.push(...fi.symbols.filter(x=>x.status==='TRADING'&&x.contractType==='PERPETUAL'&&x.quoteAsset==='USDT').map(x=>{const q=fm.get(x.symbol)||{};return row('Binance','perpetual',x.symbol,x.baseAsset,x.quoteAsset,q.lastPrice,q.priceChangePercent,q.quoteVolume,{high24h:q.highPrice,low24h:q.lowPrice,volume:q.volume});}));}
  const valid=out.filter(Boolean);if(!valid.length)throw new Error(jobs.filter(x=>x.status==='rejected').map(x=>x.reason?.message||'Binance API error').join('; ')||'Binance 未回傳有效報價');return valid;
 }
@@ -31,14 +31,14 @@ async function bybitCategory(category){
  const t=await getJson('https://api.bybit.com/v5/market/tickers?category='+category);
  if(t.retCode!==0)throw new Error(t.retMsg||'Bybit tickers error');
  const map=new Map((t.result?.list||[]).map(x=>[x.symbol,x]));
- return items.filter(x=>x.status==='Trading').map(x=>{const q=map.get(x.symbol)||{};return row('Bybit',category==='spot'?'spot':'perpetual',x.symbol,x.baseCoin,x.quoteCoin,q.lastPrice,Number(q.price24hPcnt)*100,q.turnover24h,{high24h:q.highPrice24h,low24h:q.lowPrice24h,volume:q.volume24h,nativeSymbol:x.symbol,nativeType:category});});
+ return items.filter(x=>x.status==='Trading').map(x=>{const q=map.get(x.symbol)||{};return row('Bybit',category==='spot'?'spot':'perpetual',x.symbol,x.baseCoin,x.quoteCoin,q.lastPrice,Number(q.price24hPcnt)*100,q.turnover24h,{high24h:q.highPrice24h,low24h:q.lowPrice24h,volume:q.volume24h,sourceTimestamp:t.time?new Date(Number(t.time)).toISOString():null,nativeSymbol:x.symbol,nativeType:category});});
 }
 async function bybitMarkets(){const r=await Promise.allSettled([bybitCategory('spot'),bybitCategory('linear')]);const out=r.flatMap(x=>x.status==='fulfilled'?x.value:[]);if(!out.length)throw new Error(r.filter(x=>x.status==='rejected').map(x=>x.reason.message).join('; '));return out;}
 async function okxCategory(instType,marketType){
  const [ins,ticks]=await Promise.all([getJson('https://www.okx.com/api/v5/public/instruments?instType='+instType),getJson('https://www.okx.com/api/v5/market/tickers?instType='+instType)]);
  if(ins.code!=='0'||ticks.code!=='0')throw new Error('OKX public API error');
  const map=new Map(ticks.data.map(x=>[x.instId,x]));
- return ins.data.filter(x=>x.state==='live').map(x=>{const q=map.get(x.instId)||{};const base=x.ctValCcy||x.baseCcy||x.instId.split('-')[0],quote=x.settleCcy||x.quoteCcy||'USDT';return row('OKX',marketType,x.instId.replace(/-/g,''),base,quote,q.last,Number(q.open24h)>0?(Number(q.last)/Number(q.open24h)-1)*100:null,q.volCcyQuote||q.volCcy24h,{high24h:q.high24h,low24h:q.low24h,volume:q.vol24h,nativeSymbol:x.instId,nativeType:instType});});
+ return ins.data.filter(x=>x.state==='live').map(x=>{const q=map.get(x.instId)||{};const base=x.ctValCcy||x.baseCcy||x.instId.split('-')[0],quote=x.settleCcy||x.quoteCcy||'USDT';return row('OKX',marketType,x.instId.replace(/-/g,''),base,quote,q.last,Number(q.open24h)>0?(Number(q.last)/Number(q.open24h)-1)*100:null,q.volCcyQuote||q.volCcy24h,{high24h:q.high24h,low24h:q.low24h,volume:q.vol24h,sourceTimestamp:q.ts?new Date(Number(q.ts)).toISOString():null,nativeSymbol:x.instId,nativeType:instType});});
 }
 async function okxMarkets(){const r=await Promise.allSettled([okxCategory('SPOT','spot'),okxCategory('SWAP','perpetual')]);const out=r.flatMap(x=>x.status==='fulfilled'?x.value:[]);if(!out.length)throw new Error(r.filter(x=>x.status==='rejected').map(x=>x.reason.message).join('; '));return out;}
 async function coinbaseMarkets(){
