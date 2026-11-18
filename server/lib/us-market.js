@@ -60,6 +60,17 @@ async function searchSymbols(query){
   } finally {clearTimeout(timer);}
 }
 
+async function getNews(query='US stock market'){
+  const url='https://query1.finance.yahoo.com/v1/finance/search?'+new URLSearchParams({q:query,quotesCount:'0',newsCount:'10'});
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);
+  try{
+    const response=await fetch(url,{signal:controller.signal,headers:{'User-Agent':UA,accept:'application/json'}});
+    if(!response.ok)throw new Error('Yahoo Finance news HTTP '+response.status);
+    const payload=await response.json();
+    return (payload.news||[]).slice(0,10).map(x=>({title:x.title||'',publisher:x.publisher||'Yahoo Finance',link:x.link||'',publishedAt:x.providerPublishTime?new Date(x.providerPublishTime*1000).toISOString():null,type:x.type||'NEWS'})).filter(x=>x.title&&x.link);
+  } finally {clearTimeout(timer);}
+}
+
 async function mapLimit(items,limit,fn){
   const out=new Array(items.length);let next=0;
   await Promise.all(Array.from({length:Math.min(limit,items.length)},async()=>{while(true){const i=next++;if(i>=items.length)return;try{out[i]=await fn(items[i],i);}catch(error){out[i]={error:error.message,symbol:items[i][0]};}}}));
@@ -76,6 +87,7 @@ async function loadMarket(){
     if(INDICES.some(x=>x[0]===row.symbol))indices.push(row);
   }
   if(!Object.keys(data).length)throw new Error('美股資料來源暫時無法連線');
+  let news=[];try{news=await getNews('US stock market');}catch(_){}
   const scanned=STOCKS.map(([symbol,name,sector])=>{
     const quote=data[symbol];if(!quote)return null;
     const ind=indicators(quote.candles);
@@ -83,7 +95,7 @@ async function loadMarket(){
     const scorecard=ind&&last?scoreStock({...ind,asOf:quote.timestamp||last.timestamp,maxAgeMs:5*24*60*60*1000,dailyChangePct:quote.changePct,priceVsEma20Pct:ind.ema20?(last.close/ind.ema20-1)*100:null,priceVsEma60Pct:ind.ema60?(last.close/ind.ema60-1)*100:null,return5dPct:quote.candles.length>=6?(last.close/quote.candles.at(-6).close-1)*100:null,return20dPct:quote.candles.length>=21?(last.close/quote.candles.at(-21).close-1)*100:null}):null;
     return {symbol,name,sector,...quote,indicators:ind,scorecard};
   }).filter(Boolean);
-  return {data,indices,scan:scanned,source:'Yahoo Finance Chart 非官方端點；美股涵蓋清單 30 檔大型股／ETF，不代表全市場',timestamp:new Date().toISOString(),market:'US',coverage:{stocks:scanned.length,universe:STOCKS.length,indices:indices.length},disclaimer:'非官方免費端點，可能延遲、限流或中斷；不得作為券商即時報價或下單依據。'};
+  return {data,indices,scan:scanned,news,source:'Yahoo Finance Chart 非官方端點；美股涵蓋清單 30 檔大型股／ETF，不代表全市場',timestamp:new Date().toISOString(),market:'US',coverage:{stocks:scanned.length,universe:STOCKS.length,indices:indices.length},disclaimer:'非官方免費端點，可能延遲、限流或中斷；不得作為券商即時報價或下單依據。'};
 }
 
-module.exports={STOCKS,INDICES,getChart,loadMarket,searchSymbols};
+module.exports={STOCKS,INDICES,getChart,loadMarket,searchSymbols,getNews};
