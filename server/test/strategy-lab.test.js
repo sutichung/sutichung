@@ -108,3 +108,13 @@ test('MTF strategy rejects missing volume and timestamps in either timeframe',()
  const missingDailyTime=daily.map(x=>({...x}));missingDailyTime[10].time=null;
  assert.equal(runMtfStrategy(intraday,missingDailyTime,{feeBps:10,slippageBps:5,sellTaxBps:0,annualization:365}).status,'invalid_data');
 });
+
+test('annualization follows the actual bar interval across daily and intraday markets',()=>{
+ const daily=candles(140);
+ const intraday=candles(140);intraday.forEach((x,i)=>{x.time=new Date(Date.UTC(2024,0,1)+i*4*60*60*1000).toISOString();});
+ assert.equal(inferAnnualization(daily,'crypto').annualization,365);
+ assert.equal(inferAnnualization(daily,'tw-stock').annualization,252);
+ assert.equal(inferAnnualization(intraday,'crypto').annualization,2190);
+ assert.equal(inferAnnualization(intraday,'us-stock').annualization,410);
+ assert.equal(inferAnnualization(intraday,'tw-stock').annualization,284);
+});
