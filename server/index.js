@@ -502,7 +502,7 @@ async function route(req,res){
     const result=await diagnoseProviders();
     return json(res,200,result);
   }
-  if(u.pathname==='/api/research/outcomes'){
+  if(u.pathname==='/api/research/outcomes'||u.pathname==='/api/market/research/outcomes'){
     const result=await safeLoad('research-outcomes',60000,()=>researchStorage.listReports(30),e=>({status:'unavailable',source:'Supabase private Storage',fetchedAt:now(),count:0,data:[],error:e.message}));
     return json(res,result.status==='unavailable'?503:200,result);
   }
