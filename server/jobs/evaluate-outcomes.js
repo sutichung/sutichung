@@ -7,10 +7,10 @@ const horizon=process.argv[3]||'1d';
 const sessions=process.argv[4]===undefined?1:Number(process.argv[4]);
 const REQUIRED_SESSIONS={'1h':0,'1d':1,'5d':5,'20d':20};
 
-function evaluateOutcomes(previous,snapshot,{horizon='1d',sessions=1,costPct=0.3,now=Date.now()}={}){
+function evaluateOutcomes(previous,snapshot,{horizon='1d',sessions=1,costPct=0.785,now=Date.now()}={}){
  if(!previous||typeof previous!=='object'||!snapshot||typeof snapshot!=='object')throw new Error('Historical report and current snapshot are required');
  if(!(horizon in REQUIRED_SESSIONS)||sessions!==REQUIRED_SESSIONS[horizon])throw new Error('Horizon and trading-session count do not match');
- if(!Number.isFinite(costPct)||costPct<0||costPct>20)throw new Error('Round-trip cost assumption must be between 0 and 20 percent');
+ if(!Number.isFinite(costPct)||costPct<0||costPct>10)throw new Error('Round-trip cost assumption must be between 0 and 20 percent');
  const sourceAsOf=previous.snapshotTimestamp||previous.scanTimestamp||previous.generatedAt;
  const sourceTime=Date.parse(sourceAsOf||'');
  if(!Number.isFinite(sourceTime)||sourceTime>now+30000)throw new Error('Historical signal snapshot timestamp is invalid or in the future');
@@ -76,7 +76,7 @@ async function main(){
  if(!reportPath||!fs.existsSync(reportPath))throw new Error('Historical close-review JSON file is required');
  const previous=JSON.parse(fs.readFileSync(reportPath,'utf8'));
  const snapshot=await get('/api/market/snapshot');
- const rawCost=process.env.ROUND_TRIP_COST_PCT===undefined?0.3:Number(process.env.ROUND_TRIP_COST_PCT);
+ const configuredCost=process.env.ROUND_TRIP_COST_PCT===undefined?0.785:Number(process.env.ROUND_TRIP_COST_PCT);\n const rawCost=Number.isFinite(configuredCost)&&configuredCost>=0&&configuredCost<=10?configuredCost:0.785;
  const report=evaluateOutcomes(previous,snapshot,{horizon,sessions,costPct:rawCost});
  fs.mkdirSync('reports',{recursive:true});
  const date=new Date().toISOString().slice(0,10),stem='outcome-review-'+horizon+'-'+date;
