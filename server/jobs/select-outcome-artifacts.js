@@ -7,7 +7,7 @@ function selectOutcomeArtifacts(artifacts,currentRunId,currentDate=new Date().to
   const date=String(artifact.created_at||'').slice(0,10);
   if(!artifact.name||!artifact.name.startsWith('taiwan-market-close-review-')||
      String(artifact.workflow_run?.id)===String(currentRunId)||artifact.expired===true||
-     !/^\d{4}-\\d{2}-\\d{2}$/.test(date)||date>=currentDate)continue;
+     !/^\d{4}-\d{2}-\d{2}$/.test(date)||date>=currentDate)continue;
   const old=byDate.get(date);
   if(!old||String(artifact.created_at)>String(old.created_at))byDate.set(date,artifact);
  }
