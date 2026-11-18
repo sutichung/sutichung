@@ -1,6 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-
-const API = (process.env.REACT_APP_MARKET_API || '/api/market').replace(/\\/$/, '');
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 const palette = { bg:'#0b1422', panel:'#111d30', border:'#2b405c', text:'#e7eef9', muted:'#91a1b8', green:'#34d399', yellow:'#fbbf24', red:'#fb7185', blue:'#60a5fa' };
 const crews = [
   { id:'network', name:'網路與伺服器維修組', icon:'🌐', test:/health|伺服器|網路|api/i, action:'檢查服務存活、API 回應與上游連線；若服務無回應，先確認 Render 部署與日誌。' },
@@ -17,7 +15,7 @@ async function getJson(path) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 9000);
   try {
-    const response = await fetch(API + path, { headers, signal:controller.signal, cache:'no-store' });
+    const response = await fetch(path, { headers, signal:controller.signal, cache:'no-store' });
     if (!response.ok) throw new Error('HTTP ' + response.status);
     return await response.json();
   } finally { clearTimeout(timer); }
@@ -33,6 +31,7 @@ function statusLabel(status) {
   return status || '未知';
 }
 export default function SystemControlCenter() {
+  const busyRef = useRef(false);
   const [health, setHealth] = useState(null);
   const [colony, setColony] = useState(null);
   const [providers, setProviders] = useState(null);
@@ -43,7 +42,8 @@ export default function SystemControlCenter() {
   const [expanded, setExpanded] = useState(true);
 
   const selfCheck = useCallback(async () => {
-    if (busy) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true); setError('');
     const results = await Promise.allSettled([getJson('/health'), getJson('/colony/status')]);
     if (results[0].status === 'fulfilled') setHealth(results[0].value);
@@ -51,8 +51,9 @@ export default function SystemControlCenter() {
     if (results[1].status === 'fulfilled') setColony(results[1].value);
     else setError(old => [old, '蟻群狀態讀取失敗：' + results[1].reason.message].filter(Boolean).join('；'));
     setLastCheck(new Date().toISOString());
+    busyRef.current = false;
     setBusy(false);
-  }, [busy]);
+  }, []);
 
   const fullCheck = useCallback(async () => {
     if (providerBusy) return;
