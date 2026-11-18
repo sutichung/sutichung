@@ -15,7 +15,7 @@ permissions:
   id-token: write
 concurrency:
   group: taiwan-production-smoke
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   verify-live-data:
     runs-on: ubuntu-latest
@@ -37,6 +37,11 @@ jobs:
             exit 0
           fi
           for attempt in $(seq 1 36); do
+            CURRENT_MAIN=$(git ls-remote "https://github.com/$GITHUB_REPOSITORY.git" refs/heads/main | cut -f1)
+            if [ "$CURRENT_MAIN" != "$EXPECTED_COMMIT" ]; then
+              echo "Skipping stale commit $EXPECTED_COMMIT; main advanced to $CURRENT_MAIN"
+              exit 0
+            fi
             if curl --fail --silent --show-error --max-time 10 "$MARKET_APP_URL/api/health" -o /tmp/health.json; then
               ACTUAL_COMMIT=$(node -e "const h=require('/tmp/health.json');process.stdout.write(h.commit||'')")
               if [ "$ACTUAL_COMMIT" = "$EXPECTED_COMMIT" ]; then
