@@ -476,10 +476,13 @@ async function route(req,res){
     }catch(e){return json(res,e.status||502,{error:e.message});}
   }
   if(['/api/colony/status','/api/diagnostics/providers'].includes(u.pathname)) {
-    if(!SUPABASE_CONFIGURED)return json(res,503,{error:'developer_console_auth_unavailable'});
-    const consoleUser=await authenticatedUser(req);
-    if(!consoleUser)return json(res,401,{error:'authentication_required'});
-    if(!isAdminUser(consoleUser))return json(res,403,{error:'developer_access_required'});
+    const automationAuthorized=req.method==='GET'&&u.pathname==='/api/diagnostics/providers'&&await verifyGitHubActionsToken(bearerToken(req));
+    if(!automationAuthorized){
+      if(!SUPABASE_CONFIGURED)return json(res,503,{error:'developer_console_auth_unavailable'});
+      const consoleUser=await authenticatedUser(req);
+      if(!consoleUser)return json(res,401,{error:'authentication_required'});
+      if(!isAdminUser(consoleUser))return json(res,403,{error:'developer_access_required'});
+    }
   }
   if(req.method!=='GET'){return json(res,405,{error:'method_not_allowed'});}
   if(u.pathname==='/api/colony/status')return json(res,200,antColony.getStatus());
@@ -489,7 +492,7 @@ async function route(req,res){
   }
   if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,auth:{configured:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY},provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),providers:{finmind:!!FINMIND_TOKEN,fugle:!!FUGLE_API_KEY,youtubeApiKeyConfigured:!!process.env.YOUTUBE_API_KEY,youtubeLiveResolver:!!process.env.YOUTUBE_API_KEY,youtubeChannelEmbedFallback:true,openrouter:!!process.env.OPENROUTER_API_KEY,gemini:!!process.env.GEMINI_API_KEY,groq:!!process.env.GROQ_API_KEY,xai:!!process.env.XAI_API_KEY,deepseek:!!process.env.DEEPSEEK_API_KEY,cloudflare:!!(process.env.CLOUDFLARE_API_TOKEN&&process.env.CLOUDFLARE_ACCOUNT_ID),realtime:null,realtimeProviderConfigured:!!(FUGLE_API_KEY||process.env.MARKET_REALTIME_URL),twseMisFallback:true,tpexRealtimeConfigured:!!FUGLE_API_KEY,tpexHistoricalFallback:true,scan:true,flows:true,futures:true,sentiment:true,news:true,openDataArchive:true},mode:process.env.NODE_ENV==='production'?'production':'development'});
   if(SUPABASE_CONFIGURED&&u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/api/auth/')){
-    const automationPaths=new Set(['/api/market/snapshot','/api/market/institutional-flows','/api/market/futures','/api/market/sentiment','/api/market/scan','/api/market/news','/api/market/calendar']);
+    const automationPaths=new Set(['/api/market/snapshot','/api/market/institutional-flows','/api/market/futures','/api/market/sentiment','/api/market/scan','/api/market/news','/api/market/calendar','/api/diagnostics/providers']);
     const automationAuthorized=req.method==='GET'&&automationPaths.has(u.pathname)&&await verifyGitHubActionsToken(bearerToken(req));
     if(!automationAuthorized){
       const user=await authenticatedUser(req);if(!user)return json(res,401,{error:'authentication_required'});
