@@ -31,3 +31,20 @@ test('trade tape identifies large trades and ignores invalid rows', () => {
   assert.equal(rows[0].large, false);
   assert.equal(rows[1].large, true);
 });
+
+test('order book rejects crossed books and non-positive depth rows', () => {
+  assert.throws(() => normalizeBook('test', [[102, 1]], [[101, 1]], null), /orderbook_crossed/);
+  assert.throws(() => normalizeBook('test', [[100, 'NaN']], [[101, 1]], null), /orderbook_empty/);
+});
+
+test('whale classification only runs when quote currency is USD comparable', () => {
+  const rows = [{ id: '1', timestamp: 1700000000000, side: 'buy', price: '60000', amount: '1', quoteCurrency: 'USDT' }];
+  assert.equal(normalizeTrades('Binance', rows, 50000)[0].large, true);
+  assert.equal(normalizeTrades('Binance', [{ ...rows[0], quoteCurrency: 'BTC' }], 50000)[0].large, null);
+});
+
+test('missing trade timestamps and explicit null cost stay missing or derive from price and amount', () => {
+  const [trade] = normalizeTrades('Binance', [{ price: '100', amount: '2', timestamp: null, cost: null, side: 'buy' }]);
+  assert.equal(trade.timestamp, null);
+  assert.equal(trade.quoteValue, 200);
+});
