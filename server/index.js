@@ -17,8 +17,10 @@ const { runStrategyLab } = require('./lib/strategy-lab');
 const globalFinance = require('./lib/global-finance');
 const globalIntelligence = require('./lib/intelligence');
 const { diagnoseProviders } = require('./lib/provider-diagnostics');
+const { createDependencyVulnerabilityScanner } = require('./lib/dependency-vulnerabilities');
 const { verifyGitHubActionsToken } = require('./lib/github-oidc');
 const researchStorage = require('./lib/research-storage').createResearchStorage();
+const dependencyVulnerabilityScanner = createDependencyVulnerabilityScanner({ lockPath: path.join(__dirname, '..', 'package-lock.json'), manifestPath: path.join(__dirname, '..', 'package.json') });
 
 const PORT = Number(process.env.PORT || 8787);
 const FINMIND_BASE = process.env.FINMIND_BASE || 'https://api.finmindtrade.com/api/v4/data';
@@ -517,8 +519,8 @@ async function route(req,res){
       return json(res,404,{error:'not_found'});
     }catch(e){return json(res,e.status||502,{error:e.message});}
   }
-  if(['/api/colony/status','/api/diagnostics/providers'].includes(u.pathname)) {
-    const automationAuthorized=req.method==='GET'&&u.pathname==='/api/diagnostics/providers'&&await verifyGitHubActionsToken(bearerToken(req),{allowProductionSmoke:true});
+  if(['/api/colony/status','/api/diagnostics/providers','/api/diagnostics/vulnerabilities'].includes(u.pathname)) {
+    const automationAuthorized=req.method==='GET'&&['/api/diagnostics/providers','/api/diagnostics/vulnerabilities'].includes(u.pathname)&&await verifyGitHubActionsToken(bearerToken(req),{allowProductionSmoke:true});
     if(!automationAuthorized){
       if(!SUPABASE_CONFIGURED)return json(res,503,{error:'developer_console_auth_unavailable'});
       const consoleUser=await authenticatedUser(req);
@@ -532,14 +534,18 @@ async function route(req,res){
     const result=await diagnoseProviders();
     return json(res,200,{...result,security:getTelemetry()});
   }
+  if(u.pathname==='/api/diagnostics/vulnerabilities'){
+    const result=await dependencyVulnerabilityScanner.scan({force:u.searchParams.get('refresh')==='1'});
+    return json(res,result.status==='unavailable'?503:200,result);
+  }
   if(u.pathname==='/api/research/outcomes'||u.pathname==='/api/market/research/outcomes'){
     const result=await safeLoad('research-outcomes',60000,()=>researchStorage.listReports(30),e=>({status:'unavailable',source:'Supabase private Storage',fetchedAt:now(),count:0,data:[],error:e.message}));
     return json(res,result.status==='unavailable'?503:200,result);
   }
   if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,commit:process.env.RENDER_GIT_COMMIT||null,branch:process.env.RENDER_GIT_BRANCH||null,auth:{configured:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY},provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),providers:{finmind:!!FINMIND_TOKEN,fugle:!!FUGLE_API_KEY,youtubeApiKeyConfigured:!!process.env.YOUTUBE_API_KEY,youtubeLiveResolver:!!process.env.YOUTUBE_API_KEY,youtubeChannelEmbedFallback:true,openrouter:!!process.env.OPENROUTER_API_KEY,gemini:!!process.env.GEMINI_API_KEY,groq:!!process.env.GROQ_API_KEY,xai:!!process.env.XAI_API_KEY,deepseek:!!process.env.DEEPSEEK_API_KEY,cloudflare:!!(process.env.CLOUDFLARE_API_TOKEN&&process.env.CLOUDFLARE_ACCOUNT_ID),realtime:null,realtimeProviderConfigured:!!(FUGLE_API_KEY||process.env.MARKET_REALTIME_URL),twseMisFallback:true,tpexRealtimeConfigured:!!FUGLE_API_KEY,tpexHistoricalFallback:true,scan:true,flows:true,futures:true,sentiment:true,news:true,openDataArchive:true},mode:process.env.NODE_ENV==='production'?'production':'development'});
   if(SUPABASE_CONFIGURED&&u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/api/auth/')){
-    const automationPaths=new Set(['/api/market/snapshot','/api/market/institutional-flows','/api/market/futures','/api/market/sentiment','/api/market/scan','/api/market/news','/api/market/calendar','/api/diagnostics/providers','/api/diagnostics/market','/api/crypto/market','/api/crypto/risk/BTCUSDT']);
-    const smokeReadOnlyPaths=new Set(['/api/diagnostics/providers','/api/diagnostics/market','/api/crypto/market','/api/crypto/risk/BTCUSDT']);
+    const automationPaths=new Set(['/api/market/snapshot','/api/market/institutional-flows','/api/market/futures','/api/market/sentiment','/api/market/scan','/api/market/news','/api/market/calendar','/api/diagnostics/providers','/api/diagnostics/vulnerabilities','/api/diagnostics/market','/api/crypto/market','/api/crypto/risk/BTCUSDT']);
+    const smokeReadOnlyPaths=new Set(['/api/diagnostics/providers','/api/diagnostics/vulnerabilities','/api/diagnostics/market','/api/crypto/market','/api/crypto/risk/BTCUSDT']);
     const automationAuthorized=req.method==='GET'&&automationPaths.has(u.pathname)&&await verifyGitHubActionsToken(bearerToken(req),{allowProductionSmoke:smokeReadOnlyPaths.has(u.pathname)});
     if(!automationAuthorized){
       const user=await authenticatedUser(req);if(!user)return json(res,401,{error:'authentication_required'});

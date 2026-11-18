@@ -73,6 +73,8 @@ jobs:
           curl --fail --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 90 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/crypto/risk/BTCUSDT?type=perpetual&exchange=Binance" -o /tmp/crypto-risk.json
           echo "Checking provider and firewall diagnostics"
           curl --fail --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 45 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/providers" -o /tmp/providers.json
+          echo "Checking dependency vulnerability risk data"
+          curl --fail --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 90 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/vulnerabilities" -o /tmp/vulnerabilities.json
           echo "Checking that Render did not switch to a different commit during the smoke run"
           curl --fail --silent --show-error --retry 2 --retry-all-errors --retry-delay 3 --max-time 15 "$MARKET_APP_URL/api/health" -o /tmp/health-after.json
           mkdir -p reports
@@ -84,6 +86,7 @@ jobs:
           const crypto = JSON.parse(fs.readFileSync('/tmp/crypto.json', 'utf8'));
           const cryptoRisk = JSON.parse(fs.readFileSync('/tmp/crypto-risk.json', 'utf8'));
           const providers = JSON.parse(fs.readFileSync('/tmp/providers.json', 'utf8'));
+          const vulnerabilities = JSON.parse(fs.readFileSync('/tmp/vulnerabilities.json', 'utf8'));
           const exchangeChecks = (providers.checks || []).filter(x => ['binance','bybit','okx','coinbase','kraken'].includes(x.id));
           const providerFailures = (providers.checks || []).filter(x => ['auth_error','permission_error','rate_limited','timeout','error','upstream_error','http_error','endpoint_error'].includes(x.status));
           const listedCount = Number(market.listedCount || 0);
@@ -124,6 +127,7 @@ jobs:
               scenarios: (cryptoRisk.scenarios || []).map(x => ({ id: x.id, score: x.score, name: x.name }))
             },
             providerFailures,
+            dependencyVulnerabilities: { status: vulnerabilities.status, scannedPackageCount: vulnerabilities.scannedPackageCount, vulnerabilityCount: vulnerabilities.vulnerabilityCount, severityCounts: vulnerabilities.severityCounts, productionVulnerabilityCount: vulnerabilities.productionVulnerabilityCount },
             usOfficialEntitlement: officialUs,
             warnings: [
               ...(officialUs?.status === 'not_configured' ? ['us_official_equities_feed_not_configured'] : []),
@@ -140,6 +144,7 @@ jobs:
           if (report.cryptoRiskRadar.status !== 'ok' || report.cryptoRiskRadar.candleCount < 22) throw new Error('crypto_risk_radar_candles_unavailable');
           if (report.cryptoRiskRadar.microstructureStatus !== 'connected' || report.cryptoRiskRadar.coverage.orderBook !== true || report.cryptoRiskRadar.coverage.tradeTape !== true) throw new Error('crypto_risk_orderbook_or_trade_tape_unavailable');
           if (report.providerFailures.length) throw new Error('one_or_more_configured_providers_failed');
+          if (!['clean','vulnerable'].includes(vulnerabilities.status) || Number(vulnerabilities.scannedPackageCount || 0) < 1) throw new Error('dependency_vulnerability_scan_incomplete');
           NODE
       - uses: actions/upload-artifact@v4
         if: always()

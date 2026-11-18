@@ -11,6 +11,8 @@ FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production PORT=8787
 COPY --from=build /app/server ./server
+COPY --from=build /app/package-lock.json ./package-lock.json
+COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/build ./build
 EXPOSE 8787
 USER node
