@@ -3,7 +3,7 @@
 function buildResearchLists(rows, limit=30) {
   const usable=(Array.isArray(rows)?rows:[]).filter(x=>
     x && x.scorecard && x.scorecard.status==='research-ready' &&
-    Number.isFinite(Number(x.scorecard.score))
+    typeof x.scorecard.score==='number' && Number.isFinite(x.scorecard.score)
   );
   const bullish=usable.filter(x=>x.scorecard.direction==='偏向買進')
     .sort((a,b)=>Number(b.scorecard.score)-Number(a.scorecard.score));
