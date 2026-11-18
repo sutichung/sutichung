@@ -108,3 +108,83 @@ html[data-device="phone"] .stock-app .stock-panel:nth-of-type(3){animation-delay
 @media(prefers-reduced-motion:reduce){
  html[data-device="phone"] .stock-app .stock-panel,html[data-device="phone"] .stock-app>header{animation:none!important}
 }
+
+
+/* Version 3 mobile workspace refinement: compact navigation, safe areas and readable market panels. */
+@media(max-width:760px){
+  html,body,#root{width:100%;max-width:100%;overflow-x:clip}
+  body{padding-bottom:calc(78px + env(safe-area-inset-bottom))}
+  .stock-app{width:100%;max-width:100%;overflow-x:clip!important}
+  .stock-app .market-zone-nav{
+    position:fixed!important;top:auto!important;bottom:0!important;left:50%!important;
+    transform:translateX(-50%);width:min(calc(100% - 16px),760px)!important;
+    max-width:760px;z-index:1000!important;margin:0!important;
+    padding:8px 9px calc(8px + env(safe-area-inset-bottom))!important;
+    border:1px solid rgba(148,163,184,.24)!important;border-bottom:0!important;
+    border-radius:17px 17px 0 0!important;background:rgba(8,13,24,.94)!important;
+    box-shadow:0 -12px 34px rgba(0,0,0,.32)!important;
+    backdrop-filter:blur(22px) saturate(150%)!important;
+    -webkit-backdrop-filter:blur(22px) saturate(150%)!important;
+    overflow-x:auto!important;overscroll-behavior-x:contain;scrollbar-width:none;
+  }
+  .stock-app .market-zone-nav::-webkit-scrollbar{display:none}
+  .stock-app .market-zone-nav a{
+    flex:0 0 auto!important;min-width:0!important;min-height:44px!important;
+    display:flex;align-items:center;justify-content:center;white-space:nowrap;
+    padding:10px 12px!important;border-radius:12px!important;font-size:11px!important;
+    line-height:1.2;letter-spacing:-.02em;
+  }
+  .stock-app #tw-market,.stock-app #us-market,.stock-app #crypto-market,
+  .stock-app #global-finance,.stock-app #global-intelligence{
+    scroll-margin-top:14px!important;scroll-margin-bottom:100px!important;
+    min-width:0!important;max-width:100%!important;overflow-x:clip;
+  }
+  .stock-app #us-market,.stock-app #crypto-market{
+    padding:12px!important;border-radius:17px!important;
+  }
+  .stock-app #us-market button,.stock-app #crypto-market button{
+    min-height:44px;touch-action:manipulation;
+  }
+  .stock-app #us-market input,.stock-app #us-market select,
+  .stock-app #crypto-market input,.stock-app #crypto-market select{
+    min-width:0;max-width:100%;min-height:44px;font-size:16px!important;
+  }
+  .stock-app #us-market [style*="grid-template-columns:repeat(4"],
+  .stock-app #us-market [style*="grid-template-columns: repeat(4"],
+  .stock-app #crypto-market [style*="grid-template-columns:repeat(4"],
+  .stock-app #crypto-market [style*="grid-template-columns: repeat(4"]{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important;
+  }
+  .stock-app #us-market [style*="grid-template-columns:repeat(3"],
+  .stock-app #us-market [style*="grid-template-columns: repeat(3"],
+  .stock-app #crypto-market [style*="grid-template-columns:repeat(3"],
+  .stock-app #crypto-market [style*="grid-template-columns: repeat(3"]{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important;
+  }
+  .stock-app #us-market [style*="grid-template-columns:repeat(2"],
+  .stock-app #crypto-market [style*="grid-template-columns:repeat(2"]{
+    min-width:0;
+  }
+  .stock-app #us-market table,.stock-app #crypto-market table{
+    display:block;width:100%;max-width:100%;overflow-x:auto;
+    -webkit-overflow-scrolling:touch;white-space:nowrap;
+  }
+  .stock-app #us-market canvas,.stock-app #crypto-market canvas,
+  .stock-app #tw-market canvas{display:block;max-width:100%!important}
+  .stock-app #us-market a,.stock-app #crypto-market a{overflow-wrap:anywhere}
+  .stock-app [role="status"]{overflow-wrap:anywhere;line-height:1.55}
+}
+@media(max-width:390px){
+  .stock-app .market-zone-nav a{padding:9px 10px!important;font-size:10px!important}
+  .stock-app #us-market,.stock-app #crypto-market{padding:9px!important}
+  .stock-app #us-market [style*="font-size: 20px"],
+  .stock-app #crypto-market [style*="font-size: 21px"]{font-size:18px!important}
+}
+@media(max-width:340px){
+  .stock-app .market-zone-nav{width:calc(100% - 10px)!important}
+  .stock-app .market-zone-nav a{padding:8px!important}
+}
+@media(hover:none) and (max-width:760px){
+  .stock-app .stock-panel:hover{transform:none!important}
+  .stock-app button:active,.stock-app a:active{filter:brightness(1.12)}
+}
