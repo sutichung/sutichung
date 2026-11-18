@@ -11,6 +11,7 @@ const { applyFirewall } = require('./lib/firewall');
 const antColony = require('./lib/ant-colony');
 const { loadMarket: loadUsMarket, getChart: getUsChart, searchSymbols: searchUsSymbols, getUniversePage: getUsUniversePage } = require('./lib/us-market');
 const cryptoMarket = require('./lib/crypto-market');
+const { assessMarketRisk } = require('./lib/market-risk');
 const globalFinance = require('./lib/global-finance');
 
 const PORT = Number(process.env.PORT || 8787);
@@ -543,6 +544,10 @@ async function route(req,res){
   if(u.pathname.startsWith('/api/crypto/history/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase(),type=u.searchParams.get('type')==='perpetual'?'perpetual':'spot',interval=u.searchParams.get('interval')||'1d',exchange=u.searchParams.get('exchange')||'Binance',nativeSymbol=u.searchParams.get('nativeSymbol')||symbol;
     try{return json(res,200,await cryptoMarket.getHistory(symbol,type,interval,exchange,nativeSymbol));}catch(e){return json(res,502,{error:e.message});}
+  }
+  if(u.pathname.startsWith('/api/crypto/risk/')){
+    const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase(),type=u.searchParams.get('type')==='perpetual'?'perpetual':'spot',exchange=u.searchParams.get('exchange')||'Binance',nativeSymbol=u.searchParams.get('nativeSymbol')||symbol;
+    try{const [history,derivatives]=await Promise.all([cryptoMarket.getHistory(symbol,type,u.searchParams.get('interval')||'1d',exchange,nativeSymbol),type==='perpetual'?cryptoMarket.getDerivatives(symbol,exchange,nativeSymbol):Promise.resolve(null)]);return json(res,200,assessMarketRisk(history,derivatives));}catch(e){return json(res,502,{status:'unavailable',error:e.message,scenarios:[]});}
   }
   if(u.pathname.startsWith('/api/crypto/derivatives/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase(),exchange=u.searchParams.get('exchange')||'Binance';
