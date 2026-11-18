@@ -152,6 +152,29 @@ async function diagnoseProviders(env = process.env) {
       return { httpStatus: response.status, dataCount: Array.isArray(payload.items) ? payload.items.length : 0, message: 'YouTube Data API 金鑰可用' };
     }));
   } else checks.push(notConfigured('youtube', 'YouTube Data API', 'Render 尚未設定 YOUTUBE_API_KEY；可使用官方頻道嵌入備援'));
+
+  const cryptoQuotes = [
+    ['binance', 'Binance 官方 BTC/USDT 現貨報價', 'https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT', payload => payload.symbol === 'BTCUSDT' && Number(payload.price) > 0, 'BTC/USDT 公開現貨報價端點成功；僅驗證單一商品連線'],
+    ['bybit', 'Bybit 官方 BTC/USDT 現貨報價', 'https://api.bybit.com/v5/market/tickers?category=spot&symbol=BTCUSDT', payload => payload.retCode === 0 && Number(payload.result?.list?.[0]?.lastPrice) > 0, 'BTC/USDT 公開現貨報價端點成功；僅驗證單一商品連線'],
+    ['okx', 'OKX 官方 BTC-USDT 現貨報價', 'https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT', payload => payload.code === '0' && Number(payload.data?.[0]?.last) > 0, 'BTC-USDT 公開現貨報價端點成功；僅驗證單一商品連線'],
+    ['coinbase', 'Coinbase Exchange 官方 BTC-USD 報價', 'https://api.exchange.coinbase.com/products/BTC-USD/ticker', payload => Number(payload.price) > 0, 'BTC-USD 公開現貨報價端點成功；僅驗證單一商品連線'],
+    ['kraken', 'Kraken 官方 XBT/USD 報價', 'https://api.kraken.com/0/public/Ticker?pair=XBTUSD', payload => !payload.error?.length && Number(Object.values(payload.result || {})[0]?.c?.[0]) > 0, 'XBT/USD 公開現貨報價端點成功；僅驗證單一商品連線']
+  ];
+  for (const [id, label, endpoint, valid, message] of cryptoQuotes) {
+    checks.push(probe(id, label, async () => {
+      const { response, body } = await request(endpoint, { headers: { accept: 'application/json' } });
+      if (!response.ok) throw new Error('upstream_http_' + response.status);
+      const payload = JSON.parse(body);
+      if (!valid(payload)) throw new Error(id + ' 報價回應格式錯誤或價格無效');
+      return { httpStatus: response.status, dataCount: 1, message };
+    }));
+  }
+  checks.push(notConfigured(
+    'us-equities-official',
+    '美股官方行情授權來源',
+    '尚未設定 Nasdaq／NYSE／CTA／UTP 或其授權資料商的有效行情 API；Yahoo Finance 僅為非官方備援，不列為官方行情連線。'
+  ));
+
   const results = await Promise.all(checks);
   const connected = results.filter(x => x.status === 'connected').length;
   const failed = results.filter(x => ['error','timeout','auth_error','permission_error','rate_limited'].includes(x.status)).length;
