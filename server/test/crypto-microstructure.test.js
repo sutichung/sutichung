@@ -13,6 +13,7 @@ test('order book computes spread and depth imbalance from valid levels', () => {
   assert.equal(book.askDepth, 5);
   assert.equal(book.obi, 1 / 3);
   assert.equal(book.weightedObi, (8 + 2 / 2 - (4 + 1 / 2)) / (8 + 2 / 2 + 4 + 1 / 2));
+  assert.ok(book.obiNotional > 0, 'quote notional imbalance should reflect stronger bid-side notional');
   assert.equal(book.bestBidSize, 8);
   assert.equal(book.bestAskSize, 4);
   assert.ok(book.microPrice > book.midPrice, 'larger bid size should pull microprice upward');
@@ -81,4 +82,12 @@ test('depth bands only report levels actually present in the order book', () => 
   const asks = Array.from({ length: 20 }, (_, i) => [102 + i, 20 - i]);
   const book = normalizeBook('test', bids, asks, null, 20);
   assert.deepEqual(book.depthBands.map(x => x.levels), [5, 10, 20]);
+});
+
+test('order book normalizes unsorted levels before calculating best bid and ask', () => {
+  const book = normalizeBook('test', [[99, 2], [101, 3], [100, 4]], [[103, 2], [102, 5], [104, 1]], null, 10);
+  assert.equal(book.bestBid, 101);
+  assert.equal(book.bestAsk, 102);
+  assert.equal(book.bids[0][0], 101);
+  assert.equal(book.asks[0][0], 102);
 });
