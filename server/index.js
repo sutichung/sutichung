@@ -14,6 +14,7 @@ const cryptoMarket = require('./lib/crypto-market');
 const { assessMarketRisk } = require('./lib/market-risk');
 const globalFinance = require('./lib/global-finance');
 const globalIntelligence = require('./lib/intelligence');
+const { diagnoseProviders } = require('./lib/provider-diagnostics');
 
 const PORT = Number(process.env.PORT || 8787);
 const FINMIND_BASE = process.env.FINMIND_BASE || 'https://api.finmindtrade.com/api/v4/data';
@@ -473,6 +474,10 @@ async function route(req,res){
   }
   if(req.method!=='GET'){return json(res,405,{error:'method_not_allowed'});}
   if(u.pathname==='/api/colony/status')return json(res,200,antColony.getStatus());
+  if(u.pathname==='/api/diagnostics/providers'){
+    const result=await diagnoseProviders();
+    return json(res,200,result);
+  }
   if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,auth:{configured:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY},provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),providers:{finmind:!!FINMIND_TOKEN,fugle:!!FUGLE_API_KEY,youtubeApiKeyConfigured:!!process.env.YOUTUBE_API_KEY,youtubeLiveResolver:!!process.env.YOUTUBE_API_KEY,youtubeChannelEmbedFallback:true,openrouter:!!process.env.OPENROUTER_API_KEY,gemini:!!process.env.GEMINI_API_KEY,groq:!!process.env.GROQ_API_KEY,cloudflare:!!(process.env.CLOUDFLARE_API_TOKEN&&process.env.CLOUDFLARE_ACCOUNT_ID),realtime:null,realtimeProviderConfigured:!!(FUGLE_API_KEY||process.env.MARKET_REALTIME_URL),twseMisFallback:true,tpexRealtimeConfigured:!!FUGLE_API_KEY,tpexHistoricalFallback:true,scan:true,flows:true,futures:true,sentiment:true,news:true,openDataArchive:true},mode:process.env.NODE_ENV==='production'?'production':'development'});
   if(SUPABASE_CONFIGURED&&u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/api/auth/')){
     const user=await authenticatedUser(req);if(!user)return json(res,401,{error:'authentication_required'});
