@@ -93,8 +93,7 @@ async function loadMacro() {
     }
   }
   const requested=countries.length*indicators.length;
-  const missing=requested-data.length;
-  const failed=Math.min(requested,missing+failedIndicators);
+  const failed=requested-data.length;
   return {data,source:'World Bank Open Data API',fetchedAt:new Date().toISOString(),summary:{requested,received:data.length,failed},status:data.length?'connected':'unavailable',note:'總體經濟年度／季度資料，發布存在時間差，非即時市場報價。'};
 }
 
