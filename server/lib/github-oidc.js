@@ -32,7 +32,7 @@ async function verifyGitHubActionsToken(token,{fetchImpl=fetch,now=Date.now(),al
     if(claims.iss!==ISSUER||claims.aud!==EXPECTED.aud)return false;
     if(claims.repository!==EXPECTED.repository||claims.ref!==EXPECTED.ref)return false;
     const allowedWorkflowEvent=(claims.workflow_ref===MARKET_WORKFLOW&&['schedule','workflow_dispatch'].includes(claims.event_name))||
-      (allowProductionSmoke&&claims.workflow_ref===SMOKE_WORKFLOW&&claims.event_name==='push');
+      (allowProductionSmoke&&claims.workflow_ref===SMOKE_WORKFLOW&&['push','workflow_run'].includes(claims.event_name));
     if(!allowedWorkflowEvent)return false;
     if(!Number.isFinite(claims.exp)||claims.exp<seconds-30||!Number.isFinite(claims.iat)||claims.iat>seconds+30)return false;
     if(claims.nbf!=null&&(!Number.isFinite(claims.nbf)||claims.nbf>seconds+30))return false;
