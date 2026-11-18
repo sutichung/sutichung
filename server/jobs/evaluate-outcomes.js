@@ -4,7 +4,7 @@ const path=require('node:path');
 const base=String(process.env.MARKET_APP_URL||'').replace(/\\/$/,'');
 const reportPath=process.argv[2];
 const horizon=process.argv[3]||'1d';
-const sessions=Number(process.argv[4]||1);
+const sessions=process.argv[4]===undefined?1:Number(process.argv[4]);
 if(!base)throw new Error('MARKET_APP_URL is required');
 if(!reportPath||!fs.existsSync(reportPath))throw new Error('Historical close-review JSON file is required');
 if(!['1h','1d','5d','20d'].includes(horizon)||!([0,1,5,20].includes(sessions)))throw new Error('Unsupported evaluation horizon');
