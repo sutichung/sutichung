@@ -81,23 +81,31 @@ jobs:
           retention-days: 30
   close-review:
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '40 5 * * 1-5' || github.event.schedule == '10 13 * * 1-5'
+    outputs:
+      market_open: ${{ steps.generate.outputs.market_open }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Generate close review archive
+      - id: generate
+        name: Generate close review archive
         env:
           MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
-        run: node server/jobs/close-review.js
+        run: |
+          REPORT=$(node server/jobs/close-review.js)
+          echo "$REPORT"
+          MARKET_OPEN=$(printf '%s' "$REPORT" | jq -r '.marketOpen // false')
+          echo "market_open=$MARKET_OPEN" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
+        if: steps.generate.outputs.market_open == 'true'
         with:
           name: taiwan-market-close-review-${{ github.run_id }}
           path: reports/
           retention-days: 90
   outcome-evaluation:
-    if: github.event_name == 'schedule' && github.event.schedule == '40 5 * * 1-5'
+    if: github.event_name == 'schedule' && github.event.schedule == '40 5 * * 1-5' && needs.close-review.outputs.market_open == 'true'
     needs: close-review
     runs-on: ubuntu-latest
     steps:
