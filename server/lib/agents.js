@@ -190,7 +190,7 @@ async function buildAiCommittee(symbol, options) {
   const roles = {
     gemini: '技術分析專家，重點研判K線型態、SMA/EMA、MACD、RSI、KD、布林通道、ADX、CCI、MFI、ATR、VWAP、支撐壓力與量價結構。',
     groq: '市場情境與事件風險分析師，重點評估市場環境、波動風險、可能催化因素；未提供新聞時明確說明沒有新聞資料。',
-    cloudflare: '籌碼與風險報酬分析師，重點研判外資投信自營商、融資融券、集保大戶散戶比例、估值 PER/PBR、波動度與風險界線。',
+    cloudflare: '財務品質與風險報酬分析師，檢查可取得的財務資料、現金流、估值、波動度與風險界線；美股資料若未提供 SEC 財報數據，必須明確指出資料缺口，不得假設台股法人籌碼或集保資料存在。',
     openai: '獨立總體與交叉驗證分析師，檢查資料時效、指標是否互相矛盾、估值與風險報酬；提出反方論點，不可沿用其他 Agent 結論。'
   };
   const providers = ['gemini', 'groq', 'cloudflare'];
