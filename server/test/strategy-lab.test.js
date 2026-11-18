@@ -76,7 +76,7 @@ test('strategy lab normalizes Unix seconds and milliseconds timestamps',()=>{
 
 test('MTF daily filter only exposes fully closed daily candles',()=>{
  const daily=Array.from({length:201},(_,i)=>{
-  const close=i<200?100+i:1;
+  const close=i<150?100:i<200?101:1;
   return {time:new Date(Date.UTC(2024,0,1+i)).toISOString(),open:close,high:close+1,low:close-1,close,volume:1000};
  });
  const times=[new Date(Date.UTC(2024,0,1+200)).toISOString(),new Date(Date.UTC(2024,0,1+201)).toISOString()];
