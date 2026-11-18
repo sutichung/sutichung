@@ -503,6 +503,7 @@ async function route(req,res){
           member=users.find(x=>String(x.email||'').trim().toLowerCase()===email)||null;
           if(member||users.length<100)break;
         }
+        if(!member&&page>20)return json(res,503,{error:'會員清單超過本次安全搜尋上限，未建立新帳號；請縮小查找範圍或分頁核對後再試。'});
         const origin=(req.headers['x-forwarded-proto']||'https')+'://'+(req.headers['x-forwarded-host']||req.headers.host);
         let action,userId;
         if(member){
