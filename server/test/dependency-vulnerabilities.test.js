@@ -1,7 +1,10 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {collectLockedPackages,buildReport,severityOf,fixedVersionsOf}=require('../lib/dependency-vulnerabilities');
+const fs=require('node:fs/promises');
+const os=require('node:os');
+const path=require('node:path');
+const {collectLockedPackages,buildReport,severityOf,fixedVersionsOf,createDependencyVulnerabilityScanner}=require('../lib/dependency-vulnerabilities');
 
 test('collects exact locked npm package versions and distinguishes production from development',()=>{
  const lock={packages:{
@@ -49,4 +52,42 @@ test('partial batches never report a clean security result',()=>{
  const report=buildReport(packages,batches,1);
  assert.equal(report.status,'partial');
  assert.match(report.label,/不能判定安全/);
+});
+
+async function withScannerFiles(packageCount,run){
+ const dir=await fs.mkdtemp(path.join(os.tmpdir(),'vuln-scan-'));
+ const packages={'':{name:'test-app',version:'1.0.0'}};
+ for(let i=0;i<packageCount;i++)packages['node_modules/pkg-'+i]={version:'1.0.'+i,dev:false};
+ const lockPath=path.join(dir,'package-lock.json'),manifestPath=path.join(dir,'package.json');
+ await fs.writeFile(lockPath,JSON.stringify({packages}));
+ await fs.writeFile(manifestPath,JSON.stringify({dependencies:Object.fromEntries(Array.from({length:packageCount},(_,i)=>['pkg-'+i,'*']))}));
+ try{return await run({lockPath,manifestPath});}finally{await fs.rm(dir,{recursive:true,force:true});}
+}
+test('scanner counts successfully queried locked packages instead of reporting an empty partial result',async()=>{
+ await withScannerFiles(2,async({lockPath,manifestPath})=>{
+  const scanner=createDependencyVulnerabilityScanner({lockPath,manifestPath,fetchImpl:async(url,options)=>{
+   const body=JSON.parse(options.body);
+   return {ok:true,status:200,json:async()=>({results:body.queries.map(()=>({vulns:[]}))})};
+  }});
+  const report=await scanner.scan({force:true});
+  assert.equal(report.status,'clean');
+  assert.equal(report.scannedPackageCount,2);
+  assert.equal(report.totalPackageCount,2);
+  assert.equal(report.failedBatchCount,0);
+ });
+});
+test('scanner preserves successful batches and marks failed batches partial',async()=>{
+ await withScannerFiles(101,async({lockPath,manifestPath})=>{
+  const scanner=createDependencyVulnerabilityScanner({lockPath,manifestPath,fetchImpl:async(url,options)=>{
+   const body=JSON.parse(options.body);
+   if(body.queries.length===1)throw new Error('simulated_osv_outage');
+   return {ok:true,status:200,json:async()=>({results:body.queries.map(()=>({vulns:[]}))})};
+  }});
+  const report=await scanner.scan({force:true});
+  assert.equal(report.status,'partial');
+  assert.equal(report.scannedPackageCount,100);
+  assert.equal(report.totalPackageCount,101);
+  assert.equal(report.failedBatchCount,1);
+  assert.match(report.error,/simulated_osv_outage/);
+ });
 });
