@@ -7,7 +7,7 @@ const horizon=process.argv[3]||'1d';
 const sessions=Number(process.argv[4]||1);
 if(!base)throw new Error('MARKET_APP_URL is required');
 if(!reportPath||!fs.existsSync(reportPath))throw new Error('Historical close-review JSON file is required');
-if(!['1d','5d','20d'].includes(horizon)||![1,5,20].includes(sessions))throw new Error('Unsupported evaluation horizon');
+if(!['1h','1d','5d','20d'].includes(horizon)||!([0,1,5,20].includes(sessions)))throw new Error('Unsupported evaluation horizon');
 const previous=JSON.parse(fs.readFileSync(reportPath,'utf8'));
 const costPct=Number.isFinite(Number(process.env.ROUND_TRIP_COST_PCT))?Number(process.env.ROUND_TRIP_COST_PCT):0.3;
 async function oidcToken(){
