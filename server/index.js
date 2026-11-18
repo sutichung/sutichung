@@ -466,7 +466,7 @@ async function route(req,res){
     }catch(e){return json(res,e.status||502,{error:e.message});}
   }
   if(req.method!=='GET'){return json(res,405,{error:'method_not_allowed'});}
-  if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,auth:{configured:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY},provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),providers:{finmind:!!FINMIND_TOKEN,fugle:!!FUGLE_API_KEY,youtubeApiKeyConfigured:!!process.env.YOUTUBE_API_KEY,youtubeLiveResolver:!!process.env.YOUTUBE_API_KEY,youtubeChannelEmbedFallback:true,openrouter:!!process.env.OPENROUTER_API_KEY,gemini:!!process.env.GEMINI_API_KEY,grok:!!process.env.XAI_API_KEY,deepseek:!!process.env.DEEPSEEK_API_KEY,realtime:null,realtimeProviderConfigured:!!(FUGLE_API_KEY||process.env.MARKET_REALTIME_URL),twseMisFallback:true,tpexRealtimeConfigured:!!FUGLE_API_KEY,tpexHistoricalFallback:true,scan:true,flows:true,futures:true,sentiment:true,news:true,openDataArchive:true},mode:process.env.NODE_ENV==='production'?'production':'development'});
+  if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,auth:{configured:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY},provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),providers:{finmind:!!FINMIND_TOKEN,fugle:!!FUGLE_API_KEY,youtubeApiKeyConfigured:!!process.env.YOUTUBE_API_KEY,youtubeLiveResolver:!!process.env.YOUTUBE_API_KEY,youtubeChannelEmbedFallback:true,openrouter:!!process.env.OPENROUTER_API_KEY,gemini:!!process.env.GEMINI_API_KEY,groq:!!process.env.GROQ_API_KEY,cloudflare:!!(process.env.CLOUDFLARE_API_TOKEN&&process.env.CLOUDFLARE_ACCOUNT_ID),realtime:null,realtimeProviderConfigured:!!(FUGLE_API_KEY||process.env.MARKET_REALTIME_URL),twseMisFallback:true,tpexRealtimeConfigured:!!FUGLE_API_KEY,tpexHistoricalFallback:true,scan:true,flows:true,futures:true,sentiment:true,news:true,openDataArchive:true},mode:process.env.NODE_ENV==='production'?'production':'development'});
   if(SUPABASE_CONFIGURED&&u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/api/auth/')){
     const user=await authenticatedUser(req);if(!user)return json(res,401,{error:'authentication_required'});
   }
@@ -480,6 +480,27 @@ async function route(req,res){
       if(!item)return json(res,404,{error:'此頻道目前沒有可嵌入的公開直播；請使用官方直播入口。'});
       return json(res,200,{videoId:item.id.videoId,title:item.snippet.title,channelTitle:item.snippet.channelTitle,source:'YouTube Data API'});
     }catch(e){console.error('[live-resolver] '+e.message);return json(res,502,{error:'YouTube 直播解析失敗：'+e.message});}
+  }
+  if(u.pathname==='/api/market/calendar'){
+    const result=await safeLoad('market-calendar',24*60*60*1000,async()=>{
+      const rows=await fetchJson('https://openapi.twse.com.tw/v1/holidaySchedule/holidaySchedule',12000);
+      if(!Array.isArray(rows)||!rows.length)throw new Error('TWSE 官方開休市行事曆沒有回傳資料');
+      const events=rows.map(row=>{
+        const raw=String(row.Date||row.date||'').replace(/[^0-9]/g,'');
+        if(raw.length!==7)return null;
+        const date=String(Number(raw.slice(0,3))+1911)+raw.slice(3);
+        const iso=date.slice(0,4)+'-'+date.slice(4,6)+'-'+date.slice(6,8);
+        const name=String(row.Name||row.name||'');
+        const description=String(row.Description||row.description||'');
+        const noTrade=/市場無交易|僅辦理結算交割/.test(name+' '+description);
+        const holiday=/放假|補假|市場無交易/.test(name+' '+description);
+        if(!holiday)return null;
+        return {date:iso,name:name||'交易所公告休市',type:noTrade?'無交易・僅結算交割':'休市',description:description.replace(/<[^>]*>/g,' ').trim(),source:'TWSE OpenAPI'};
+      }).filter(Boolean);
+      if(!events.length)throw new Error('TWSE 官方行事曆格式尚未辨識');
+      return {events,source:'TWSE 官方 OpenAPI holidaySchedule',timestamp:now(),asOf:events.map(x=>x.date).sort().at(-1)};
+    },e=>({events:[],source:'unavailable',timestamp:now(),error:e.message}));
+    return json(res,200,result);
   }
   if(u.pathname==='/api/trading/readiness')return json(res,200,getTradingReadiness());
   if(u.pathname==='/api/market/universe'){
