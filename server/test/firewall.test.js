@@ -36,3 +36,12 @@ test('firewall rejects oversized request bodies before route handling',()=>{
  assert.equal(applyFirewall(request('/api/market/news','POST',{'content-length':'20000'}),res),false);
  assert.equal(res.status,413);
 });
+
+test('firewall permits bounded outcome uploads only on the dedicated automation route',()=>{
+ const allowed=response();
+ assert.equal(applyFirewall(request('/api/automation/research/outcomes','POST',{'content-length':'20000'}),allowed),true);
+ assert.equal(allowed.headers['X-RateLimit-Limit'],'20');
+ const blocked=response();
+ assert.equal(applyFirewall(request('/api/automation/research/outcomes','POST',{'content-length':String(300*1024)}),blocked),false);
+ assert.equal(blocked.status,413);
+});
