@@ -996,6 +996,10 @@ async function route(req,res){
     const result=await safeLoad('global-finance-fx',60*60*1000,globalFinance.loadFx,e=>({rates:[],errors:[],base:'EUR',source:'unavailable',fetchedAt:now(),error:e.message}));
     return json(res,result.error?503:200,result);
   }
+  if(u.pathname==='/api/finance/macro'){
+    const result=await safeLoad('global-finance-macro',6*60*60*1000,globalFinance.loadMacro,e=>({data:[],source:'unavailable',fetchedAt:now(),status:'unavailable',summary:{requested:0,received:0,failed:0},error:e.message}));
+    return json(res,result.status==='unavailable'?503:200,result);
+  }
   if(u.pathname==='/api/intelligence/overview'){
     const results=await Promise.allSettled([
       safeLoad('news',TTL.news,async()=>{
