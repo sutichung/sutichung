@@ -18,7 +18,9 @@ test('accepts signed short-lived tokens only from the allowlisted market and pro
  const fetchImpl=async()=>({ok:true,json:async()=>({keys:[jwk]})});
  assert.equal(await verifyGitHubActionsToken(makeToken(pair),{fetchImpl}),true);
  assert.equal(await verifyGitHubActionsToken(makeToken(pair,{event_name:'workflow_dispatch'}),{fetchImpl}),true);
- assert.equal(await verifyGitHubActionsToken(makeToken(pair,{workflow_ref:'sutichung/sutichung/.github/workflows/production-smoke.yml@refs/heads/main',event_name:'push'}),{fetchImpl}),true);
+ const smokeToken=makeToken(pair,{workflow_ref:'sutichung/sutichung/.github/workflows/production-smoke.yml@refs/heads/main',event_name:'push'});
+ assert.equal(await verifyGitHubActionsToken(smokeToken,{fetchImpl}),false);
+ assert.equal(await verifyGitHubActionsToken(smokeToken,{fetchImpl,allowProductionSmoke:true}),true);
  assert.equal(await verifyGitHubActionsToken(makeToken(pair,{workflow_ref:'sutichung/sutichung/.github/workflows/production-smoke.yml@refs/heads/main',event_name:'schedule'}),{fetchImpl}),false);
  assert.equal(await verifyGitHubActionsToken(makeToken(pair,{event_name:'push'}),{fetchImpl}),false);
 });
