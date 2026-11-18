@@ -10,9 +10,10 @@ import CryptoMarket from './CryptoMarket';
 import AntColony from './AntColony';
 import GlobalFinance from './GlobalFinance';
 import GlobalIntelligence from './GlobalIntelligence';
+import MobileDock from './MobileDock';
 
 const API = (process.env.REACT_APP_MARKET_API || '/api/market').replace(/\/$/, '');
-const APP_VERSION = '2026.11.18.54';
+const APP_VERSION = '2026.11.18.55';
 
 const C = { bg:'#080d18', panel:'#111a2b', panel2:'#172338', border:'#293951', text:'#e8eef8', muted:'#91a1b8', blue:'#60a5fa', green:'#34d399', red:'#fb7185', yellow:'#fbbf24' };
 const fmt = (v,d=2) => Number.isFinite(Number(v)) ? Number(v).toLocaleString('zh-TW',{minimumFractionDigits:d,maximumFractionDigits:d}) : '—';
@@ -162,5 +163,6 @@ export default function App(){
  <Panel title="🧠 AI 多空判讀與風險劇本" right={<small style={{color:C.yellow}}>規則評分，非獲利保證</small>}><div style={{fontSize:34,fontWeight:900,color:decision.score>=70?C.green:decision.score<=35?C.red:C.yellow}}>{decision.score??'—'}<small style={{fontSize:13,color:C.muted}}>/100　{decision.label}</small></div><small style={{color:C.muted}}>趨勢：{ind?.trend||'尚無 K 線資料'}　因子覆蓋率：{decision.confidence!=null?decision.confidence+'%':'—'}</small><div style={{background:'#3b2d12',color:'#fcd34d',padding:9,borderRadius:7,fontSize:11,marginTop:8}}>目前僅供研究的規則式分數，不是勝率或預測機率；尚未通過樣本外回測與校準前，不產生買賣指令。</div><ul style={{color:C.muted,fontSize:12,lineHeight:1.8}}>{decision.reasons.map((x,i)=><li key={i}>{x}</li>)}</ul><div style={{background:C.panel2,padding:10,borderRadius:8,fontSize:12}}><b style={{color:C.blue}}>ATR 風控參考：</b>{ind&&active.price!=null?`波動幅度 ${fmt(ind.atr)}；示意停損 ${fmt(active.price-1.5*ind.atr)}，示意目標 ${fmt(active.price+2*ind.atr)}。`:'需先取得有效 ATR 與即時價格。'}</div></Panel>
  <div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:12}}><Panel title="🏦 法人／大戶籌碼"><div style={grid}><Metric label="外資買賣超" value={flow.foreignNet!=null?fmt(flow.foreignNet,0):'—'}/><Metric label="投信買賣超" value={flow.trustNet!=null?fmt(flow.trustNet,0):'—'}/><Metric label="自營商買賣超" value={flow.dealerNet!=null?fmt(flow.dealerNet,0):'—'}/><Metric label="大戶持股級距" value={flow.largeHolderPct!=null?fmt(flow.largeHolderPct,1)+'%':'—'}/></div><small style={{color:C.muted}}>法人日期：{flow.asOf||'—'}；集保日期：{flow.tdccAsOf||'—'}；來源：證交所 T86／TDCC 開放資料。法人每日更新，集保每週更新。</small></Panel><Panel title="👥 散戶情緒與反指標"><div style={grid}><Metric label="融資變化" value={flow.marginChange!=null?fmt(flow.marginChange,0):'—'}/><Metric label="融券變化" value={flow.shortChange!=null?fmt(flow.shortChange,0):'—'}/><Metric label="散戶持股占比" value={flow.retailHolderPct!=null?fmt(flow.retailHolderPct,1)+'%':'—'}/><Metric label="市場廣度" value={sentiment?.advanceDecline!=null?fmt(sentiment.advanceDecline,2):'—'}/><Metric label="恐懼貪婪指數" value={sentiment?.fearGreed!=null?fmt(sentiment.fearGreed,0):'未提供'} note={sentiment?.fearGreed!=null?(sentiment.label||'來源日資料'):'沒有可驗證的指數來源，不以市場廣度代替'}/></div><small style={{color:C.muted}}>恐慌不代表必然反彈；需價格結構確認。</small></Panel></div></div></div>
  <footer style={{color:C.muted,fontSize:10,lineHeight:1.7,marginTop:14,borderTop:`1px solid ${C.border}`,paddingTop:10}}>報價前端每 5 秒同步；全市場技術與籌碼分析每 60 秒同步（歷史日 K 與法人資料依交易日更新）。公開資料歸檔每日更新，並保留來源日期；盤中即時報價仍以行情來源時間戳為準。規則分數不是已驗證預測模型，不保證獲利。{error&&<span style={{color:C.red}}> API 訊息：{error}</span>}<div>API 根目錄：{API}；請依 README.md 建立後端服務及環境設定。</div></footer>
+ <MobileDock/>
  </main>;
 }
