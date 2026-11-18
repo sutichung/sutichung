@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { normalizeBook, normalizeTrades } = require('../lib/crypto-microstructure');
+const { normalizeBook, normalizeTrades, safeIsoTimestamp } = require('../lib/crypto-microstructure');
 
 test('order book computes spread and depth imbalance from valid levels', () => {
   const book = normalizeBook('test', [[101, 8], [100, 2]], [[103, 4], [104, 1]], null, 10);
@@ -15,14 +15,27 @@ test('order book computes spread and depth imbalance from valid levels', () => {
   assert.equal(book.timestamp, null, 'do not invent an exchange timestamp');
 });
 
+test('order book normalizes level ordering and exposes quote-notional weighted imbalance', () => {
+  const book = normalizeBook('test', [[99, 10], [100, 1]], [[103, 1], [102, 10]], 1700000000, 10);
+  assert.equal(book.bestBid, 100);
+  assert.equal(book.bestAsk, 102);
+  assert.equal(book.bids[0][0], 100);
+  assert.equal(book.asks[0][0], 102);
+  assert.ok(book.obiNotional > 0);
+  assert.ok(book.bidNotional > 0);
+  assert.ok(book.askNotional > 0);
+  assert.equal(book.timestamp, new Date(1700000000000).toISOString());
+});
+
 test('empty or invalid order books are rejected', () => {
   assert.throws(() => normalizeBook('test', [], [[1, 1]], null), /orderbook_empty/);
   assert.throws(() => normalizeBook('test', [[0, 1]], [[1, 1]], null), /orderbook_empty/);
 });
 
-test('trade tape identifies large trades and ignores invalid rows', () => {
+test('trade tape identifies large trades, ignores invalid rows and deduplicates exchange IDs', () => {
   const rows = normalizeTrades('test', [
     { id: '1', timestamp: 1000, side: 'buy', price: 60000, amount: 1 },
+    { id: '1', timestamp: 1001, side: 'buy', price: 60000, amount: 1 },
     { id: '2', timestamp: 2000, side: 'sell', price: 60000, amount: 0.5 },
     { id: '3', timestamp: 3000, side: 'buy', price: 'bad', amount: 1 }
   ], 50000);
@@ -47,6 +60,14 @@ test('missing trade timestamps and explicit null cost stay missing or derive fro
   const [trade] = normalizeTrades('Binance', [{ price: '100', amount: '2', timestamp: null, cost: null, side: 'buy' }]);
   assert.equal(trade.timestamp, null);
   assert.equal(trade.quoteValue, 200);
+});
+
+test('timestamp parser safely handles seconds, milliseconds and invalid values', () => {
+  assert.equal(safeIsoTimestamp(1700000000), new Date(1700000000000).toISOString());
+  assert.equal(safeIsoTimestamp(1700000000000), new Date(1700000000000).toISOString());
+  assert.equal(safeIsoTimestamp(null), null);
+  assert.equal(safeIsoTimestamp('not-a-time'), null);
+  assert.equal(safeIsoTimestamp(1e30), null);
 });
 
 test('unsupported exchanges and malformed symbols fail closed', async () => {
