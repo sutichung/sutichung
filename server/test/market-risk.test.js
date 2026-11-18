@@ -48,6 +48,14 @@ test('missing microstructure stays explicitly unavailable and never becomes a ze
  assert.equal(result.microstructureStatus,'unavailable');
 });
 
+test('empty trade samples do not count as connected tape coverage',()=>{
+ const result=assessMarketRisk(history(),null,microstructure({tape:{count:0,knownSideCount:0,largeTradeCount:0,largeTrades:[],tradeImbalance:null,aggressiveBuyPct:null}}));
+ assert.equal(result.coverage.orderBook,true);
+ assert.equal(result.coverage.tradeTape,false);
+ assert.equal(result.microstructureStatus,'book_only');
+ assert.equal(result.metrics.tradeImbalance,null);
+});
+
 test('invalid OHLC candles are excluded and insufficient history fails closed',()=>{
  const h=history(24);h.data[5].high=1;
  const result=assessMarketRisk(h,null);
