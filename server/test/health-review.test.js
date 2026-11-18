@@ -16,7 +16,11 @@ test('daily health report distinguishes missing optional APIs from real failures
   assert.equal(report.providerSummary.connected, 1);
   assert.equal(report.providerSummary.notConfigured, 1);
   assert.equal(report.providerSummary.failing, 1);
-  assert.deepEqual(report.failures.map(x => x.id), ['fugle']);
+  assert.equal(report.providerSummary.criticalFailing, 0);
+  assert.equal(report.providerSummary.optionalFailing, 1);
+  assert.deepEqual(report.failures, []);
+  assert.ok(report.warnings.includes('some_optional_providers_unavailable'));
+  assert.equal(report.overallStatus, 'partial');
 });
 
 test('daily health report fails closed when application health is not ok', () => {
@@ -75,4 +79,34 @@ test('market data report fails closed when official Taiwan or all crypto exchang
   );
   assert.deepEqual(report.failures.map(x => x.id), ['twse-market-data', 'crypto-market-data']);
   assert.equal(report.overallStatus, 'degraded');
+});
+
+test('daily health report blocks required Taiwan, ECB, and Supabase provider failures',()=>{
+ const report=buildHealthReport(
+  {ok:true},
+  {checks:[
+   {id:'twse',status:'connected'},
+   {id:'ecb',status:'connected'},
+   {id:'supabase',status:'auth_error',httpStatus:401,message:'invalid anon key'},
+   {id:'binance',status:'error',httpStatus:451,message:'region restricted'}
+  ]}
+ );
+ assert.deepEqual(report.failures.map(x=>x.id),['supabase']);
+ assert.equal(report.providerSummary.criticalFailing,1);
+ assert.equal(report.providerSummary.optionalFailing,1);
+ assert.ok(report.warnings.includes('some_optional_providers_unavailable'));
+ assert.equal(report.overallStatus,'degraded');
+});
+
+test('daily health report treats missing required authentication as a blocking configuration error',()=>{
+ const report=buildHealthReport(
+  {ok:true},
+  {checks:[
+   {id:'twse',status:'connected'},
+   {id:'ecb',status:'connected'},
+   {id:'supabase',status:'not_configured',message:'missing anon key'}
+  ]}
+ );
+ assert.deepEqual(report.failures.map(x=>x.id),['supabase']);
+ assert.equal(report.providerSummary.criticalFailing,1);
 });
