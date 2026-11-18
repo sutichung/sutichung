@@ -110,7 +110,7 @@ function simulate(bars,fs,htf,start,end,costs){
     returns.push(prevEquity>0?eq/prevEquity-1:0);
     peak=Math.max(peak,eq);maxDD=Math.min(maxDD,eq/peak-1);
   }
-  if(qty>0){const last=bars[end-1],fill=last.close*(1-slip),proceeds=qty*fill*(1-fee-tax);trades.push({pnl:proceeds-entryCost,returnPct:(proceeds/entryCost-1)*100,holdBars:end-1-entryIndex,periodEndClose:true});cash+=proceeds;}
+  if(qty>0){const last=bars[end-1],fill=last.close*(1-slip),proceeds=qty*fill*(1-fee-tax);trades.push({pnl:proceeds-entryCost,returnPct:(proceeds/entryCost-1)*100,holdBars:end-1-entryIndex,periodEndClose:true});cash+=proceeds;const prior=returns.length?cash/(1+returns.at(-1)):cash;const finalEquity=cash;peak=Math.max(peak,finalEquity);maxDD=Math.min(maxDD,finalEquity/peak-1);}
   const wins=trades.filter(t=>t.pnl>0),losses=trades.filter(t=>t.pnl<0),avg=mean(returns)||0,sd=returns.length?Math.sqrt(mean(returns.map(x=>(x-avg)**2))):0,down=returns.length?Math.sqrt(mean(returns.map(x=>Math.min(0,x)**2))):0;
   const gw=wins.reduce((s,t)=>s+t.pnl,0),gl=-losses.reduce((s,t)=>s+t.pnl,0);
   return {status:trades.length?'ok':'no_trades',trades:trades.length,winRatePct:trades.length?round(wins.length/trades.length*100):null,netReturnPct:round((cash/100000-1)*100),maxDrawdownPct:round(Math.abs(maxDD)*100),sharpe:sd?round(avg/sd*Math.sqrt(costs.annualization),3):null,profitFactor:gl?round(gw/gl,3):gw?null:0,expectancyPct:trades.length?round(mean(trades.map(t=>t.returnPct))):null,finalEquity:round(cash),tradeDetails:trades};
@@ -125,10 +125,13 @@ function runMtfStrategy(intraday,daily,costs){
   const folds=[],size=Math.floor((bars.length-split)/3);
   if(size>=3)for(let k=0;k<3;k++){const a=split+k*size,b=k===2?bars.length:split+(k+1)*size;folds.push({fold:k+1,metrics:simulate(bars,fs,htf,a,b,costs)});}
   const valid=folds.filter(x=>x.metrics.trades>0),totalTrades=valid.reduce((s,x)=>s+x.metrics.trades,0),positiveFolds=valid.filter(x=>x.metrics.netReturnPct>0).length;
-  const wfPassed=folds.length===3&&valid.length===3&&totalTrades>=10&&positiveFolds>=2;
+  const averageNetReturnPct=valid.length?mean(valid.map(x=>x.metrics.netReturnPct)):null;
+  const worstMaxDrawdownPct=valid.length?Math.max(...valid.map(x=>x.metrics.maxDrawdownPct)):null;
+  const averageSharpe=valid.length&&valid.every(x=>x.metrics.sharpe!==null)?mean(valid.map(x=>x.metrics.sharpe)):null;
+  const wfPassed=folds.length===3&&valid.length===3&&totalTrades>=10&&positiveFolds>=2&&averageNetReturnPct>0&&worstMaxDrawdownPct<=15&&averageSharpe!==null&&averageSharpe>0;
   const oos=periods[1].metrics,passed=oos.trades>=10&&oos.netReturnPct>0&&oos.maxDrawdownPct<=15&&oos.sharpe>0&&oos.profitFactor>1.1&&wfPassed;
   const half=simulate(bars,fs,htf,split,bars.length,{...costs,feeBps:costs.feeBps/2,slippageBps:costs.slippageBps/2,sellTaxBps:costs.sellTaxBps/2});
   const doubled=simulate(bars,fs,htf,split,bars.length,{...costs,feeBps:costs.feeBps*2,slippageBps:costs.slippageBps*2,sellTaxBps:costs.sellTaxBps*2});
-  return {status:'ok',id:'mtf_structure_4h_1d',name:'多時間框架結構共識（4h＋1d）',category:'multi_timeframe',description:'日線 SMA50/200 趨勢過濾，4h Efficiency Ratio、Choppiness、Swing/BOS、Order Block、波動分位數與量能評分',timeframes:{execution:'4h',trendFilter:'1d',dailyBarsRequired:200},periods,walkForward:{passed:wfPassed,folds,totalTrades,positiveFolds},costSensitivity:{halfCost:half,baseCost:oos,doubleCost:doubled,doubleCostStillPositive:doubled.netReturnPct>0},validation:{passed,status:passed?'preliminary_pass':'not_validated',level:'single_holdout_plus_three_walk_forward_folds'},latest:{dailyTrend:htf.at(-1),score:score(fs.at(-1),htf.at(-1)).value,reasons:score(fs.at(-1),htf.at(-1)).reasons,features:fs.at(-1)},disclaimer:'只使用已完整收盤日線作為 4h 趨勢濾網；Swing 需右側 5 根確認，BOS/OB 僅在偵測當根之後可用。訊號於 4h 收盤後計算，下一根 4h 開盤成交。簡化 OB 不代表真實機構掛單。回測仍未完整模擬市場微結構、滑價跳空、交易所停牌或資料供應限制；未通過驗證不得當作實盤推薦。'};
+  return {status:'ok',id:'mtf_structure_4h_1d',name:'多時間框架結構共識（4h＋1d）',category:'multi_timeframe',description:'日線 SMA50/200 趨勢過濾，4h Efficiency Ratio、Choppiness、Swing/BOS、Order Block、波動分位數與量能評分',timeframes:{execution:'4h',trendFilter:'1d',dailyBarsRequired:200},periods,walkForward:{passed:wfPassed,folds,totalTrades,positiveFolds,averageNetReturnPct:round(averageNetReturnPct),worstMaxDrawdownPct:round(worstMaxDrawdownPct),averageSharpe:round(averageSharpe,3)},costSensitivity:{halfCost:half,baseCost:oos,doubleCost:doubled,doubleCostStillPositive:doubled.netReturnPct>0},validation:{passed,status:passed?'preliminary_pass':'not_validated',level:'single_holdout_plus_three_walk_forward_folds'},latest:{dailyTrend:htf.at(-1),score:score(fs.at(-1),htf.at(-1)).value,reasons:score(fs.at(-1),htf.at(-1)).reasons,features:fs.at(-1)},disclaimer:'只使用已完整收盤日線作為 4h 趨勢濾網；Swing 需右側 5 根確認，BOS/OB 僅在偵測當根之後可用。訊號於 4h 收盤後計算，下一根 4h 開盤成交。簡化 OB 不代表真實機構掛單。回測仍未完整模擬市場微結構、滑價跳空、交易所停牌或資料供應限制；未通過驗證不得當作實盤推薦。'};
 }
 module.exports={runMtfStrategy,dailyTrendMap,buildFeatures,score,simulate};
