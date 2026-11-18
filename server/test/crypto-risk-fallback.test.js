@@ -60,3 +60,8 @@ test('risk history tries the selected Coinbase spot feed before cross-exchange f
  assert.equal(result.exchange,'Coinbase');
  assert.equal(result.fallbackUsed,false);
 });
+
+test('risk history defaults to completed 15-minute candles for current risk monitoring',async()=>{
+ const result=await loadRiskHistory({symbol:'BTCUSDT',marketType:'perpetual',getHistory:async(s,t,interval)=>{assert.equal(interval,'15m');return goodHistory;}});
+ assert.equal(result.history.source,'public candles');
+});
