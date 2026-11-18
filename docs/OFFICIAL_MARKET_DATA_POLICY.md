@@ -1,0 +1,173 @@
+# 官方行情資料來源與資料品質規格（Official Market Data Policy）
+
+版本：2.0  
+狀態：已納入規格；實際 API 接線、授權與部署狀態必須逐項驗證。  
+適用：台股、美股、加密貨幣，以及所有行情、選股、技術指標、AI Agent、回測與風控模組。
+
+## 1. 核心政策
+
+1. 台股與美股行情的第一優先來源必須是交易所、官方市場資料計畫、監管機構或其明確授權的資料通路。
+2. 不得把私人資料商、券商轉售資料、爬蟲、非官方網站或模型推估值標示為「交易所官方即時報價」。
+3. 每筆資料必須攜帶來源、資料種類、交易所／市場、事件時間（event time）、接收時間（received time）、時區、延遲狀態、授權／方案狀態及品質狀態。
+4. 官方來源沒有提供、未授權、超出額度或資料過期時，回傳明確的 unavailable / delayed / stale 狀態；不得以舊值、合成值或其他未核准來源靜默補值。
+5. 官方來源優先不代表所有官方 OpenAPI 都是即時行情。必須區分即時、延遲、盤後、日資料及歷史資料。
+6. SEC、FINRA 等監管資料可作為申報、交易活動或監理分析依據，但不能冒充 NYSE/Nasdaq 的即時逐筆報價或完整 NBBO。
+
+## 2. 核准來源登記表
+
+### 台灣市場
+
+| 市場／資料 | 優先官方來源 | 使用限制 |
+|---|---|---|
+| 上市股票、指數、成交及公開市場資訊 | TWSE 官方網站與 OpenAPI（https://openapi.twse.com.tw/） | 逐端點確認更新頻率、欄位、歷史範圍與使用條款；不可一律標成盤中即時 |
+| 上櫃／興櫃及櫃買市場資料 | TPEx 官方 OpenAPI（https://www.tpex.org.tw/openapi/） | 依端點標示資料日期與延遲 |
+| 台指期、選擇權及期貨市場 | TAIFEX 官方 OpenAPI（https://openapi.taifex.com.tw/） | 日資料、盤後資料與即時授權資料分開處理 |
+| 公司重大訊息、公開資訊 | 公開資訊觀測站（https://mops.twse.com.tw/）及交易所官方公告 | 公告時間與行情時間不可混用 |
+
+### 美國市場
+
+| 市場／資料 | 優先官方來源 | 使用限制 |
+|---|---|---|
+| Nasdaq 掛牌證券市場資料 | Nasdaq 官方 Market Data / Data Link（https://www.nasdaq.com/solutions/data） | 依產品確認即時／延遲、涵蓋範圍、再散布及展示授權 |
+| NYSE 掛牌證券市場資料 | NYSE 官方 Market Data（https://www.nyse.com/market-data） | 依產品確認即時／延遲、涵蓋範圍、再散布及展示授權 |
+| 美國跨市場整合報價／成交 | CTA（Tape A/B）與 UTP（Tape C）官方 SIP 計畫及其授權通路 | 完整 NBBO／整合行情須確認 SIP 權利與授權；單一交易所資料不等於全市場 |
+| 公司申報、財報、重大文件 | SEC EDGAR / data.sec.gov（https://www.sec.gov/edgar/sec-api-documentation） | 官方申報資料，不是即時行情 API |
+| 場外交易申報與監理資料 | FINRA 官方資料（https://www.finra.org/finra-data） | 依資料集頻率使用；不可冒充全市場即時報價 |
+
+### 加密貨幣
+
+使用各交易所自己的官方 API，例如交易所官方 REST、WebSocket、交易規則與市場資訊端點。每個交易所分開記錄市場深度、成交、時間戳及連線狀態；不同交易所價格不可直接視為同一市場的可成交價格。官方 API 亦須遵守其速率限制與使用條款。
+
+## 3. 資料來源分級與路由
+
+- Tier 0：交易所／官方市場資料計畫直接提供，且符合所需即時性與授權。
+- Tier 1：監管機構或官方公告資料，僅供其適用的基本面、申報或監理用途。
+- Tier 2：經明確授權的官方資料轉播通路；必須記錄授權來源與產品名稱。不得宣稱為交易所直連。
+- Blocked：私人未核准 API、爬蟲、未知來源、無法驗證授權或來源標示不清的報價。不得進入正式行情與交易訊號路徑。
+
+台股與美股行情模組預設只接受 Tier 0；允許 Tier 2 必須由管理設定明確啟用並標示「授權轉播」，不得靜默降級。Tier 1 只可餵入相應公告／基本面模組。
+
+## 4. 標準行情資料契約
+
+所有供應商 Adapter 必須正規化為下列欄位；不適用欄位可為 null，但不得捏造：
+
+```json
+{
+  "symbol": "AAPL",
+  "market": "US",
+  "venue": "NASDAQ",
+  "assetType": "EQUITY",
+  "sourceId": "nasdaq_official",
+  "sourceTier": 0,
+  "sourceProduct": "licensed_product_name",
+  "price": 0,
+  "bid": null,
+  "ask": null,
+  "volume": null,
+  "currency": "USD",
+  "eventTime": null,
+  "receivedAt": "ISO-8601 timestamp",
+  "session": "REGULAR",
+  "dataMode": "REALTIME",
+  "delaySeconds": null,
+  "entitlement": "VERIFIED",
+  "quality": "VALID",
+  "sequence": null
+}
+```
+
+必要狀態：
+- dataMode：REALTIME、DELAYED、END_OF_DAY、HISTORICAL、UNKNOWN。
+- quality：VALID、STALE、INCOMPLETE、OUT_OF_ORDER、INVALID、UNAVAILABLE。
+- entitlement：VERIFIED、NOT_CONFIGURED、NOT_AUTHORIZED、RATE_LIMITED、UNKNOWN。
+
+若無法證實即時性，dataMode 必須為 UNKNOWN 或 DELAYED，不能標成 REALTIME。
+
+## 5. 資料驗證與風控閘門
+
+每筆行情進入快取、指標或 AI 分析前，依序檢查：
+
+1. 來源是否在核准清單，且來源識別與市場相符。
+2. 授權是否有效、產品是否涵蓋該市場及資料用途。
+3. eventTime、receivedAt 是否存在且可解析；時區必須明確。
+4. 是否超過該資料類型設定的最大新鮮度；不同市場、盤中／盤後、日資料使用不同門檻。
+5. 價格、成交量、買賣價及 OHLC 數值是否合法；bid 不得高於 ask（若來源定義允許交叉市場則另行處理）。
+6. 是否重複、亂序、時間倒退、序號缺口或異常跳價。
+7. 交易日、交易時段、休市、熔斷及盤前盤後狀態是否吻合。
+8. 多來源交叉核對只比較相同商品、相同時間窗、相同資料類型；不一致時標記衝突，不以平均值掩蓋差異。
+
+驗證失敗時隔離該筆資料並產生告警。不得讓無效資料更新最後有效報價，也不得讓舊快取繼續被顯示成即時。
+
+## 6. 故障處理
+
+- 連線逾時、HTTP 429、5xx：指數退避、隨機抖動、尊重 Retry-After，並設最大重試次數。
+- WebSocket 中斷：重連後補抓缺口；無法補齊時標記 INCOMPLETE。
+- API Key 缺失／權限不足：健康狀態顯示 NOT_CONFIGURED / NOT_AUTHORIZED，不得用其他未核准私人來源代替。
+- 官方服務中斷：顯示最後有效資料及其時間，並醒目標示 STALE；超過門檻後停止用於訊號。
+- Rate limit：佇列與快取依授權條款節流，不得以多帳號規避限制。
+- 系統恢復：先跑完整性檢查，再恢復該來源的訊號資格。
+
+## 7. AI、掃描、回測與交易的資料閘門
+
+- AI Agent、飆股掃描、多空評分、技術指標、資金流向及警示必須引用資料來源與 as-of 時間。
+- 缺少必要欄位或資料過期時，輸出「資料不足／觀望」，不得推估填補。
+- 回測只能使用當時可取得的資料版本與時間戳，避免前視偏誤；需保留公司行動、下市及存活者偏誤處理紀錄。
+- 訊號不得混用即時、延遲與日線資料而不標示頻率。
+- 實盤下單維持獨立風控與授權閘門；本規格不會自行啟用交易執行。
+
+## 8. 監控、稽核與管理控制台
+
+每個 Adapter 至少暴露：
+- source_id、market、product、entitlement、connection_status。
+- last_event_time、last_received_at、data_mode、delay_seconds。
+- request_count、rate_limit_count、error_rate、reconnect_count。
+- stale_count、invalid_count、missing_field_count、sequence_gap_count。
+- 最近錯誤、最近成功時間及健康狀態。
+
+管理端可啟用／停用來源、查看授權狀態及設定新鮮度門檻；一般客戶端不得看見 API Secret。所有變更寫入稽核紀錄。
+
+## 9. 安全要求
+
+- API Secret 僅存放後端 Secret / Environment，不可放在 React 前端、公開設定檔、Git 或日誌。
+- 最小權限、定期輪替、TLS、輸入驗證及敏感欄位遮罩。
+- 禁止將金鑰、完整授權標頭或個人資料寫入錯誤日誌。
+- 供應商條款、交易所展示／非展示／再散布授權需由管理者確認；技術上可連線不代表取得商業使用權。
+
+## 10. 驗收測試（完成前不得宣稱通過）
+
+- [ ] 核准來源清單外的行情被拒絕。
+- [ ] 官方端點的即時／延遲／日資料標示正確。
+- [ ] 無 API Key、無授權、額度耗盡時不會回傳假行情。
+- [ ] 過期行情不會進入即時訊號。
+- [ ] 亂序、重複、缺欄位、異常 OHLC 均能隔離。
+- [ ] 斷線重連與缺口補抓可測試，無法補齊時標示 INCOMPLETE。
+- [ ] TWSE、TPEx、Nasdaq、NYSE 等來源分別驗證，不以單一測試代表全部市場。
+- [ ] SEC / FINRA 資料不會被誤當即時報價。
+- [ ] AI、掃描、圖表、回測均顯示來源與資料時間。
+- [ ] 前端 bundle、Git、日誌均未洩漏 API Secret。
+- [ ] Render 健康檢查與部署後 smoke test 通過。
+
+## 11. 舊供應商處理清單
+
+現有專案 README 提及的 FinMind、Fugle、MARKET_REALTIME_URL、MARKET_SCAN_URL、MARKET_FLOWS_URL、MARKET_FUTURES_URL、MARKET_SENTIMENT_URL、MARKET_NEWS_URL 必須逐一盤點：
+
+- 不得因為目前程式有接線，就推定它們是官方來源。
+- FinMind、Fugle 等第三方服務需重新分類其資料來源、授權與用途；未通過核准不得作為台股官方行情來源。
+- MARKET_* 自訂 URL 預設視為未驗證來源，除非完成來源與授權登記。
+- 可保留非行情研究資料的供應商，但需與官方報價路徑隔離、標示來源，且不得冒充官方。
+- 不可在未確認替代官方端點、欄位與授權前，直接刪除現有服務造成整個行情功能中斷；先切換為明確的資料不足狀態。
+
+## 12. 官方文件
+
+- TWSE OpenAPI：https://openapi.twse.com.tw/
+- TPEx OpenAPI：https://www.tpex.org.tw/openapi/
+- TAIFEX OpenAPI：https://openapi.taifex.com.tw/
+- Nasdaq Market Data：https://www.nasdaq.com/solutions/data
+- NYSE Market Data：https://www.nyse.com/market-data
+- SEC EDGAR API：https://www.sec.gov/edgar/sec-api-documentation
+- FINRA Data：https://www.finra.org/finra-data
+- CTA：https://www.ctaplan.com/
+- UTP：https://www.utpplan.com/
+
+---
+本文件是工程規格與驗收標準，不代表上述 API 已完成申請、取得即時行情授權、已整合或已部署。每項狀態必須以實際端點測試、帳戶授權及部署紀錄為準。
