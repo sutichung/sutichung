@@ -672,7 +672,7 @@ async function route(req,res){
         loadRiskHistory({getHistory:cryptoMarket.getHistory,symbol,marketType:type,interval,exchange,nativeSymbol,limit:240}),
         type==='perpetual'?cryptoMarket.getDerivatives(symbol,exchange,nativeSymbol):Promise.resolve(null)
       ]);
-      const microResult=await loadFreshMicrostructure({safeLoad,fetchMicrostructure:cryptoMicrostructure.fetchMicrostructure,symbol:nativeSymbol,marketType:type,requestedExchange:exchange,preferredExchange:historyResult.exchange,depth:10,whaleThresholdUsd:50000});
+      const microResult=await loadFreshMicrostructure({safeLoad,fetchMicrostructure:cryptoMicrostructure.fetchMicrostructure,symbol,marketType:type,requestedExchange:exchange,preferredExchange:historyResult.exchange,nativeSymbol,depth:10,whaleThresholdUsd:50000});
       const micro=microResult.data;
       const result=assessMarketRisk(historyResult.history,derivatives,micro);
       if(!micro){
