@@ -41,7 +41,7 @@ export default function USMarket(){
     <div style={{marginTop:12}}>{history.length?<CandleChart data={history} source={historyMeta.source} updatedAt={historyMeta.asOf}/>:<div style={{color:colors.muted,padding:16}}>正在載入歷史 K 線，至少需要 60 根日 K 才能計算完整指標。</div>}</div>
     <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginTop:10}}><b>研究判讀：{selected.scorecard?.direction||'資料不足'}</b><span style={{color:colors.muted,fontSize:11}}>分數 {selected.scorecard?.score??'—'}／100｜覆蓋 {selected.scorecard?.confidence??0}%</span><a href={'https://www.sec.gov/edgar/search/#/q='+encodeURIComponent(symbol)} target="_blank" rel="noreferrer" style={{color:colors.blue,fontSize:12}}>SEC 公司申報資料</a></div>
    </Box>
-   <QuantResearch candles={history} symbol={symbol} source={historyMeta.source||'Yahoo Finance Chart'} asOf={historyMeta.asOf}/>
+   <QuantResearch candles={history} symbol={symbol} source={historyMeta.source||'Yahoo Finance Chart'} asOf={historyMeta.asOf} market="US"/>
    <Box title="🤖 Gemini／Groq／Cloudflare 三方 AI 多空分析" right={<button disabled={aiBusy} onClick={runAI} style={{background:colors.blue,color:'#fff',border:0,borderRadius:7,padding:'8px 12px'}}>{aiBusy?'分析中…':'立即分析'}</button>}>
     <div style={{fontSize:11,color:colors.muted,marginBottom:8}}>AI 使用此美股代號的行情與歷史 K 線；未接通的供應商會顯示錯誤，不以其他模型冒名替代。</div>
     {consensus&&<div style={{fontSize:18,fontWeight:800,marginBottom:9}}>三方共識：{consensus.direction||'資料不足'}</div>}
