@@ -17,7 +17,7 @@
     "test:server": "node --test server/test/*.test.js"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "6.3.0",
+    "@vitejs/plugin-react": "5.2.0",
     "vite": "6.4.6"
   }
 }
