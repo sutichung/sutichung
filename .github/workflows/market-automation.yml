@@ -134,7 +134,9 @@ jobs:
           AUTH_HEADER="Authorization: Bearer $OIDC_TOKEN"
           curl --fail --silent --show-error --max-time 30 "$MARKET_APP_URL/api/health" -o /tmp/health.json
           curl --fail --silent --show-error --max-time 90 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/providers" -o /tmp/providers.json
-          node server/jobs/health-review.js /tmp/health.json /tmp/providers.json
+          curl --fail --silent --show-error --max-time 60 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/market" -o /tmp/market.json
+          curl --fail --silent --show-error --max-time 120 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/crypto/market" -o /tmp/crypto.json
+          node server/jobs/health-review.js /tmp/health.json /tmp/providers.json /tmp/market.json /tmp/crypto.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
