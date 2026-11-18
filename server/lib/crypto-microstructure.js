@@ -26,11 +26,24 @@ function normalizeBook(exchange, bids, asks, timestamp, depth = 10) {
   const bidVolume = bidRows.reduce((sum, x) => sum + x[1], 0);
   const askVolume = askRows.reduce((sum, x) => sum + x[1], 0);
   const total = bidVolume + askVolume;
+  const weighted = rows => rows.reduce((sum, x, i) => sum + x[1] / (i + 1), 0);
+  const weightedBid = weighted(bidRows), weightedAsk = weighted(askRows), weightedTotal = weightedBid + weightedAsk;
+  const bestBidSize = bidRows[0][1], bestAskSize = askRows[0][1];
+  const microPrice = (ask * bestBidSize + bid * bestAskSize) / (bestBidSize + bestAskSize);
+  const depthBands = [5, 10, 20].map(levels => {
+    const b = bidRows.slice(0, levels).reduce((sum, x) => sum + x[1], 0);
+    const a = askRows.slice(0, levels).reduce((sum, x) => sum + x[1], 0);
+    return { levels, bid: b, ask: a, imbalance: b + a > 0 ? (b - a) / (b + a) : null };
+  });
   return {
     exchange, bids: bidRows, asks: askRows, bestBid: bid, bestAsk: ask,
-    midPrice: mid, spreadPct: mid > 0 ? (ask - bid) / mid * 100 : null,
+    bestBidSize, bestAskSize, midPrice: mid, microPrice,
+    microPriceDeviationBps: mid > 0 ? (microPrice - mid) / mid * 10000 : null,
+    spreadPct: mid > 0 ? (ask - bid) / mid * 100 : null,
     bidDepth: bidVolume, askDepth: askVolume,
     obi: total > 0 ? (bidVolume - askVolume) / total : null,
+    weightedObi: weightedTotal > 0 ? (weightedBid - weightedAsk) / weightedTotal : null,
+    depthBands,
     timestamp: timestamp && Number.isFinite(Number(timestamp)) ? new Date(Number(timestamp)).toISOString() : null,
     receivedAt: now(), depth: Math.min(depth, Math.min(bidRows.length, askRows.length))
   };
@@ -95,11 +108,13 @@ async function fetchMicrostructure({ exchange = 'Binance', symbol, marketType = 
   const largeTrades = trades.filter(x => x.large === true);
   const buyValue = trades.filter(x => x.side === 'buy').reduce((s, x) => s + (x.quoteValue || 0), 0);
   const sellValue = trades.filter(x => x.side === 'sell').reduce((s, x) => s + (x.quoteValue || 0), 0);
+  const knownSideTrades = trades.filter(x => x.side === 'buy' || x.side === 'sell');
+  const knownSideValue = buyValue + sellValue;
   const notionalAvailable = !(exchange === 'OKX' && marketType === 'perpetual');
   return {
     exchange, symbol: safeSymbol, marketType, source, timestamp: book.timestamp,
     receivedAt: now(), book,
-    tape: { count: trades.length, largeTradeCount: whaleClassificationAvailable ? largeTrades.length : null, largeTrades: whaleClassificationAvailable ? largeTrades.slice(0, 20) : [], whaleClassificationAvailable, quoteCurrency, buyQuoteValue: notionalAvailable ? buyValue : null, sellQuoteValue: notionalAvailable ? sellValue : null, netAggressiveQuoteValue: notionalAvailable ? buyValue - sellValue : null, whaleThresholdUsd: whaleClassificationAvailable ? whaleThresholdUsd : null }
+    tape: { count: trades.length, knownSideCount: knownSideTrades.length, largeTradeCount: whaleClassificationAvailable ? largeTrades.length : null, largeTrades: whaleClassificationAvailable ? largeTrades.slice(0, 20) : [], whaleClassificationAvailable, quoteCurrency, buyQuoteValue: notionalAvailable ? buyValue : null, sellQuoteValue: notionalAvailable ? sellValue : null, netAggressiveQuoteValue: notionalAvailable ? buyValue - sellValue : null, aggressiveBuyPct: notionalAvailable && knownSideValue > 0 ? buyValue / knownSideValue * 100 : null, tradeImbalance: notionalAvailable && knownSideValue > 0 ? (buyValue - sellValue) / knownSideValue : null, whaleThresholdUsd: whaleClassificationAvailable ? whaleThresholdUsd : null }
   };
 }
 module.exports = { fetchMicrostructure, normalizeBook, normalizeTrades };
