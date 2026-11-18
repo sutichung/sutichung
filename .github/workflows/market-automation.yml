@@ -10,6 +10,8 @@ on:
     - cron: "40 5 * * 1-5"
     # Re-run close research after FinMind institutional flows are normally published.
     - cron: "10 13 * * 1-5"
+    # Daily system and provider health review at 06:00 Taiwan time (22:00 UTC).
+    - cron: "0 22 * * *"
   workflow_dispatch:
 permissions:
   contents: read
@@ -104,6 +106,30 @@ jobs:
           name: taiwan-market-close-review-${{ github.run_id }}
           path: reports/
           retention-days: 90
+  daily-system-health:
+    if: github.event_name == 'schedule' && github.event.schedule == '0 22 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check application and provider health
+        env:
+          MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
+        run: |
+          OIDC_TOKEN=$(curl --fail --silent --show-error --get --data-urlencode "audience=taiwan-stock-hunter-automation" "$ACTIONS_ID_TOKEN_REQUEST_URL" -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r '.value')
+          test -n "$OIDC_TOKEN" && test "$OIDC_TOKEN" != "null" || { echo "Unable to obtain GitHub Actions OIDC token"; exit 1; }
+          echo "::add-mask::$OIDC_TOKEN"
+          AUTH_HEADER="Authorization: Bearer $OIDC_TOKEN"
+          curl --fail --silent --show-error --max-time 30 "$MARKET_APP_URL/api/health" -o /tmp/health.json
+          curl --fail --silent --show-error --max-time 90 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/providers" -o /tmp/providers.json
+          node server/jobs/health-review.js /tmp/health.json /tmp/providers.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: taiwan-market-daily-system-health-${{ github.run_id }}
+          path: reports/daily-system-health.json
+          retention-days: 30
   outcome-evaluation:
     if: github.event_name == 'schedule' && github.event.schedule == '40 5 * * 1-5' && needs.close-review.outputs.market_open == 'true'
     needs: close-review
