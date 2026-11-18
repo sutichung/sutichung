@@ -25,8 +25,8 @@ async function runAgent(provider, prompt, env) {
     gemini: { key: env.GEMINI_API_KEY, model: env.GEMINI_MODEL || 'gemini-3.8-flash' },
     groq: { key: env.GROQ_API_KEY, model: env.GROQ_MODEL || 'openai/gpt-oss-20b' },
     cloudflare: { key: env.CLOUDFLARE_API_TOKEN && env.CLOUDFLARE_ACCOUNT_ID ? env.CLOUDFLARE_API_TOKEN : '', accountId: env.CLOUDFLARE_ACCOUNT_ID, model: env.CLOUDFLARE_AI_MODEL || '@cf/meta/llama-3.3-70b-instruct-fp8-fast' },
-    xai: { key: env.XAI_API_KEY, model: env.XAI_MODEL || 'grok-4.1' },
-    deepseek: { key: env.DEEPSEEK_API_KEY, model: env.DEEPSEEK_MODEL || 'deepseek-chat' },
+    xai: { key: env.XAI_API_KEY, model: env.XAI_MODEL || 'grok-4.7' },
+    deepseek: { key: env.DEEPSEEK_API_KEY, model: env.DEEPSEEK_MODEL || 'deepseek-flash' },
     openai: { key: env.OPENAI_API_KEY, model: env.OPENAI_MODEL || 'gpt-6-luna' }
   };
   const config = configs[provider];
