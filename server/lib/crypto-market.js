@@ -118,7 +118,7 @@ async function getDerivatives(symbol,exchange='Binance',nativeSymbol=''){
  const rows=[
   {exchange:'Binance',fundingRate:n(binance?.lastFundingRate),markPrice:n(binance?.markPrice),openInterest:n(binanceOi?.openInterest)},
   {exchange:'Bybit',fundingRate:n(bq?.fundingRate),markPrice:n(bq?.markPrice),openInterest:n(bq?.openInterest)},
-  {exchange:'OKX',fundingRate:n(oq?.fundingRate),markPrice:n(oq?.last),openInterest:n(oq?.oi)}
+  {exchange:'OKX',fundingRate:n(oq?.fundingRate),markPrice:null,openInterest:null}
  ];
  const ratios=battle.filter(x=>x&&Number.isFinite(x.longPct)&&Number.isFinite(x.shortPct));
  const longPct=ratios.length?ratios.reduce((s,x)=>s+x.longPct,0)/ratios.length:null;
