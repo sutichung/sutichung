@@ -4,6 +4,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install --no-audit --no-fund
 COPY . .
+RUN node --check server/index.js && npm run test:server
 RUN npm run build
 
 FROM node:20-alpine AS runtime
