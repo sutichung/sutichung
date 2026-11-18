@@ -488,7 +488,7 @@ async function route(req,res){
     }catch(e){return json(res,e.status||502,{error:e.message});}
   }
   if(['/api/colony/status','/api/diagnostics/providers'].includes(u.pathname)) {
-    const automationAuthorized=req.method==='GET'&&u.pathname==='/api/diagnostics/providers'&&await verifyGitHubActionsToken(bearerToken(req));
+    const automationAuthorized=req.method==='GET'&&u.pathname==='/api/diagnostics/providers'&&await verifyGitHubActionsToken(bearerToken(req),{allowProductionSmoke:true});
     if(!automationAuthorized){
       if(!SUPABASE_CONFIGURED)return json(res,503,{error:'developer_console_auth_unavailable'});
       const consoleUser=await authenticatedUser(req);
