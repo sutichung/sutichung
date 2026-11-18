@@ -27,7 +27,7 @@ jobs:
             node --check "$file"
           done
       - run: npm run test:server
-      - run: npm install
+      - run: npm install --no-audit --no-fund
       - name: Report dependency vulnerabilities
         if: always()
         run: |
