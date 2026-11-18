@@ -49,7 +49,8 @@ function evaluateOutcomes(previous,snapshot,{horizon='1d',sessions=1,costPct=0.7
   evaluatedSignalDate:previous.generatedAt||previous.scanTimestamp||null,sourceReportAsOf:sourceAsOf,
   currentSnapshotAsOf:quoteTimes.length?new Date(quoteTimes[Math.floor(quoteTimes.length/2)]).toISOString():null,
   currentSnapshotSource:snapshot.source||null,evaluatedSignalCount:signals.length,evaluatedCount:results.length,excludedCount:excluded.length,
-  assumedRoundTripCostPct:costPct,\n  costAssumption:'預設 0.785%：台股一般股票手續費 0.1425% 買賣各一次 + 賣出證交稅 0.30% + 單邊滑價假設 0.10% 買賣各一次；實際依商品、券商折扣及成交情況不同。',directionalHitRatePct:results.length?wins/results.length*100:null,
+  assumedRoundTripCostPct:costPct,
+  costAssumption:'預設 0.785%：台股一般股票手續費 0.1425% 買賣各一次 + 賣出證交稅 0.30% + 單邊滑價假設 0.10% 買賣各一次；實際依商品、券商折扣及成交情況不同。',directionalHitRatePct:results.length?wins/results.length*100:null,
   averageDirectionalReturnPct:avg('directionalReturnPct'),averageNetReturnPct:avg('netReturnPct'),
   long:bySide('long'),short:bySide('short'),results,excluded,
   caveat:'以指定交易日研究快照的訊號價格，對照訊號之後且時間戳新鮮的官方行情計算方向性報酬；不是實際成交或完整策略回測。空方是方向性反向比較，未計融券可得性、借券費、個別實際滑價、股利與公司行動；預設成本只是台股一般股票估算，不代表真實成交。1h 另限制在訊號後 45 分鐘至 3 小時評估；1d/5d/20d 由工作流程按不同交易日的官方收盤報告選取。缺少報告或有效報價時不補值，樣本不足不得據此調整模型。'
