@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
 
-const HLS_CHANNELS = (()=>{try{const value=JSON.parse(process.env.REACT_APP_LIVE_HLS_STREAMS||'[]');return Array.isArray(value)?value.filter(x=>x&&x.id&&x.name&&x.src&&/^https:\/\//i.test(x.src)).map(x=>({...x,url:x.url||x.src,kind:'hls'})):[];}catch(_){return [];}})();
+const HLS_CHANNELS = (()=>{try{const value=JSON.parse(import.meta.env.VITE_LIVE_HLS_STREAMS||'[]');return Array.isArray(value)?value.filter(x=>x&&x.id&&x.name&&x.src&&/^https:\/\//i.test(x.src)).map(x=>({...x,url:x.url||x.src,kind:'hls'})):[];}catch(_){return [];}})();
 function HlsLivePlayer({src,title}){const ref=useRef(null);useEffect(()=>{const video=ref.current;if(!video)return;let hls;if(video.canPlayType('application/vnd.apple.mpegurl'))video.src=src;else if(Hls.isSupported()){hls=new Hls({enableWorker:true,lowLatencyMode:true});hls.loadSource(src);hls.attachMedia(video);}return()=>{if(hls)hls.destroy();video.removeAttribute('src');video.load();};},[src]);return <video ref={ref} controls playsInline preload="none" aria-label={title} style={{width:'100%',aspectRatio:'16/9',background:'#000',borderRadius:8}}/>;}
 const CHANNELS = [
   {id:'ebc57',name:'57 東森財經新聞',kind:'youtube',channel:'UCuzqko_GKcj9922M1gUo__w',url:'https://www.youtube.com/@57ETFN/live',note:'官方財經新聞直播'},

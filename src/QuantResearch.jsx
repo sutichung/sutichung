@@ -1,7 +1,7 @@
 import React,{useEffect,useMemo,useState} from 'react';
 
 const fmt=(v,suffix='')=>v===null||v===undefined||v===''?'—':Number.isFinite(Number(v))?Number(v).toFixed(2)+suffix:'—';
-const API_BASE=process.env.REACT_APP_MARKET_API||'/api/market';
+const API_BASE=import.meta.env.VITE_MARKET_API||'/api/market';
 const API=API_BASE.endsWith('/')?API_BASE.slice(0,-1):API_BASE;
 export default function QuantResearch({symbol='2330',source='',asOf='',market='tw-stock'}) {
  const defaults=market==='crypto'?{fee:0.10,tax:0,slippage:0.05}:market==='us-stock'?{fee:0.01,tax:0,slippage:0.05}:{fee:0.1425,tax:0.30,slippage:0.10};
