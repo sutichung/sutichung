@@ -21,7 +21,7 @@ export default function AuthGate({children}){
   const [mode,setMode]=useState('login'),[email,setEmail]=useState(''),[password,setPassword]=useState('');
   const [phone,setPhone]=useState(''),[phoneOtp,setPhoneOtp]=useState(''),[phoneSent,setPhoneSent]=useState(false);
   const [busy,setBusy]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState('');
-  const [adminOpen,setAdminOpen]=useState(false),[members,setMembers]=useState([]),[newEmail,setNewEmail]=useState(''),[newPassword,setNewPassword]=useState('');
+  const [adminOpen,setAdminOpen]=useState(false),[members,setMembers]=useState([]),[newEmail,setNewEmail]=useState('');
   const [memberBusy,setMemberBusy]=useState(false),[passwordOpen,setPasswordOpen]=useState(false),[nextPassword,setNextPassword]=useState('');
   const loadMe=useCallback(async()=>{
     const data=await request('/auth/me');setUser(data.user);setIsAdmin(!!data.isAdmin);
@@ -32,8 +32,8 @@ export default function AuthGate({children}){
       const hash=new URLSearchParams(window.location.hash.replace(/^#/,'') );
       const oauthError=hash.get('error_description')||hash.get('error');
       if(oauthError){setError(decodeURIComponent(oauthError.replace(/\+/g,' ')));window.history.replaceState({},document.title,window.location.pathname+window.location.search);}
-      const oauthAccess=hash.get('access_token'),oauthRefresh=hash.get('refresh_token');
-      if(oauthAccess){saveSession({access_token:oauthAccess,refresh_token:oauthRefresh});window.history.replaceState({},document.title,window.location.pathname+window.location.search);}
+      const oauthAccess=hash.get('access_token'),oauthRefresh=hash.get('refresh_token'),oauthType=hash.get('type');
+      if(oauthAccess){saveSession({access_token:oauthAccess,refresh_token:oauthRefresh});if(oauthType==='invite'||oauthType==='recovery'){setPasswordOpen(true);setNotice('驗證連結已確認，請設定新的登入密碼。');}window.history.replaceState({},document.title,window.location.pathname+window.location.search);}
       const c=await fetch('/api/auth/config').then(r=>r.json());if(!alive)return;setConfig(c);
       if(!c.configured){setError('伺服器尚未完成 Supabase 設定，會員入口暫時無法啟用。');return;}
       if(getToken()){try{await loadMe();}catch(_){
@@ -69,17 +69,19 @@ export default function AuthGate({children}){
   const logout=async()=>{try{await request('/auth/logout',{method:'POST'});}catch(_){}clearSession();setUser(null);setIsAdmin(false);setAdminOpen(false);};
   const changePassword=async(e)=>{e.preventDefault();setMemberBusy(true);setError('');try{await request('/auth/password',{method:'POST',body:JSON.stringify({password:nextPassword})});setNextPassword('');setPasswordOpen(false);setNotice('密碼已更新。');}catch(err){setError(err.message);}finally{setMemberBusy(false);}};
   const loadMembers=async()=>{setMemberBusy(true);try{const data=await request('/admin/members');setMembers(data.users||[]);}catch(e){setError(e.message);}finally{setMemberBusy(false);}};
-  const createMember=async(e)=>{e.preventDefault();setMemberBusy(true);setError('');try{await request('/admin/members',{method:'POST',body:JSON.stringify({email:newEmail,password:newPassword})});setNewEmail('');setNewPassword('');await loadMembers();}catch(err){setError(err.message);}finally{setMemberBusy(false);}};
+  const createMember=async(e)=>{e.preventDefault();setMemberBusy(true);setError('');setNotice('');try{const result=await request('/admin/members/invite',{method:'POST',body:JSON.stringify({email:newEmail})});setNewEmail('');setNotice(result.message||'邀請信已寄出。');await loadMembers();}catch(err){setError(err.message);}finally{setMemberBusy(false);}};
+  const resetMemberPassword=async(member)=>{setMemberBusy(true);setError('');setNotice('');try{const result=await request('/admin/members/'+member.id+'/reset-password',{method:'POST'});setNotice(result.message||'已寄送密碼重設信。');}catch(err){setError(err.message);}finally{setMemberBusy(false);}};
   const toggleMember=async(member)=>{setMemberBusy(true);setError('');try{await request('/admin/members/'+member.id+'/'+(member.banned_until?'enable':'disable'),{method:'POST'});await loadMembers();}catch(err){setError(err.message);}finally{setMemberBusy(false);}};
   if(busy&&!user)return <div style={styles.center}>正在安全連線會員服務…</div>;
   if(!user)return <div style={styles.page}><style>{responsiveCss}</style><div className="auth-card" style={styles.card}>
     <div style={styles.mark}>TS</div><div style={styles.eyebrow}>TAIWAN STOCK HUNTER</div>
     <h1 style={styles.heading}>台股 AI 智慧操盤中樞</h1><p style={styles.sub}>會員登入與安全註冊</p>
-    <div style={styles.tabs}><button style={mode==='login'?styles.activeTab:styles.tab} onClick={()=>{setMode('login');setError('');setNotice('');}}>會員登入</button><button style={mode==='signup'?styles.activeTab:styles.tab} onClick={()=>{setMode('signup');setError('');setNotice('');}}>建立帳號</button></div>
+    <div style={styles.tabs}><button style={mode==='login'?styles.activeTab:styles.tab} onClick={()=>{setMode('login');setError('');setNotice('');}}>會員登入</button><button style={mode==='signup'?styles.activeTab:styles.tab} disabled={config?.registrationEnabled===false} onClick={()=>{setMode('signup');setError('');setNotice('');}}>建立帳號</button></div>
     <form onSubmit={submit} style={{display:'grid',gap:13}}>
       <label style={styles.label}>Email<input style={styles.input} type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} required placeholder="name@example.com"/></label>
       <label style={styles.label}>密碼<input style={styles.input} type="password" autoComplete={mode==='login'?'current-password':'new-password'} value={password} onChange={e=>setPassword(e.target.value)} minLength={10} required placeholder="至少 10 個字元"/></label>
-      <button style={styles.submit} disabled={busy}>{busy?'處理中…':mode==='login'?'登入系統':'註冊會員'}</button>
+      <button style={styles.submit} disabled={busy||(mode==='signup'&&config?.registrationEnabled===false)}>{busy?'處理中…':mode==='login'?'登入系統':'註冊會員'}</button>
+      {mode==='signup'&&config?.registrationEnabled===false&&<div style={styles.notice}>目前網站已關閉公開註冊，請聯絡管理員寄送邀請連結；管理員可在會員管理中遠端建立帳號。</div>}
     </form>
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:12}}>
       <button type="button" style={styles.socialBtn} disabled={busy} onClick={()=>startOAuth('apple')}> 使用 Apple</button>
@@ -99,11 +101,11 @@ export default function AuthGate({children}){
   }
   return <><style>{responsiveCss}</style><div className="auth-userbar" style={styles.userbar}><span>{user.email}{isAdmin?' · 管理員':''}</span><button style={styles.smallBtn} onClick={()=>{setPasswordOpen(true);setError('');setNotice('');}}>修改密碼</button>{isAdmin&&<button style={styles.smallBtn} onClick={()=>{window.location.href='/developer';}}>開發者控制台</button>}{isAdmin&&<button style={styles.smallBtn} onClick={()=>{setAdminOpen(true);setError('');loadMembers();}}>會員管理</button>}<button style={styles.smallBtn} onClick={logout}>登出</button></div>{adminOpen&&<div style={styles.overlay}><div className="auth-modal" style={styles.modal}>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}><h2 style={{margin:0}}>會員管理</h2><button style={styles.smallBtn} onClick={()=>setAdminOpen(false)}>關閉</button></div>
-    <form className="auth-create-form" onSubmit={createMember} style={styles.createForm}><input style={styles.input} type="email" placeholder="會員 Email" value={newEmail} onChange={e=>setNewEmail(e.target.value)} required/><input style={styles.input} type="password" minLength={10} placeholder="初始密碼（至少 10 字元）" value={newPassword} onChange={e=>setNewPassword(e.target.value)} required/><button style={styles.submit} disabled={memberBusy}>新增會員</button></form>
+    <form className="auth-create-form" onSubmit={createMember} style={{...styles.createForm,gridTemplateColumns:'minmax(0,1fr) auto'}}><input style={styles.input} type="email" autoComplete="email" placeholder="會員 Email（寄送專屬邀請連結）" value={newEmail} onChange={e=>setNewEmail(e.target.value)} required/><button style={styles.submit} disabled={memberBusy||!config?.adminManagementConfigured}>寄送註冊邀請</button></form>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'14px 0 8px'}}><b>會員清單</b><button style={styles.smallBtn} onClick={loadMembers}>重新整理</button></div>
-    {members.map(m=><div key={m.id} className="auth-member" style={styles.member}><div><b>{m.email}</b><small style={{display:'block',color:'#94a3b8'}}>註冊：{m.created_at?new Date(m.created_at).toLocaleDateString('zh-TW'):'—'} · {m.banned_until?'已停用':'啟用中'}</small></div><button style={styles.smallBtn} disabled={memberBusy} onClick={()=>toggleMember(m)}>{m.banned_until?'恢復':'停用'}</button></div>)}
+    {members.map(m=><div key={m.id} className="auth-member" style={styles.member}><div><b>{m.email}</b><small style={{display:'block',color:'#94a3b8'}}>註冊：{m.created_at?new Date(m.created_at).toLocaleDateString('zh-TW'):'—'} · {m.banned_until?'已停用':'啟用中'}</small></div><div style={{display:'flex',gap:6,flexWrap:'wrap'}}><button style={styles.smallBtn} disabled={memberBusy} onClick={()=>resetMemberPassword(m)}>寄送重設密碼</button><button style={styles.smallBtn} disabled={memberBusy} onClick={()=>toggleMember(m)}>{m.banned_until?'恢復':'停用'}</button></div></div>)}
     {members.length===0&&<p style={{color:'#94a3b8'}}>尚無會員資料，或正在載入。</p>}{error&&<div style={styles.error}>{error}</div>}
-    {!config?.adminManagementConfigured&&<div style={styles.notice}>請在 Render 設定 SUPABASE_SERVICE_ROLE_KEY，才能新增／停用會員。</div>}
+    {!config?.adminManagementConfigured&&<div style={styles.notice}>管理功能尚未完整設定：請確認 Render 已設定 SUPABASE_ADMIN_EMAIL（必須與管理員登入 Email 完全一致）及 SUPABASE_SERVICE_ROLE_KEY。未設定前不會開放會員管理 API。</div>}
   </div></div>}
   {passwordOpen&&<div style={styles.overlay}><form onSubmit={changePassword} className="auth-modal" style={styles.modal}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><h2 style={{margin:0}}>修改密碼</h2><button type="button" style={styles.smallBtn} onClick={()=>setPasswordOpen(false)}>關閉</button></div><label style={{...styles.label,marginTop:16}}>新密碼<input style={styles.input} type="password" minLength={10} value={nextPassword} onChange={e=>setNextPassword(e.target.value)} required placeholder="至少 10 個字元"/></label><button style={{...styles.submit,marginTop:12}} disabled={memberBusy}>更新密碼</button>{error&&<div style={styles.error}>{error}</div>}</form></div>}
   {children}</>;
