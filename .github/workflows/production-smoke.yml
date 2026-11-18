@@ -92,6 +92,9 @@ jobs:
               source: market.source || null,
               listedCount,
               quoteCount,
+              requestedCount: Number(market.requestedCount || 0),
+              coveragePct: market.coveragePct ?? null,
+              delayedCount: Number(market.delayedCount || 0),
               serverTime: market.serverTime || null,
               error: market.error || null
             },
