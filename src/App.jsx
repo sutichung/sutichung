@@ -7,7 +7,7 @@ import MarketOverview from './MarketOverview';
 import QuantResearch from './QuantResearch';
 
 const API = (process.env.REACT_APP_MARKET_API || '/api/market').replace(/\/$/, '');
-const APP_VERSION = '2026.11.18.39';
+const APP_VERSION = '2026.11.18.40';
 
 const C = { bg:'#080d18', panel:'#111a2b', panel2:'#172338', border:'#293951', text:'#e8eef8', muted:'#91a1b8', blue:'#60a5fa', green:'#34d399', red:'#fb7185', yellow:'#fbbf24' };
 const fmt = (v,d=2) => Number.isFinite(Number(v)) ? Number(v).toLocaleString('zh-TW',{minimumFractionDigits:d,maximumFractionDigits:d}) : '—';
@@ -89,7 +89,7 @@ export default function App(){
  <Panel title="⭐ 每日 AI 看好股｜全市場量化初篩" right={<small style={{color:C.muted}}>依最新可用掃描結果排序；不是保證獲利訊號</small>}>
   <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10,fontSize:11}}><span style={{color:C.green}}>偏多買進 {signalCounts.buy}</span><span style={{color:C.yellow}}>中立觀望 {signalCounts.neutral}</span><span style={{color:C.red}}>偏空賣出／避險 {signalCounts.sell}</span><span style={{color:C.muted}}>資料不足 {signalCounts.insufficient}</span></div>
   {recommendations.length?<div style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:8}}>{recommendations.map(stock=><button key={stock.symbol} onClick={()=>setSelected(stock.symbol)} style={{textAlign:'left',background:C.panel2,border:'1px solid '+C.border,borderRadius:9,padding:10,color:C.text,cursor:'pointer',minWidth:0}}><div style={{display:'flex',justifyContent:'space-between',gap:6}}><b>{stock.symbol} {stock.name||''}</b><b style={{color:C.green}}>{stock.scorecard.score}</b></div><div style={{fontSize:11,color:C.green,margin:'5px 0'}}>偏多買進觀察</div><div style={{fontSize:11,color:C.muted,lineHeight:1.6}}>{(stock.scorecard.reasons||[]).slice(0,2).join('；')||'量化因子符合初篩條件'}</div><small style={{display:'block',color:C.muted,marginTop:6}}>日K {stock.technicalAsOf||stock.asOf||'日期未提供'}</small></button>)}</div>:<div style={{padding:12,background:C.panel2,borderRadius:8,color:C.muted,fontSize:12}}>目前沒有同時符合「資料新鮮、有效因子覆蓋率足夠、偏多買進」條件的股票。這是正常的風險控管，不會為了湊推薦名單而放寬門檻。</div>}
-  <small style={{display:'block',color:C.muted,marginTop:9}}>這是全市場量化評分產生的每日候選名單；Gemini／Grok／DeepSeek 的逐檔意見仍須在個股頁實際連線後才會顯示，不會把未執行的模型分析標成已完成。</small>
+  <small style={{display:'block',color:C.muted,marginTop:9}}>這是全市場量化評分產生的每日候選名單；Gemini／Groq／Cloudflare 的逐檔意見仍須在個股頁實際連線後才會顯示，不會把未執行的模型分析標成已完成。</small>
  </Panel>
  <div style={{display:'grid',gridTemplateColumns:'minmax(280px,.9fr) minmax(0,2fr)',gap:12,alignItems:'start'}}>
  <div style={{display:'grid',gap:12}}><Panel title="📰 證交所公告與事件"><div style={{maxHeight:220,overflow:"auto"}}>{news.length?news.slice(0,12).map((item,i)=><div key={item.url||item.id||i} style={{padding:"7px 0",borderBottom:"1px solid "+C.border}}><a href={item.url||"#"} target="_blank" rel="noreferrer" style={{color:C.blue,fontSize:12,textDecoration:"none"}}>{item.title||item.headline||"未命名新聞"}</a><small style={{display:"block",color:C.muted}}>{item.source||"新聞來源"}　{item.publishedAt||item.time||""}</small><small style={{color:C.muted}}>{item.summary||item.description||""}</small></div>):<small style={{color:C.muted}}>尚無交易所公告；此區顯示官方公告，不冒充即時財經新聞。</small>}</div></Panel><Panel title="📡 財經新聞直播中心"><LiveMarketTV/></Panel>
