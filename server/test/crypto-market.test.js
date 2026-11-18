@@ -24,3 +24,12 @@ test('limited quote requests tolerate an individual exchange ticker failure',asy
   const result=await mapLimit([1,2,3],2,async n=>{if(n===2)throw new Error('rate limited');return n*10;});
   assert.deepEqual(result,[10,null,30]);
 });
+
+test('crypto quote rows preserve a valid exchange event timestamp separately from receive time',()=>{
+  const sourceTimestamp='2026-11-18T15:00:00.000Z';
+  const row=buildQuoteRow('Binance','spot','BTCUSDT','BTC','USDT',65000,1.5,1000000,{sourceTimestamp});
+  assert.equal(row.timestamp,sourceTimestamp);
+  assert.equal(row.sourceTimestamp,sourceTimestamp);
+  assert.ok(Number.isFinite(Date.parse(row.receivedAt)));
+  assert.notEqual(row.receivedAt,row.sourceTimestamp);
+});
