@@ -17,7 +17,7 @@ async function getJson(url, timeoutMs = 10000) {
 function normalizeBook(exchange, bids, asks, timestamp, depth = 10) {
   const clean = rows => (rows || []).slice(0, depth).map(x => [number(x[0]), number(x[1])])
     .filter(x => x[0] !== null && x[1] !== null && x[0] > 0 && x[1] > 0);
-  const bidRows = clean(bids), askRows = clean(asks);
+  const bidRows = clean(bids).sort((a, b) => b[0] - a[0]), askRows = clean(asks).sort((a, b) => a[0] - b[0]);
   if (!bidRows.length || !askRows.length) throw new Error('orderbook_empty');
   const bid = bidRows[0][0], ask = askRows[0][0];
   if (!(ask > bid)) throw new Error('orderbook_crossed_or_invalid');
@@ -27,6 +27,9 @@ function normalizeBook(exchange, bids, asks, timestamp, depth = 10) {
   const total = bidVolume + askVolume;
   const weighted = rows => rows.reduce((sum, x, i) => sum + x[1] / (i + 1), 0);
   const weightedBid = weighted(bidRows), weightedAsk = weighted(askRows), weightedTotal = weightedBid + weightedAsk;
+  const bidNotional = bidRows.reduce((sum, x) => sum + x[0] * x[1], 0);
+  const askNotional = askRows.reduce((sum, x) => sum + x[0] * x[1], 0);
+  const notionalTotal = bidNotional + askNotional;
   const bestBidSize = bidRows[0][1], bestAskSize = askRows[0][1];
   const microPrice = (ask * bestBidSize + bid * bestAskSize) / (bestBidSize + bestAskSize);
   const availableLevels = Math.min(bidRows.length, askRows.length);
@@ -43,6 +46,7 @@ function normalizeBook(exchange, bids, asks, timestamp, depth = 10) {
     bidDepth: bidVolume, askDepth: askVolume,
     obi: total > 0 ? (bidVolume - askVolume) / total : null,
     weightedObi: weightedTotal > 0 ? (weightedBid - weightedAsk) / weightedTotal : null,
+    obiNotional: notionalTotal > 0 ? (bidNotional - askNotional) / notionalTotal : null,
     depthBands,
     timestamp: timestamp && Number.isFinite(Number(timestamp)) ? new Date(Number(timestamp)).toISOString() : null,
     receivedAt: now(), depth: Math.min(depth, Math.min(bidRows.length, askRows.length))
