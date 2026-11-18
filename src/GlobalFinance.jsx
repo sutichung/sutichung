@@ -18,10 +18,15 @@ export default function GlobalFinance() {
   const load = useCallback(async () => {
     setLoading(true); setError('');
     try {
+      // All /api/* endpoints require a valid Supabase bearer token when auth is configured.
+      // Keep this panel consistent with GlobalIntelligence; otherwise both finance calls return 401.
+      const token = localStorage.getItem('ts_access_token') || '';
+      const headers = { Accept:'application/json', ...(token ? { Authorization:'Bearer '+token } : {}) };
       const [r,f] = await Promise.all([
-        fetch('/api/finance/registry',{headers:{Accept:'application/json'}}),
-        fetch('/api/finance/fx',{headers:{Accept:'application/json'}})
+        fetch('/api/finance/registry',{headers}),
+        fetch('/api/finance/fx',{headers})
       ]);
+      if(r.status===401 || f.status===401) throw new Error('登入狀態已失效或尚未登入，請重新登入後再同步金融資料。');
       if(!r.ok) throw new Error('全球金融機構目錄讀取失敗：HTTP '+r.status);
       if(!f.ok) throw new Error('ECB 匯率資料讀取失敗：HTTP '+f.status);
       const [rd,fd] = await Promise.all([r.json(),f.json()]);
