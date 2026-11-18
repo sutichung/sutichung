@@ -667,11 +667,11 @@ async function route(req,res){
   if(u.pathname.startsWith('/api/crypto/risk/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase(),type=u.searchParams.get('type')==='perpetual'?'perpetual':'spot',exchange=u.searchParams.get('exchange')||'Binance',nativeSymbol=u.searchParams.get('nativeSymbol')||symbol,interval=u.searchParams.get('interval')||'1d';
     try{
-      const [historyResult,derivatives]=await Promise.all([
-        loadRiskHistory({getHistory:cryptoMarket.getHistory,symbol,marketType:type,interval,exchange,nativeSymbol,limit:240}),
-        type==='perpetual'?cryptoMarket.getDerivatives(symbol,exchange,nativeSymbol):Promise.resolve(null)
+      const historyResult=await loadRiskHistory({getHistory:cryptoMarket.getHistory,symbol,marketType:type,interval,exchange,nativeSymbol,limit:240});
+      const [derivatives,microResult]=await Promise.all([
+        type==='perpetual'?cryptoMarket.getDerivatives(symbol,historyResult.exchange,historyResult.exchange===exchange?nativeSymbol:symbol):Promise.resolve(null),
+        loadFreshMicrostructure({safeLoad,fetchMicrostructure:cryptoMicrostructure.fetchMicrostructure,symbol,marketType:type,requestedExchange:exchange,preferredExchange:historyResult.exchange,nativeSymbol,depth:10,whaleThresholdUsd:50000})
       ]);
-      const microResult=await loadFreshMicrostructure({safeLoad,fetchMicrostructure:cryptoMicrostructure.fetchMicrostructure,symbol,marketType:type,requestedExchange:exchange,preferredExchange:historyResult.exchange,nativeSymbol,depth:10,whaleThresholdUsd:50000});
       const micro=microResult.data;
       const result=assessMarketRisk(historyResult.history,derivatives,micro);
       if(!micro){
