@@ -1,41 +1,48 @@
-name: Production deployment acceptance
+name: Production smoke
 on:
   push:
     branches: [main]
-concurrency:
-  group: production-smoke-main
-  cancel-in-progress: true
 permissions:
   contents: read
   id-token: write
+concurrency:
+  group: taiwan-production-smoke
+  cancel-in-progress: false
 jobs:
-  production-smoke:
+  verify-live-data:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Wait until Render serves this exact Git commit
+      - name: Wait for the exact Render commit to become live
         env:
+          EXPECTED_COMMIT: ${{ github.sha }}
           MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 40); do
-            http_code=$(curl --silent --show-error --max-time 30 -o /tmp/health.json -w '%{http_code}' "$MARKET_APP_URL/api/health" 2>/dev/null || true)
-            deployed_commit=$(jq -r '.commit // empty' /tmp/health.json 2>/dev/null || true)
-            if [ "$http_code" = "200" ] && [ "$deployed_commit" = "$GITHUB_SHA" ]; then
-              echo "Render is serving expected commit $GITHUB_SHA"
-              exit 0
+          CURRENT_MAIN=$(git ls-remote "https://github.com/$GITHUB_REPOSITORY.git" refs/heads/main | cut -f1)
+          if [ "$CURRENT_MAIN" != "$EXPECTED_COMMIT" ]; then
+            echo "Skipping stale commit $EXPECTED_COMMIT; main is now $CURRENT_MAIN"
+            exit 0
+          fi
+          for attempt in $(seq 1 36); do
+            if curl --fail --silent --show-error --max-time 10 "$MARKET_APP_URL/api/health" -o /tmp/health.json; then
+              ACTUAL_COMMIT=$(node -e "const h=require('/tmp/health.json');process.stdout.write(h.commit||'')")
+              if [ "$ACTUAL_COMMIT" = "$EXPECTED_COMMIT" ]; then
+                node -e "const h=require('/tmp/health.json');if(!h.ok||h.branch!=='main')process.exit(1)"
+                echo "Render is serving expected commit $ACTUAL_COMMIT"
+                exit 0
+              fi
+              echo "Render still serves $ACTUAL_COMMIT; waiting for $EXPECTED_COMMIT"
             fi
-            echo "Waiting for Render commit: expected=$GITHUB_SHA actual=${deployed_commit:-unavailable} http=${http_code:-unavailable} attempt=$attempt/40"
-            sleep 15
+            sleep 10
           done
-          echo "Render did not serve the pushed commit within the acceptance window." >&2
-          cat /tmp/health.json 2>/dev/null || true
+          echo "Render did not activate expected commit $EXPECTED_COMMIT within six minutes" >&2
           exit 1
-      - name: Verify provider, Taiwan market, and crypto exchange APIs
+      - name: Verify official Taiwan and multi-exchange crypto data from Render
         env:
           MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
         run: |
@@ -44,14 +51,51 @@ jobs:
           test -n "$OIDC_TOKEN" && test "$OIDC_TOKEN" != "null" || { echo "Unable to obtain GitHub Actions OIDC token"; exit 1; }
           echo "::add-mask::$OIDC_TOKEN"
           AUTH_HEADER="Authorization: Bearer $OIDC_TOKEN"
-          curl --fail --silent --show-error --max-time 90 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/providers" -o /tmp/providers.json
-          curl --fail --silent --show-error --max-time 60 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/market" -o /tmp/market.json
+          curl --fail --silent --show-error --max-time 180 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/market" -o /tmp/market.json
           curl --fail --silent --show-error --max-time 120 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/crypto/market" -o /tmp/crypto.json
-          HEALTH_REPORT_NAME=production-smoke-health.json node server/jobs/health-review.js /tmp/health.json /tmp/providers.json /tmp/market.json /tmp/crypto.json
+          curl --fail --silent --show-error --max-time 45 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/providers" -o /tmp/providers.json
+          mkdir -p reports
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const health = JSON.parse(fs.readFileSync('/tmp/health.json', 'utf8'));
+          const market = JSON.parse(fs.readFileSync('/tmp/market.json', 'utf8'));
+          const crypto = JSON.parse(fs.readFileSync('/tmp/crypto.json', 'utf8'));
+          const providers = JSON.parse(fs.readFileSync('/tmp/providers.json', 'utf8'));
+          const exchangeChecks = (providers.checks || []).filter(x => ['binance','bybit','okx','coinbase','kraken'].includes(x.id));
+          const officialUs = (providers.checks || []).find(x => x.id === 'us-equities-official') || null;
+          const connectedExchanges = Number(crypto.summary?.connectedExchangeCount || 0);
+          const report = {
+            generatedAt: new Date().toISOString(),
+            commit: health.commit,
+            application: { ok: health.ok === true, branch: health.branch, mode: health.mode },
+            taiwan: {
+              ok: market.ok === true,
+              source: market.source || null,
+              listedCount: Number(market.listedCount || 0),
+              quoteCount: Number(market.quoteCount || 0),
+              serverTime: market.serverTime || null,
+              error: market.error || null
+            },
+            crypto: {
+              ok: Array.isArray(crypto.markets) && crypto.markets.length > 0 && connectedExchanges > 0,
+              marketCount: Array.isArray(crypto.markets) ? crypto.markets.length : 0,
+              connectedExchangeCount: connectedExchanges,
+              sourceTimestampCoveragePct: crypto.summary?.sourceTimestampCoveragePct ?? null,
+              exchanges: crypto.exchanges || []
+            },
+            cryptoProviderChecks: exchangeChecks,
+            usOfficialEntitlement: officialUs,
+            warnings: officialUs?.status === 'not_configured' ? ['us_official_equities_feed_not_configured'] : []
+          };
+          fs.writeFileSync('reports/production-smoke.json', JSON.stringify(report, null, 2) + '\n');
+          console.log(JSON.stringify(report, null, 2));
+          if (!report.application.ok) throw new Error('production_health_not_ok');
+          if (!report.taiwan.ok || report.taiwan.listedCount < 1 || report.taiwan.quoteCount < 1) throw new Error('official_taiwan_market_data_unavailable');
+          if (!report.crypto.ok) throw new Error('all_crypto_exchange_market_data_unavailable');
+          NODE
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: production-smoke-${{ github.run_id }}
-          path: reports/production-smoke-health.json
+          path: reports/production-smoke.json
           retention-days: 30
-          if-no-files-found: ignore
