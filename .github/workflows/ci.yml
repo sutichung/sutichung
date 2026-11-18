@@ -40,7 +40,7 @@ jobs:
         if: always()
         run: |
           npm audit --omit=dev --json > /tmp/npm-audit-production.json || true
-          node -e "const fs=require('fs');let a={};try{a=JSON.parse(fs.readFileSync('/tmp/npm-audit-production.json','utf8'))}catch(e){console.log('production audit unavailable:',e.message);process.exit(0)};console.log('PRODUCTION_AUDIT_SUMMARY',JSON.stringify(a.metadata?.vulnerabilities||{}))"
+          node -e "const fs=require('fs');let a={};try{a=JSON.parse(fs.readFileSync('/tmp/npm-audit-production.json','utf8'))}catch(e){console.error('production audit unavailable:',e.message);process.exit(1)};const v=a.metadata?.vulnerabilities;if(!v){console.error('production audit returned no vulnerability summary');process.exit(1)};console.log('PRODUCTION_AUDIT_SUMMARY',JSON.stringify(v));if((v.high||0)>0||(v.critical||0)>0){console.error('High or critical production dependency vulnerabilities detected');process.exit(1)}"
       - run: npm run build
         env:
           NODE_OPTIONS: --openssl-legacy-provider
