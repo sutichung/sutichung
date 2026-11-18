@@ -401,7 +401,7 @@ async function route(req,res){
       const stored=await researchStorage.saveReport(report);
       return json(res,201,{ok:true,...stored});
     }catch(e){
-      const status=e.code==='invalid_report'||e.code==='report_too_large'?400:e.code==='storage_not_configured'?503:502;
+      const status=e.code==='invalid_report'||e.code==='report_too_large'||e.message==='invalid_json'?400:e.message==='request_body_too_large'?413:e.code==='storage_not_configured'?503:502;
       return json(res,status,{error:e.code||'research_storage_error',message:e.message});
     }
   }
