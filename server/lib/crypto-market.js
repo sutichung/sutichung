@@ -127,7 +127,7 @@ function liquidationMap(price,openInterest,baseAsset){
 async function loadNews(){
  return cached('news',300000,async()=>{
   const urls=['https://www.coindesk.com/arc/outboundfeeds/rss/','https://cointelegraph.com/rss'];
-  const feeds=await Promise.allSettled(urls.map(url=>fetch(url,{headers:{'user-agent':'Mozilla/5.0'},signal:AbortSignal.timeout(10000}).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.text();})));
+  const feeds=await Promise.allSettled(urls.map(url=>fetch(url,{headers:{'user-agent':'Mozilla/5.0'},signal:AbortSignal.timeout(10000)}).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.text();})));
   const data=[];
   for(let i=0;i<feeds.length;i++)if(feeds[i].status==='fulfilled'){const xml=feeds[i].value,items=xml.match(/<item[\s\S]*?<\/item>/g)||[];for(const item of items.slice(0,20)){const get=tag=>{const m=item.match(new RegExp('<'+tag+'(?:\\s[^>]*)?>([\\s\\S]*?)<\\/'+tag+'>','i'));return m?m[1].replace(/<!\[CDATA\[|\]\]>/g,'').replace(/<[^>]+>/g,' ').replace(/&amp;/g,'&').replace(/&quot;/g,'"').trim():'';};const title=get('title'),link=get('link'),date=get('pubDate');if(title&&link)data.push({title,link,publishedAt:date,source:i===0?'CoinDesk':'Cointelegraph'});}}
   return {data:data.sort((a,b)=>Date.parse(b.publishedAt||0)-Date.parse(a.publishedAt||0)).slice(0,30),source:'CoinDesk／Cointelegraph RSS',timestamp:now(),errors:feeds.filter(x=>x.status==='rejected').length};
