@@ -514,7 +514,7 @@ async function route(req,res){
     const batch=(market.markets||[]).slice(offset,offset+limit);
     const results=await Promise.all(batch.map(async item=>{
       try{
-        const h=await cryptoMarket.getHistory(item.symbol,item.marketType,'1d'),v=h.indicators;
+        const h=await cryptoMarket.getHistory(item.symbol,item.marketType,'1d',item.exchange,item.nativeSymbol),v=h.indicators;
         if(!v)return {...item,technical:{status:'insufficient',direction:'資料不足',score:null,asOf:h.asOf}};
         const checks=[
           ['趨勢',v.trend==='bullish',v.trend==='bearish'],
@@ -537,17 +537,18 @@ async function route(req,res){
     return json(res,200,result);
   }
   if(u.pathname.startsWith('/api/crypto/history/')){
-    const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase(),type=u.searchParams.get('type')==='perpetual'?'perpetual':'spot',interval=u.searchParams.get('interval')||'1d';
-    try{return json(res,200,await cryptoMarket.getHistory(symbol,type,interval));}catch(e){return json(res,502,{error:e.message});}
+    const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase(),type=u.searchParams.get('type')==='perpetual'?'perpetual':'spot',interval=u.searchParams.get('interval')||'1d',exchange=u.searchParams.get('exchange')||'Binance',nativeSymbol=u.searchParams.get('nativeSymbol')||symbol;
+    try{return json(res,200,await cryptoMarket.getHistory(symbol,type,interval,exchange,nativeSymbol));}catch(e){return json(res,502,{error:e.message});}
   }
   if(u.pathname.startsWith('/api/crypto/derivatives/')){
-    const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase();
-    try{const data=await cryptoMarket.getDerivatives(symbol);return json(res,200,{...data,liquidationMap:cryptoMarket.liquidationMap(data.markPrice,data.openInterest,symbol.replace(/USDT$/,''))});}catch(e){return json(res,502,{error:e.message});}
+    const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase(),exchange=u.searchParams.get('exchange')||'Binance';
+    try{const data=await cryptoMarket.getDerivatives(symbol,exchange);return json(res,200,data);}catch(e){return json(res,502,{error:e.message});}
   }
   if(u.pathname.startsWith('/api/crypto/agents/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase(),type=u.searchParams.get('type')==='perpetual'?'perpetual':'spot';
     try{
-      const history=await cryptoMarket.getHistory(symbol,type,'1d'),derivatives=type==='perpetual'?await cryptoMarket.getDerivatives(symbol):null;
+      const exchange=u.searchParams.get('exchange')||'Binance',nativeSymbol=u.searchParams.get('nativeSymbol')||symbol;
+      const history=await cryptoMarket.getHistory(symbol,type,'1d',exchange,nativeSymbol),derivatives=type==='perpetual'?await cryptoMarket.getDerivatives(symbol,exchange,nativeSymbol):null;
       const quote={symbol,price:history.data.at(-1)?.close,source:history.source,timestamp:history.asOf};
       const scan={[symbol]:{symbol,scorecard:{status:'research-ready',fresh:true,direction:history.indicators?.trend==='bullish'?'偏向買進':history.indicators?.trend==='bearish'?'偏向賣出':'中立觀望',score:50,confidence:history.indicators?75:0,reasons:['使用 Binance 日 K 技術指標；未接入鏈上／代幣基本面']}}};
       const result=await buildAiCommittee(symbol,{getHistory:async()=>({data:history.data,indicators:history.indicators,source:history.source,asOf:history.asOf}),quotes:{[symbol]:quote},scan,flows:{},fundamentals:derivatives?{derivatives}:null,quoteSource:history.source,env:process.env});
