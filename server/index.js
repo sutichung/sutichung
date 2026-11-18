@@ -13,6 +13,7 @@ const { loadMarket: loadUsMarket, getChart: getUsChart, searchSymbols: searchUsS
 const cryptoMarket = require('./lib/crypto-market');
 const cryptoMicrostructure = require('./lib/crypto-microstructure');
 const { assessMarketRisk } = require('./lib/market-risk');
+const { loadRiskHistory, loadFreshMicrostructure } = require('./lib/crypto-risk-fallback');
 const { runStrategyLab } = require('./lib/strategy-lab');
 const globalFinance = require('./lib/global-finance');
 const globalIntelligence = require('./lib/intelligence');
@@ -665,34 +666,33 @@ async function route(req,res){
     try{return json(res,200,await cryptoMarket.getHistory(symbol,type,interval,exchange,nativeSymbol));}catch(e){return json(res,502,{error:e.message});}
   }
   if(u.pathname.startsWith('/api/crypto/risk/')){
-    const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase(),type=u.searchParams.get('type')==='perpetual'?'perpetual':'spot',exchange=u.searchParams.get('exchange')||'Binance',nativeSymbol=u.searchParams.get('nativeSymbol')||symbol;
+    const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase(),type=u.searchParams.get('type')==='perpetual'?'perpetual':'spot',exchange=u.searchParams.get('exchange')||'Binance',nativeSymbol=u.searchParams.get('nativeSymbol')||symbol,interval=u.searchParams.get('interval')||'1d';
     try{
-      const riskInputs=await loadCryptoRiskInputs({
-        symbol,type,interval:u.searchParams.get('interval')||'1d',exchange,nativeSymbol,
-        getHistory:(s,t,interval,ex,native)=>cryptoMarket.getHistory(s,t,interval,ex,native),
-        getDerivatives:(s,ex,native)=>cryptoMarket.getDerivatives(s,ex,native),
-        getMicrostructure:(ex,native)=>{
-          if(!['Binance','Bybit','OKX'].includes(ex))return Promise.resolve(null);
-          const microKey='crypto-microstructure:'+ex+':'+type+':'+(native||symbol)+':10:50000';
-          return safeLoad(microKey,3000,()=>cryptoMicrostructure.fetchMicrostructure({exchange:ex,symbol:native||symbol,marketType:type,depth:10,whaleThresholdUsd:50000}),e=>({status:'unavailable',error:e.message}));
-        }
-      });
-      const micro=riskInputs.microstructure;
-      const received=Date.parse(micro?.receivedAt||'');
-      const microFresh=!!(micro&&!micro.stale&&Number.isFinite(received)&&Date.now()-received<=30000);
-      const result=assessMarketRisk(riskInputs.history,riskInputs.derivatives,microFresh?micro:null);
-      result.requestedExchange=riskInputs.requestedExchange;
-      result.dataExchange=riskInputs.dataExchange;
-      result.exchangeFallback=riskInputs.exchangeFallback;
-      result.derivativesStatus=result.coverage?.derivatives?'connected':'unavailable';
-      if(riskInputs.exchangeFallback)result.exchangeFallbackWarning=riskInputs.requestedExchange+' K 線資料不可用，已改用 '+riskInputs.dataExchange+' 官方公開行情；風險來源已明確標示，未混合不同交易所報價。';
-      if(riskInputs.derivativesError)result.derivativesWarning='衍生品資料暫不可用：'+riskInputs.derivativesError;
-      if(riskInputs.microstructureError)result.microstructureWarning='委託簿／成交資料暫不可用：'+riskInputs.microstructureError;
-      if(!microFresh)result.microstructureStatus=micro?.stale?'stale':micro?'unavailable':'unsupported_exchange';
-      if(micro?.warning)result.microstructureWarning=micro.warning;
-      if(micro?.error)result.microstructureWarning=micro.error;
+      const [historyResult,derivatives]=await Promise.all([
+        loadRiskHistory({getHistory:cryptoMarket.getHistory,symbol,marketType:type,interval,exchange,nativeSymbol,limit:240}),
+        type==='perpetual'?cryptoMarket.getDerivatives(symbol,exchange,nativeSymbol):Promise.resolve(null)
+      ]);
+      const microResult=await loadFreshMicrostructure({safeLoad,fetchMicrostructure:cryptoMicrostructure.fetchMicrostructure,symbol:nativeSymbol,marketType:type,requestedExchange:exchange,preferredExchange:historyResult.exchange,depth:10,whaleThresholdUsd:50000});
+      const micro=microResult.data;
+      const result=assessMarketRisk(historyResult.history,derivatives,micro);
+      if(!micro){
+        result.microstructureStatus='unavailable';
+        result.microstructureAttempts=microResult.errors;
+      }else{
+        result.microstructureExchange=microResult.exchange;
+        if(microResult.fallbackUsed)result.microstructureWarning='原指定交易所微結構資料不可用，已改用 '+microResult.exchange+' 的新鮮委託簿與逐筆成交快照';
+      }
+      result.requestedExchange=exchange;
+      result.candleExchange=historyResult.exchange;
+      if(historyResult.fallbackUsed){
+        result.candleFallbackAttempts=historyResult.errors;
+        result.candleWarning='原指定交易所 K 線不可用，已改用 '+historyResult.exchange+' 的實際 K 線來源';
+      }
       return json(res,200,result);
-    }catch(e){return json(res,502,{status:'unavailable',error:e.message,scenarios:[]});}
+    }catch(e){
+      console.error('[crypto-risk] '+exchange+' '+symbol+' '+String(e.message||e));
+      return json(res,502,{status:'unavailable',error:String(e.message||e),attempts:e.attempts||[],scenarios:[]});
+    }
   }
   if(u.pathname.startsWith('/api/crypto/derivatives/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase(),exchange=u.searchParams.get('exchange')||'Binance';
