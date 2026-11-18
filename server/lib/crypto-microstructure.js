@@ -6,6 +6,14 @@ const number = value => {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 };
+function safeIsoTimestamp(value) {
+  const n = number(value);
+  if (n === null || n <= 0) return null;
+  // Exchange APIs normally return milliseconds; tolerate second-based feeds too.
+  const ms = n < 1e11 ? n * 1000 : n;
+  const date = new Date(ms);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
 async function getJson(url, timeoutMs = 10000) {
   const response = await fetch(url, {
     headers: { accept: 'application/json', 'user-agent': 'TaiwanStockHunter/1.0' },
@@ -15,38 +23,57 @@ async function getJson(url, timeoutMs = 10000) {
   return response.json();
 }
 function normalizeBook(exchange, bids, asks, timestamp, depth = 10) {
-  const clean = rows => (rows || []).slice(0, depth).map(x => [number(x[0]), number(x[1])])
-    .filter(x => x[0] !== null && x[1] !== null && x[0] > 0 && x[1] > 0);
-  const bidRows = clean(bids), askRows = clean(asks);
+  const requestedDepth = Number.isFinite(Number(depth)) ? Math.min(50, Math.max(1, Math.floor(Number(depth)))) : 10;
+  const clean = (rows, side) => (Array.isArray(rows) ? rows : [])
+    .map(x => [number(x?.[0]), number(x?.[1])])
+    .filter(x => x[0] !== null && x[1] !== null && x[0] > 0 && x[1] > 0)
+    .sort((a, b) => side === 'bid' ? b[0] - a[0] : a[0] - b[0])
+    .slice(0, requestedDepth);
+  const bidRows = clean(bids, 'bid'), askRows = clean(asks, 'ask');
   if (!bidRows.length || !askRows.length) throw new Error('orderbook_empty');
   const bid = bidRows[0][0], ask = askRows[0][0];
-  if (!(ask > bid)) throw new Error('orderbook_crossed_or_invalid');
+  if (!(ask > bid)) throw new Error('orderbook_crossed');
   const mid = (bid + ask) / 2;
-  if (ask < bid) throw new Error('orderbook_crossed');
   const bidVolume = bidRows.reduce((sum, x) => sum + x[1], 0);
   const askVolume = askRows.reduce((sum, x) => sum + x[1], 0);
+  const bidNotional = bidRows.reduce((sum, x) => sum + x[0] * x[1], 0);
+  const askNotional = askRows.reduce((sum, x) => sum + x[0] * x[1], 0);
   const total = bidVolume + askVolume;
+  const totalNotional = bidNotional + askNotional;
   return {
     exchange, bids: bidRows, asks: askRows, bestBid: bid, bestAsk: ask,
     midPrice: mid, spreadPct: mid > 0 ? (ask - bid) / mid * 100 : null,
     bidDepth: bidVolume, askDepth: askVolume,
+    bidNotional, askNotional,
     obi: total > 0 ? (bidVolume - askVolume) / total : null,
-    timestamp: timestamp && Number.isFinite(Number(timestamp)) ? new Date(Number(timestamp)).toISOString() : null,
-    receivedAt: now(), depth: Math.min(depth, Math.min(bidRows.length, askRows.length))
+    obiNotional: totalNotional > 0 ? (bidNotional - askNotional) / totalNotional : null,
+    timestamp: safeIsoTimestamp(timestamp),
+    receivedAt: now(), depth: Math.min(requestedDepth, Math.min(bidRows.length, askRows.length))
   };
 }
 function normalizeTrades(exchange, rows, thresholdUsd = 50000) {
-  return (rows || []).map(t => {
+  const seen = new Set();
+  return (Array.isArray(rows) ? rows : []).map(t => {
     const price = number(t.price), amount = number(t.amount), side = t.side;
     const cost = number(t.cost) ?? (price !== null && amount !== null ? price * amount : null);
     const quoteCurrency = String(t.quoteCurrency || 'USDT').toUpperCase();
     const usdComparable = ['USD','USDT','USDC','BUSD','FDUSD','TUSD'].includes(quoteCurrency) && t.whaleClassificationAvailable !== false;
+    const timestamp = number(t.timestamp);
+    const id = t.id == null ? null : String(t.id);
     return {
-      id: t.id == null ? null : String(t.id), timestamp: number(t.timestamp),
-      side: side === 'buy' || side === 'sell' ? side : null,
-      price, amount, quoteCurrency, quoteValue: cost, large: usdComparable && cost !== null ? cost >= thresholdUsd : null
+      id, timestamp, side: side === 'buy' || side === 'sell' ? side : null,
+      price, amount, quoteCurrency, quoteValue: cost,
+      large: usdComparable && cost !== null ? cost >= thresholdUsd : null
     };
   }).filter(t => t.price > 0 && t.amount > 0)
+    .filter(t => {
+      const key = t.id !== null
+        ? 'id:' + t.id
+        : [t.timestamp, t.side, t.price, t.amount].join(':');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
     .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
     .slice(0, 100);
 }
@@ -102,4 +129,4 @@ async function fetchMicrostructure({ exchange = 'Binance', symbol, marketType = 
     tape: { count: trades.length, largeTradeCount: whaleClassificationAvailable ? largeTrades.length : null, largeTrades: whaleClassificationAvailable ? largeTrades.slice(0, 20) : [], whaleClassificationAvailable, quoteCurrency, buyQuoteValue: notionalAvailable ? buyValue : null, sellQuoteValue: notionalAvailable ? sellValue : null, netAggressiveQuoteValue: notionalAvailable ? buyValue - sellValue : null, whaleThresholdUsd: whaleClassificationAvailable ? whaleThresholdUsd : null }
   };
 }
-module.exports = { fetchMicrostructure, normalizeBook, normalizeTrades };
+module.exports = { fetchMicrostructure, normalizeBook, normalizeTrades, safeIsoTimestamp };
