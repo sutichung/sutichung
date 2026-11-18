@@ -17,7 +17,8 @@ const INSTITUTIONS = [
   {code:'SG-MAS',name:'Monetary Authority of Singapore',country:'新加坡',region:'亞洲',flag:'🇸🇬',category:'中央銀行／金融監理',capabilities:'金融統計、監理與 API 資料',url:'https://www.mas.gov.sg',status:'directory_only'},
   {code:'JP-BOJ',name:'Bank of Japan',country:'日本',region:'亞洲',flag:'🇯🇵',category:'中央銀行／官方統計',capabilities:'利率、貨幣與金融統計',url:'https://www.stat-search.boj.or.jp',status:'directory_only'},
   {code:'AU-RBA',name:'Reserve Bank of Australia',country:'澳洲',region:'大洋洲',flag:'🇦🇺',category:'中央銀行／官方統計',capabilities:'匯率、利率與金融統計',url:'https://www.rba.gov.au/statistics/',status:'directory_only'},
-  {code:'INT-BIS',name:'Bank for International Settlements',country:'國際',region:'歐洲',flag:'🌐',category:'國際金融機構',capabilities:'國際銀行統計、支付與金融研究',url:'https://data.bis.org',status:'directory_only'}
+  {code:'INT-BIS',name:'Bank for International Settlements',country:'國際',region:'歐洲',flag:'🌐',category:'國際金融機構',capabilities:'國際銀行統計、支付與金融研究',url:'https://data.bis.org',status:'directory_only'},
+  {code:'INT-WB',name:'World Bank Open Data',country:'國際',region:'全球',flag:'🌐',category:'國際總體經濟資料 API',capabilities:'GDP、通膨、失業率與跨國發展指標',url:'https://data.worldbank.org',status:'public_data_only'}
 ];
 
 async function loadFx() {
@@ -83,7 +84,7 @@ async function loadMacro() {
 }
 
 function getRegistry() {
-  return {institutions:INSTITUTIONS,jurisdictions:new Set(INSTITUTIONS.map(x=>x.country)).size,publicDataConnectorsImplemented:1,privateAccountConnectors:0,source:'Curated official institution directory',timestamp:new Date().toISOString()};
+  return {institutions:INSTITUTIONS,jurisdictions:new Set(INSTITUTIONS.map(x=>x.country)).size,publicDataConnectorsImplemented:2,privateAccountConnectors:0,source:'Curated official institution directory',timestamp:new Date().toISOString()};
 }
 
 module.exports = {getRegistry,loadFx,loadMacro};
