@@ -35,5 +35,5 @@ test('strategy lab accepts market-specific fee overrides and never validates no-
  const result=runStrategyLab(candles(240,'sideways'),{market:'crypto',feeBps:2,slippageBps:1,sellTaxBps:0});
  assert.equal(result.costs.feeBps,2);
  assert.equal(result.costs.annualization,365);
- assert.ok(result.strategies.every(s=>s.validation.status!=='preliminary_pass'||s.periods[1].metrics.trades>=5));
+ assert.ok(result.strategies.every(s=>s.validation.status!=='preliminary_pass'||s.periods[1].metrics.trades>=10));
 });
