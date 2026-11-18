@@ -8,13 +8,13 @@ const round = (x,d=2) => Number.isFinite(x) ? Number(x.toFixed(d)) : null;
 function features(bars, lookback=5) {
   const n=bars.length, out=Array(n), swings=[], blocks=[];
   const tr=Array(n).fill(null), atr=Array(n).fill(null), er=Array(n).fill(null), chop=Array(n).fill(null), volPct=Array(n).fill(null);
-  const fast=Array(n).fill(null), slow=Array(n).fill(null), volZ=Array(n).fill(null), bullDist=Array(n).fill(0), bearDist=Array(n).fill(0), structure=Array(n).fill('neutral');
+  const fast=Array(n).fill(null), slow=Array(n).fill(null), volZ=Array(n).fill(null), bullDist=Array(n).fill(null), bearDist=Array(n).fill(null), structure=Array(n).fill('neutral');
   for(let i=0;i<n;i++){
     const b=bars[i],prev=bars[i-1];
     tr[i]=Math.max(b.high-b.low,prev?Math.abs(b.high-prev.close):0,prev?Math.abs(b.low-prev.close):0);
     if(i>=13)atr[i]=mean(tr.slice(i-13,i+1));
     if(i>=20){
-      const path=bars.slice(i-19,i+1).reduce((s,x,j,a)=>j?s+Math.abs(x.close-a[j-1].close):s,0);
+      const path=bars.slice(i-20,i+1).reduce((s,x,j,a)=>j?s+Math.abs(x.close-a[j-1].close):s,0);
       er[i]=path?Math.abs(b.close-bars[i-20].close)/path:0;
       const range=Math.max(...bars.slice(i-13,i+1).map(x=>x.high))-Math.min(...bars.slice(i-13,i+1).map(x=>x.low));
       const sum=mean(tr.slice(i-13,i+1))*14;
@@ -60,14 +60,16 @@ function features(bars, lookback=5) {
 }
 function score(f){
   let value=0;const reasons=[];
-  if(f.trendDir===1&&f.er>0.3){value+=1.2;reasons.push('有效上升趨勢');}
-  else if(f.trendDir===1&&f.er>0.18){value+=0.6;reasons.push('弱上升趨勢');}
-  if(f.chop<45&&f.volPercentile<0.85){value+=1;reasons.push('波動可控');}
-  else if(f.chop>61){value-=1.5;reasons.push('高度盤整');}
-  if(f.nearestBullOb>-1.5&&f.nearestBullOb<0.3){value+=1.3;reasons.push('接近多頭訂單區');}
-  if(f.nearestBullOb<-2.5)value-=0.8;
-  if(f.volZ>1.1){value+=0.7;reasons.push('量能放大');}
-  if(f.er<0.12){value-=2;reasons.push('效率過低');}
+  if(f.trendDir===1&&f.er!==null&&f.er>0.3){value+=1.2;reasons.push('有效上升趨勢');}
+  else if(f.trendDir===1&&f.er!==null&&f.er>0.18){value+=0.6;reasons.push('弱上升趨勢');}
+  if(f.chop!==null&&f.volPercentile!==null&&f.chop<45&&f.volPercentile<0.85){value+=1;reasons.push('波動可控');}
+  else if(f.chop!==null&&f.chop>61){value-=1.5;reasons.push('高度盤整');}
+  if(f.nearestBullOb!==null&&Math.abs(f.nearestBullOb)<1.5){value+=1.3;reasons.push('接近多頭訂單區');}
+  if(f.nearestBullOb!==null&&f.nearestBullOb>2.5)value-=0.8;
+  if(f.nearestBearOb!==null&&Math.abs(f.nearestBearOb)<1.5){value-=1.3;reasons.push('接近空頭訂單區');}
+  if(f.volZ>1.1&&f.trendDir===1){value+=0.7;reasons.push('上升趨勢量能放大');}
+  else if(f.volZ>1.1&&f.trendDir===-1){value-=0.7;reasons.push('下降趨勢量能放大');}
+  if(f.er!==null&&f.er<0.12){value-=2;reasons.push('效率過低');}
   if(f.structure==='bullish_bos'){value+=0.8;reasons.push('多頭結構突破');}
   if(f.structure==='bearish_bos'){value-=0.8;reasons.push('空頭結構突破');}
   return {value,reasons};
@@ -93,14 +95,22 @@ function simulate(bars,fs,start,end,costs,minScore){
   if(qty>0){const last=bars[end-1],fill=last.close*(1-slip),proceeds=qty*fill*(1-fee-tax);trades.push({pnl:proceeds-entryCost,returnPct:(proceeds/entryCost-1)*100,holdBars:end-1-entryIndex,score:entryScore,reasons:entryReasons,periodEndClose:true});cash+=proceeds;curve.push(cash);}
   const wins=trades.filter(t=>t.pnl>0),losses=trades.filter(t=>t.pnl<0),avg=mean(returns)||0,sd=returns.length?Math.sqrt(mean(returns.map(x=>(x-avg)**2))):0,down=returns.length?Math.sqrt(mean(returns.map(x=>Math.min(0,x)**2))):0;
   const gw=wins.reduce((s,t)=>s+t.pnl,0),gl=-losses.reduce((s,t)=>s+t.pnl,0);
-  return {status:trades.length?'ok':'no_trades',trades:trades.length,wins:wins.length,losses:losses.length,winRatePct:trades.length?round(wins.length/trades.length*100):null,netReturnPct:round((cash/100000-1)*100),maxDrawdownPct:round(maxDD*100),sharpe:sd?round(avg/sd*Math.sqrt(costs.annualization),3):null,sortino:down?round(avg/down*Math.sqrt(costs.annualization),3):null,profitFactor:gl?round(gw/gl,3):gw?null:0,expectancyPct:trades.length?round(mean(trades.map(t=>t.returnPct))):null,averageEntryScore:trades.length?round(mean(trades.map(t=>t.score))):null,finalEquity:round(cash),tradeDetails:trades};
+  return {status:trades.length?'ok':'no_trades',trades:trades.length,wins:wins.length,losses:losses.length,winRatePct:trades.length?round(wins.length/trades.length*100):null,netReturnPct:round((cash/100000-1)*100),maxDrawdownPct:round(Math.abs(maxDD)*100),sharpe:sd?round(avg/sd*Math.sqrt(costs.annualization),3):null,sortino:down?round(avg/down*Math.sqrt(costs.annualization),3):null,profitFactor:gl?round(gw/gl,3):gw?null:0,expectancyPct:trades.length?round(mean(trades.map(t=>t.returnPct))):null,averageEntryScore:trades.length?round(mean(trades.map(t=>t.score))):null,finalEquity:round(cash),tradeDetails:trades};
 }
 function runConsensusResearch(input, options={}) {
   if(!Array.isArray(input)||input.length<130)return {status:'insufficient_data',error:'共識策略至少需要 130 根 OHLCV K 線',strategies:[]};
-  const bars=input.map(x=>({time:x.time??null,open:Number(x.open),high:Number(x.high),low:Number(x.low),close:Number(x.close),volume:Number(x.volume)}));
-  for(let i=0;i<bars.length;i++){const b=bars[i];if(![b.open,b.high,b.low,b.close,b.volume].every(Number.isFinite)||b.open<=0||b.high<Math.max(b.open,b.close,b.low)||b.low>Math.min(b.open,b.close,b.high)||b.volume<0)return {status:'invalid_data',error:'共識策略收到無效 OHLCV',invalidIndex:i,strategies:[]};}
+  const bars=input.map(x=>({time:x.time??null,open:x.open===null||x.open===undefined||x.open===''?NaN:Number(x.open),high:x.high===null||x.high===undefined||x.high===''?NaN:Number(x.high),low:x.low===null||x.low===undefined||x.low===''?NaN:Number(x.low),close:x.close===null||x.close===undefined||x.close===''?NaN:Number(x.close),volume:x.volume===null||x.volume===undefined||x.volume===''?NaN:Number(x.volume)}));
+  let previousTime=0;
+  for(let i=0;i<bars.length;i++){
+    const b=bars[i],timestamp=Date.parse(b.time||'');
+    if(!Number.isFinite(timestamp)||timestamp<=0)return {status:'invalid_data',error:'共識策略收到無效或缺漏 K 線時間',invalidIndex:i,strategies:[]};
+    if(timestamp<=previousTime)return {status:'invalid_data',error:'共識策略 K 線時間必須嚴格遞增且不可重複',invalidIndex:i,strategies:[]};
+    previousTime=timestamp;
+    if(![b.open,b.high,b.low,b.close,b.volume].every(Number.isFinite)||b.open<=0||b.high<=0||b.low<=0||b.high<Math.max(b.open,b.close,b.low)||b.low>Math.min(b.open,b.close,b.high)||b.volume<0)return {status:'invalid_data',error:'共識策略收到無效或缺漏 OHLCV',invalidIndex:i,strategies:[]};
+  }
   const market=options.market||'tw-stock',defaults=market==='crypto'?{feeBps:10,slippageBps:5,sellTaxBps:0,annualization:365}:market==='us-stock'?{feeBps:1,slippageBps:5,sellTaxBps:0,annualization:252}:{feeBps:14.25,slippageBps:10,sellTaxBps:30,annualization:252};
   const costs={...defaults,...options};
+  if(![costs.feeBps,costs.slippageBps,costs.sellTaxBps,costs.annualization].every(Number.isFinite)||costs.feeBps<0||costs.slippageBps<0||costs.sellTaxBps<0||costs.annualization<=0)return {status:'invalid_options',error:'成本與年化參數必須為有效非負數',strategies:[]};
   for(const key of ['feeBps','slippageBps','sellTaxBps'])if(!Number.isFinite(Number(costs[key]))||Number(costs[key])<0||Number(costs[key])>1000)return {status:'invalid_costs',error:'交易成本參數必須介於 0 到 1000 bps',strategies:[]};
   const fs=features(bars,5),split=Math.floor(bars.length*0.6),start=60;
   const periods=[{id:'in_sample',label:'訓練區間',start,end:split},{id:'out_of_sample',label:'樣本外區間',start:split,end:bars.length}].map(p=>({...p,metrics:simulate(bars,fs,p.start,p.end,costs,3.5)}));
@@ -113,4 +123,4 @@ function runConsensusResearch(input, options={}) {
   const passed=oos.trades>=10&&oos.netReturnPct>0&&oos.maxDrawdownPct<=15&&oos.sharpe>0&&oos.profitFactor>1.1&&wfPassed;
   return {status:'ok',id:'consensus_market_structure',name:'多維度市場結構共識評分',category:'market_structure',description:'Efficiency Ratio、Choppiness、波動分位數、Swing、BOS、Order Block、量能異常多因子評分',features:fs.slice(-120),periods,walkForward:{passed:!!wfPassed,folds,totalTrades:count,positiveFolds:positive},costSensitivity:{halfCost:half,baseCost:oos,doubleCost:doubled,doubleCostStillPositive:doubled.netReturnPct>0},validation:{passed:!!passed,status:passed?'preliminary_pass':'not_validated',level:'single_holdout_plus_three_walk_forward_folds'},disclaimer:'Swing 僅在右側 5 根 K 線完成後確認；BOS 與訂單區僅自確認當根起可用，不回填至歷史。訊號於收盤後計算，下一根開盤成交。OB 為簡化價格區域代理，不代表真實機構掛單或必然支撐阻力。研究結果不構成投資建議。'};
 }
-module.exports={runConsensusResearch,features,score};
+module.exports={runConsensusResearch,features,score,simulate};
