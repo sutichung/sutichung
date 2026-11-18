@@ -22,7 +22,7 @@ test('provider diagnostics verify actual public crypto ticker responses and expo
   const originalFetch = global.fetch;
   const payloads = [
     ['openapi.twse.com.tw', [{ Code: '2330' }]],
-    ['data-api.ecb.europa.eu', 'KEY,OBS_VALUE\\nX,1.1'],
+    ['data-api.ecb.europa.eu', 'KEY,OBS_VALUE' + String.fromCharCode(10) + 'X,1.1'],
     ['api.binance.com', { symbol: 'BTCUSDT', price: '65000' }],
     ['api.bybit.com', { retCode: 0, result: { list: [{ symbol: 'BTCUSDT', lastPrice: '65000' }] } }],
     ['www.okx.com', { code: '0', data: [{ instId: 'BTC-USDT', last: '65000' }] }],
