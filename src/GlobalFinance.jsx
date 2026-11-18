@@ -42,7 +42,7 @@ export default function GlobalFinance() {
   const cards = [
     {label:'登錄機構／官方來源',value:registry?.institutions?.length ?? '—'},
     {label:'國家／司法管轄區',value:registry?.jurisdictions ?? '—'},
-    {label:'已實作公開資料介接',value:registry?.publicDataConnectorsImplemented ?? '—',note:'ECB 每日參考匯率 API 模組'},
+    {label:'已實作公開資料介接',value:registry?.publicDataConnectorsImplemented ?? '—',note:'ECB 外匯＋World Bank 總體經濟 API'},
     {label:'私人銀行帳戶連線',value:'0',note:'尚未取得銀行／聚合商授權'}
   ];
   return <section id="global-finance" style={{scrollMarginTop:78,margin:'14px 0',color:'#e8eef8',fontFamily:'Inter,system-ui,sans-serif'}}>
