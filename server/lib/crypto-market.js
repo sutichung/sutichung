@@ -89,16 +89,18 @@ function normalizeKlines(rows,exchange,interval='1d',asOf=Date.now()){
  return [...unique.values()].sort((a,b)=>Date.parse(a.time)-Date.parse(b.time));
 }
 
-async function getHistory(symbol,marketType='spot',interval='1d',exchange='Binance',nativeSymbol=''){
+async function getHistory(symbol,marketType='spot',interval='1d',exchange='Binance',nativeSymbol='',requestedLimit=240){
  const clean=String(nativeSymbol||symbol||'').toUpperCase();
- return cached('history:'+exchange+':'+marketType+':'+clean+':'+interval,300000,async()=>{
+ const cap=exchange==='OKX'?300:exchange==='Coinbase'?300:exchange==='Kraken'?720:1000;
+ const limit=Math.max(1,Math.min(cap,Math.floor(Number(requestedLimit)||240)));
+ return cached('history:'+exchange+':'+marketType+':'+clean+':'+interval+':'+limit,300000,async()=>{
   let rows=[],source=exchange+' public candles';
   const iv=interval==='1d'?'1d':interval;
-  if(exchange==='Binance'){const base=marketType==='perpetual'?'https://fapi.binance.com':'https://api.binance.com',path=marketType==='perpetual'?'/fapi/v1/klines':'/api/v3/klines';rows=await getJson(base+path+'?'+new URLSearchParams({symbol:clean,interval:iv,limit:'240'}));}
-  else if(exchange==='Bybit'){const category=marketType==='perpetual'?'linear':'spot',intervalMap={'1d':'D','1h':'60','4h':'240','15m':'15'};const x=await getJson('https://api.bybit.com/v5/market/kline?'+new URLSearchParams({category,symbol:clean,interval:intervalMap[iv]||'D',limit:'240'}));if(x.retCode!==0)throw new Error(x.retMsg);rows=x.result.list;}
-  else if(exchange==='OKX'){const inst=clean.includes('-')?clean:clean.replace(/(USDT|USDC|USD)$/,'-$1')+(marketType==='perpetual'?'-SWAP':'');const x=await getJson('https://www.okx.com/api/v5/market/candles?'+new URLSearchParams({instId:inst,bar:iv==='1d'?'1D':iv,limit:'240'}));if(x.code!=='0')throw new Error(x.msg);rows=x.data;}
-  else if(exchange==='Coinbase'){const product=clean.includes('-')?clean:clean.replace(/(USDT|USDC|USD)$/,'-$1');rows=await getJson('https://api.exchange.coinbase.com/products/'+encodeURIComponent(product)+'/candles?granularity=86400');}
-  else if(exchange==='Kraken'){const x=await getJson('https://api.kraken.com/0/public/OHLC?'+new URLSearchParams({pair:clean,interval:'1440'}));if(x.error?.length)throw new Error(x.error.join(','));const key=Object.keys(x.result||{}).find(k=>k!=='last');rows=x.result?.[key]||[];}
+  if(exchange==='Binance'){const base=marketType==='perpetual'?'https://fapi.binance.com':'https://api.binance.com',path=marketType==='perpetual'?'/fapi/v1/klines':'/api/v3/klines';rows=await getJson(base+path+'?'+new URLSearchParams({symbol:clean,interval:iv,limit:String(limit)}));}
+  else if(exchange==='Bybit'){const category=marketType==='perpetual'?'linear':'spot',intervalMap={'1d':'D','1h':'60','4h':'240','15m':'15'};const x=await getJson('https://api.bybit.com/v5/market/kline?'+new URLSearchParams({category,symbol:clean,interval:intervalMap[iv]||'D',limit:String(limit)}));if(x.retCode!==0)throw new Error(x.retMsg);rows=x.result.list;}
+  else if(exchange==='OKX'){const inst=clean.includes('-')?clean:clean.replace(/(USDT|USDC|USD)$/,'-$1')+(marketType==='perpetual'?'-SWAP':'');const x=await getJson('https://www.okx.com/api/v5/market/candles?'+new URLSearchParams({instId:inst,bar:iv==='1d'?'1D':iv,limit:String(Math.min(limit,300))}));if(x.code!=='0')throw new Error(x.msg);rows=x.data;}
+  else if(exchange==='Coinbase'){const product=clean.includes('-')?clean:clean.replace(/(USDT|USDC|USD)$/,'-$1');const granularity=({'1d':86400,'1h':3600,'15m':900}[iv]||86400);rows=await getJson('https://api.exchange.coinbase.com/products/'+encodeURIComponent(product)+'/candles?granularity='+granularity);}
+  else if(exchange==='Kraken'){const x=await getJson('https://api.kraken.com/0/public/OHLC?'+new URLSearchParams({pair:clean,interval:iv==='4h'?'240':iv==='1h'?'60':iv==='15m'?'15':'1440'}));if(x.error?.length)throw new Error(x.error.join(','));const key=Object.keys(x.result||{}).find(k=>k!=='last');rows=x.result?.[key]||[];}
   const candles=normalizeKlines(rows,exchange,iv);
   if(!candles.length)throw new Error(exchange+' 此市場沒有可用 K 線');
   return {symbol,marketType,exchange,interval,data:candles,indicators:indicators(candles),asOf:candles.at(-1).time,source,timestamp:now()};
