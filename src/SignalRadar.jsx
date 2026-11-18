@@ -1,7 +1,7 @@
 import React,{useMemo,useState} from 'react';
 
 const num=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))?Number(v):null;
-const fmt=v=>v===null?'—':Number(v).toLocaleString('zh-TW',{maximumFractionDigits:2});
+const fmt=v=>v===null||v===undefined||v===''||!Number.isFinite(Number(v))?'—':Number(v).toLocaleString('zh-TW',{maximumFractionDigits:2});
 export default function SignalRadar({stocks=[],selected,onSelect}){
  const [mode,setMode]=useState('quick'),[filter,setFilter]=useState('all');
  const items=useMemo(()=>stocks.map(s=>{
