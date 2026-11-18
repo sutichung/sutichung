@@ -10,15 +10,15 @@ const REQUIRED_SESSIONS={'1h':0,'1d':1,'5d':5,'20d':20};
 function evaluateOutcomes(previous,snapshot,{horizon='1d',sessions=1,costPct=0.785,now=Date.now()}={}){
  if(!previous||typeof previous!=='object'||!snapshot||typeof snapshot!=='object')throw new Error('Historical report and current snapshot are required');
  if(!(horizon in REQUIRED_SESSIONS)||sessions!==REQUIRED_SESSIONS[horizon])throw new Error('Horizon and trading-session count do not match');
- if(!Number.isFinite(costPct)||costPct<0||costPct>10)throw new Error('Round-trip cost assumption must be between 0 and 20 percent');
+ if(!Number.isFinite(costPct)||costPct<0||costPct>10)throw new Error('Round-trip cost assumption must be between 0 and 10 percent');
  const sourceAsOf=previous.snapshotTimestamp||previous.scanTimestamp||previous.generatedAt;
  const sourceTime=Date.parse(sourceAsOf||'');
  if(!Number.isFinite(sourceTime)||sourceTime>now+30000)throw new Error('Historical signal snapshot timestamp is invalid or in the future');
  const elapsedMs=now-sourceTime;
  if(horizon==='1h'&&(elapsedMs<45*60*1000||elapsedMs>3*60*60*1000))throw new Error('One-hour outcome evaluation is outside the allowed 45-minute to 3-hour window');
  const signals=[
-  ...(previous.topBullish||[]).map(x=>({...x,side:'long'})),
-  ...(previous.topBearish||[]).map(x=>({...x,side:'short'}))
+  ...(previous.topBullish||[]).map(x=>({...x,side:x&&Object.prototype.hasOwnProperty.call(x,'side')?x.side:'long'})),
+  ...(previous.topBearish||[]).map(x=>({...x,side:x&&Object.prototype.hasOwnProperty.call(x,'side')?x.side:'short'}))
  ];
  const quotes=snapshot.data||{},results=[],excluded=[];
  for(const signal of signals){
