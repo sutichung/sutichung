@@ -23,6 +23,7 @@ async function get(endpoint){
  await get('/api/market/snapshot');
  const [flows,futures,sentiment,news]=await Promise.all([get('/api/market/institutional-flows'),get('/api/market/futures'),get('/api/market/sentiment'),get('/api/market/news')]);
  const scan=await get('/api/market/scan');
+ if(scan.error||!scan.data||!Object.keys(scan.data).length)throw new Error('Market scan returned no usable data: '+String(scan.error||'empty scan').slice(0,180));
  const rows=Object.entries(scan.data||{}).map(([symbol,row])=>({symbol,...row,scorecard:row.scorecard||null}));
  const research=buildResearchLists(rows,30);
  const date=new Date().toISOString().slice(0,10);
