@@ -615,7 +615,21 @@ async function route(req,res){
   }
   if(u.pathname.startsWith('/api/crypto/risk/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase(),type=u.searchParams.get('type')==='perpetual'?'perpetual':'spot',exchange=u.searchParams.get('exchange')||'Binance',nativeSymbol=u.searchParams.get('nativeSymbol')||symbol;
-    try{const [history,derivatives]=await Promise.all([cryptoMarket.getHistory(symbol,type,u.searchParams.get('interval')||'1d',exchange,nativeSymbol),type==='perpetual'?cryptoMarket.getDerivatives(symbol,exchange,nativeSymbol):Promise.resolve(null)]);return json(res,200,assessMarketRisk(history,derivatives));}catch(e){return json(res,502,{status:'unavailable',error:e.message,scenarios:[]});}
+    try{
+      const microSupported=['Binance','Bybit','OKX'].includes(exchange);
+      const microKey='crypto-microstructure:'+exchange+':'+type+':'+nativeSymbol+':10:50000';
+      const [history,derivatives,micro]=await Promise.all([
+        cryptoMarket.getHistory(symbol,type,u.searchParams.get('interval')||'1d',exchange,nativeSymbol),
+        type==='perpetual'?cryptoMarket.getDerivatives(symbol,exchange,nativeSymbol):Promise.resolve(null),
+        microSupported?safeLoad(microKey,3000,()=>cryptoMicrostructure.fetchMicrostructure({exchange,symbol:nativeSymbol,marketType:type,depth:10,whaleThresholdUsd:50000}),e=>({status:'unavailable',error:e.message})):Promise.resolve(null)
+      ]);
+      const received=Date.parse(micro?.receivedAt||'');
+      const microFresh=!!(micro&&!micro.stale&&Number.isFinite(received)&&Date.now()-received<=30000);
+      const result=assessMarketRisk(history,derivatives,microFresh?micro:null);
+      if(!microFresh)result.microstructureStatus=micro?.stale?'stale':microSupported?'unavailable':'unsupported_exchange';
+      if(micro?.warning)result.microstructureWarning=micro.warning;
+      return json(res,200,result);
+    }catch(e){return json(res,502,{status:'unavailable',error:e.message,scenarios:[]});}
   }
   if(u.pathname.startsWith('/api/crypto/derivatives/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase(),exchange=u.searchParams.get('exchange')||'Binance';
