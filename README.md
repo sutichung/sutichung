@@ -93,3 +93,14 @@ API Key 僅放後端環境變數；不要提交 .env、Token、券商帳密或�
 ## Supabase 會員系統
 
 網站已加入 Supabase Auth 會員登入／註冊、會員密碼修改與管理員會員管理介面。請依照 [Supabase 會員系統設定](./docs/SUPABASE_MEMBERSHIP_SETUP.md) 設定 Render 後端環境變數；其中 `SUPABASE_SERVICE_ROLE_KEY` 必須只放在 Render，不可提交到 Git 或前端。管理員 Email 由伺服器端 `SUPABASE_ADMIN_EMAIL` 驗證。未登入的使用者不能讀取市場 API。
+
+## 美股專區（免費資料優先）
+- `GET /api/us/market`：美股指數（S&P 500、Dow Jones、NASDAQ、VIX）、30 檔大型股／ETF 觀察清單、技術指標、規則式研究評分及美股新聞。
+- `GET /api/us/history/:symbol`：指定美股／ETF 的 2 年日 K 歷史資料，供 K 線與量化回測使用。
+- `GET /api/us/search?q=:query`：搜尋觀察清單以外的美股代號及公司名稱。
+- `GET /api/us/agents/:symbol`：Gemini、Groq、Cloudflare Workers AI 三方獨立分析；依序使用各自 API Key，若設定 OpenRouter 則可作為免費模型備援。
+- 美股行情與新聞使用 Yahoo Finance 非官方公開 Chart/Search 端點，無 API Key，但不屬於正式授權即時行情 API，可能延遲、限流或中斷；市場狀態不是 REGULAR、報價時間戳過期或休市時一律標示非即時。
+- 目前量化掃描僅涵蓋程式內 30 檔大型股／ETF，不等於美國所有上市股票；可用搜尋查找其他代號並載入單檔歷史資料。
+- SEC 官方 EDGAR 公司申報文件連結可由個股頁開啟；本版本尚未自動抽取 SEC XBRL 財報與估值比率。
+- 美股回測預設券商佣金與賣出交易費用為 0，這只代表尚未填入成本，不代表實際交易免費；必須依券商、交易類型及 SEC/FINRA 費用調整。滑價亦須按標的流動性調整。
+- 美股與台股的交易時區、幣別、休市日、盤前盤後及交易制度不同；不得將台股漲跌幅限制、三大法人或集保籌碼規則直接套用於美股。
