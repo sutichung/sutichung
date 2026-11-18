@@ -133,4 +133,6 @@ API Key 僅放後端環境變數；不要提交 .env、Token、券商帳密或�
 
 ## 正式環境驗收
 
+正式驗收會檢查 Render commit、TWSE MIS 官方行情抽樣、多交易所加密貨幣、BTC 訂單簿與逐筆成交資料；未通過不會標記上線完成。
+
 `.github/workflows/production-smoke.yml` 會在 main 分支每次推送後，等待 Render 啟用對應 commit，並透過 GitHub Actions OIDC 驗證台股官方行情與多交易所加密貨幣資料；美股官方行情授權未設定時會明確列為警告，不冒充官方報價。
