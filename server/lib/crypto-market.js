@@ -59,14 +59,14 @@ async function krakenMarkets(){
  return shortlist.map(([key,x])=>{const base=(x.wsname.split('/')[0]||'').replace(/^XBT$/,'BTC'),quote=(x.wsname.split('/')[1]||'').replace(/^XBT$/,'BTC'),native=x.altname||key,q=tmap[native]||tmap[key]||{};return row('Kraken','spot',(base+quote).replace(/[^A-Z0-9]/g,''),base,quote,q.c?.[0],q.o&&Number(q.o)>0?(Number(q.c?.[0])/Number(q.o)-1)*100:null,Number(q.v?.[1])&&Number(q.c?.[0])?Number(q.v[1])*Number(q.c[0]):0,{high24h:q.h?.[1],low24h:q.l?.[1],volume:q.v?.[1],nativeSymbol:native,nativeType:'spot'});}).filter(Boolean);
 }
 async function loadMarket(){
- return cached('market-multi',60000,async()=>{
+ return cached('market-multi',15000,async()=>{
   const jobs=[['Binance',binanceMarkets],['Bybit',bybitMarkets],['OKX',okxMarkets],['Coinbase',coinbaseMarkets],['Kraken',krakenMarkets]];
-  const settled=await Promise.allSettled(jobs.map(x=>x[1]()));
-  const markets=settled.flatMap((x)=>x.status==='fulfilled'?x.value:[]).filter(x=>x&&Number.isFinite(x.price)&&x.price>0);
+  const settled=await Promise.allSettled(jobs.map(async([name,loader])=>{const started=Date.now();const data=await loader();return {data,updatedAt:now(),latencyMs:Date.now()-started};}));
+  const markets=settled.flatMap(x=>x.status==='fulfilled'?x.value.data:[]).filter(x=>x&&Number.isFinite(x.price)&&x.price>0);
   if(!markets.length)throw new Error('所有交易所公開市場 API 均無法連線');
-  const exchanges=jobs.map((j,i)=>{const count=settled[i].status==='fulfilled'?settled[i].value.filter(x=>x&&x.price>0).length:0;return {name:j[0],status:count?'connected':'unavailable',markets:count,error:count?null:settled[i].status==='rejected'?String(settled[i].reason?.message||'API error'):'上游未回傳有效價格'};});
+  const exchanges=jobs.map((j,i)=>{const result=settled[i].status==='fulfilled'?settled[i].value:null;const count=result?result.data.filter(x=>x&&x.price>0).length:0;return {name:j[0],status:count?'connected':'unavailable',markets:count,updatedAt:result?.updatedAt||null,latencyMs:result?.latencyMs??null,quoteMode:'REST snapshot polling',error:count?null:settled[i].status==='rejected'?String(settled[i].reason?.message||'API error'):'上游未回傳有效價格'};});
   markets.sort((a,b)=>b.quoteVolume-a.quoteVolume);
-  return {markets,summary:{total:markets.length,spot:markets.filter(x=>x.marketType==='spot').length,perpetual:markets.filter(x=>x.marketType==='perpetual').length,exchanges:exchanges.filter(x=>x.status==='connected').map(x=>x.name)},exchanges,source:'Binance／Bybit／OKX／Coinbase／Kraken 公開市場 API；各交易所涵蓋商品依公開清單',timestamp:now()};
+  return {markets,summary:{total:markets.length,spot:markets.filter(x=>x.marketType==='spot').length,perpetual:markets.filter(x=>x.marketType==='perpetual').length,exchanges:exchanges.filter(x=>x.status==='connected').map(x=>x.name),connectedExchangeCount:exchanges.filter(x=>x.status==='connected').length},exchanges,source:'Binance／Bybit／OKX／Coinbase／Kraken 各自公開行情 API；價格不跨交易所混合',quoteMode:'REST snapshot polling；非 WebSocket 逐筆推送',refreshIntervalMs:15000,timestamp:now()};
  });
 }
 function normalizeKlines(rows,exchange){
