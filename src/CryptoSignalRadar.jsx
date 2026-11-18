@@ -1,6 +1,6 @@
 import React,{useMemo,useState} from 'react';
 const n=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))?Number(v):null;
-const fmt=v=>v===null?'—':Number(v).toLocaleString('en-US',{maximumFractionDigits:3});
+const fmt=v=>v===null||v===undefined||v===''||!Number.isFinite(Number(v))?'—':Number(v).toLocaleString('en-US',{maximumFractionDigits:3});
 export default function CryptoSignalRadar({rows=[],techMap={},onSelect}){
  const [mode,setMode]=useState('quick'),[direction,setDirection]=useState('all');
  const items=useMemo(()=>rows.map(x=>{const t=techMap[x.id]||{},change=n(x.changePct),vol=n(x.quoteVolume),rsi=n(t.rsi),hist=n(t.macdHistogram),adx=n(t.adx),ema20=n(t.ema20),ema60=n(t.ema60),hasTech=[rsi,hist,adx,ema20,ema60].filter(v=>v!==null).length>=3;
