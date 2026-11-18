@@ -64,14 +64,14 @@ export default function App(){
  },[ind,active.price,selectedScorecard]);
  const bullBearSignal=useMemo(()=>{
   const checks=[
-   {label:'價格高於 EMA20',available:Number.isFinite(Number(active.price))&&Number.isFinite(Number(ind?.e20)),bull:Number(active.price)>Number(ind?.e20)},
-   {label:'EMA20 高於 EMA60',available:Number.isFinite(Number(ind?.e20))&&Number.isFinite(Number(ind?.e60)),bull:Number(ind?.e20)>Number(ind?.e60)},
-   {label:'MACD 高於訊號線',available:Number.isFinite(Number(ind?.macd))&&Number.isFinite(Number(ind?.signal)),bull:Number(ind?.macd)>Number(ind?.signal)},
-   {label:'RSI 高於 50',available:Number.isFinite(Number(ind?.rsi)),bull:Number(ind?.rsi)>=50},
-   {label:'成交量比率至少 1',available:Number.isFinite(Number(ind?.volumeRatio)),bull:Number(ind?.volumeRatio)>=1},
-   {label:'市場研究資料已確認',available:selectedScorecard?.status==='research-ready'&&selectedScorecard?.fresh===true,bull:selectedScorecard?.direction==='偏向買進'}
+   {label:'價格高於 EMA20',available:Number.isFinite(Number(active.price))&&Number.isFinite(Number(ind?.e20)),bull:Number(active.price)>Number(ind?.e20),bear:Number(active.price)<Number(ind?.e20)},
+   {label:'EMA20 與 EMA60 趨勢',available:Number.isFinite(Number(ind?.e20))&&Number.isFinite(Number(ind?.e60)),bull:Number(ind?.e20)>Number(ind?.e60),bear:Number(ind?.e20)<Number(ind?.e60)},
+   {label:'MACD 動能方向',available:Number.isFinite(Number(ind?.macd))&&Number.isFinite(Number(ind?.signal)),bull:Number(ind?.macd)>Number(ind?.signal),bear:Number(ind?.macd)<Number(ind?.signal)},
+   {label:'RSI 動能方向',available:Number.isFinite(Number(ind?.rsi)),bull:Number(ind?.rsi)>=50,bear:Number(ind?.rsi)<50},
+   {label:'放量確認（僅作確認）',available:Number.isFinite(Number(ind?.volumeRatio)),bull:Number(ind?.volumeRatio)>=1,bear:Number(ind?.volumeRatio)>=1},
+   {label:'全市場研究方向',available:selectedScorecard?.status==='research-ready'&&selectedScorecard?.fresh===true,bull:selectedScorecard?.direction==='偏向買進',bear:String(selectedScorecard?.direction||'').includes('賣出')}
   ];
-  const usable=checks.filter(x=>x.available),bull=usable.filter(x=>x.bull).length,bear=usable.length-bull;
+  const usable=checks.filter(x=>x.available),bull=usable.filter(x=>x.bull).length,bear=usable.filter(x=>x.bear).length;
   const enough=usable.length>=4;
   const bullScore=enough?Math.round(bull/usable.length*100):null,bearScore=enough?Math.round(bear/usable.length*100):null;
   let state='盤整／方向不明';
