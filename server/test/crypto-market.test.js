@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {buildQuoteRow,mapLimit,normalizeKlines,getJsonFallback}=require('../lib/crypto-market');
+const {buildQuoteRow,mapLimit,normalizeKlines,getJsonFallback,getDerivatives}=require('../lib/crypto-market');
 
 test('crypto quote rows reject missing, zero and invalid prices',()=>{
   assert.equal(buildQuoteRow('Binance','spot','BTCUSDT','BTC','USDT',null,0,0),null);
