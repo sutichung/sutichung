@@ -508,6 +508,30 @@ async function route(req,res){
     const result=await safeLoad('crypto-market',60000,cryptoMarket.loadMarket,e=>({markets:[],summary:{total:0,spot:0,perpetual:0},source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,result.error?503:200,result);
   }
+  if(u.pathname==='/api/crypto/scan'){
+    const market=await safeLoad('crypto-market',60000,cryptoMarket.loadMarket,e=>({markets:[],error:e.message}));
+    const offset=Math.max(0,Number(u.searchParams.get('offset'))||0),limit=Math.min(40,Math.max(1,Number(u.searchParams.get('limit'))||25));
+    const batch=(market.markets||[]).slice(offset,offset+limit);
+    const results=await Promise.all(batch.map(async item=>{
+      try{
+        const h=await cryptoMarket.getHistory(item.symbol,item.marketType,'1d'),v=h.indicators;
+        if(!v)return {...item,technical:{status:'insufficient',direction:'資料不足',score:null,asOf:h.asOf}};
+        const checks=[
+          ['趨勢',v.trend==='bullish',v.trend==='bearish'],
+          ['RSI',v.rsi>=50&&v.rsi<=70,v.rsi<40||v.rsi>75],
+          ['MACD',v.macdHistogram>0,v.macdHistogram<0],
+          ['ADX',v.adx>=20,false],
+          ['MFI',v.mfi>=50,v.mfi<35],
+          ['量比',v.volumeRatio>=1,v.volumeRatio<0.6]
+        ];
+        const available=checks.filter(x=>x[1]||x[2]||x[0]==='ADX'||x[0]==='量比');
+        const score=Math.round(50+available.reduce((sum,x)=>sum+(x[1]?1:x[2]?-1:0),0)/Math.max(1,available.length)*50);
+        const direction=score>=65?'偏多觀察':score<=35?'偏空觀察':'中立觀望';
+        return {...item,technical:{status:'research-ready',direction,score,confidence:Math.round(available.length/checks.length*100),checks:checks.map(x=>({name:x[0],bullish:x[1],bearish:x[2]})),indicators:v,asOf:h.asOf}};
+      }catch(e){return {...item,technical:{status:'error',direction:'資料暫缺',score:null,error:e.message}};}
+    }));
+    return json(res,200,{results,offset,nextOffset:offset+batch.length,total:(market.markets||[]).length,done:offset+batch.length>=(market.markets||[]).length,source:'Binance 逐市場日K技術掃描',timestamp:now()});
+  }
   if(u.pathname==='/api/crypto/news'){
     const result=await safeLoad('crypto-news',300000,cryptoMarket.loadNews,e=>({data:[],source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
