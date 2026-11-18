@@ -87,7 +87,8 @@ function runStrategy(id, candles, start, end, costs) {
   if(position){
     const last=candles[end-1],gross=last.close/entryPrice-1;
     const net=(1+gross)*(1-entryCost)*(1-exitCost)-1;
-    trades.push({returnPct:net*100,holdBars:end-entryIndex});
+    trades.push({returnPct:net*100,holdBars:end-entryIndex,periodEndClose:true});
+    if(dailyReturns.length)dailyReturns[dailyReturns.length-1]=(1+dailyReturns.at(-1))*(1-exitCost)-1;
   }
   return summarize(trades,dailyReturns);
 }
@@ -120,7 +121,7 @@ function runStrategyLab(input, options={}) {
     const passed=oos.status==='ok'&&oos.trades>=5&&oos.netReturnPct>0&&oos.maxDrawdownPct<=20&&oos.sharpe!==null&&oos.sharpe>0;
     return {...strategy,periods:results,validation:{status:passed?'candidate_pass':'not_validated',rules:['樣本外至少 5 筆交易','樣本外淨報酬大於 0（已扣估算成本）','樣本外最大回撤不超過 20%','樣本外 Sharpe 大於 0'],passed}};
   });
-  return {status:'ok',symbol:options.symbol||null,market,source:options.source||'provided OHLCV',asOf:candles.at(-1).time,barCount:candles.length,split:{trainBars:trainEnd-trainStart,outOfSampleBars:testEnd-testStart,ratio:'60/40'},costs:{feeBps:costs.feeBps,slippageBps:costs.slippageBps,sellTaxBps:costs.sellTaxBps,unit:'bps per side; sell tax charged on exit'},strategies,disclaimer:'研究與回測結果不是未來報酬保證。使用下一根 K 線開盤成交以避免同根收盤訊號前視偏誤；仍未完整模擬限價排隊、停牌、漲跌停、融券限制及實際市場微結構。未通過樣本外規則的策略不得當作推薦訊號。'};
+  return {status:'ok',symbol:options.symbol||null,market,source:options.source||'provided OHLCV',asOf:candles.at(-1).time,barCount:candles.length,split:{trainBars:trainEnd-trainStart,outOfSampleBars:testEnd-testStart,ratio:'60/40'},costs:{feeBps:costs.feeBps,slippageBps:costs.slippageBps,sellTaxBps:costs.sellTaxBps,unit:'bps per side; sell tax charged on exit'},strategies,disclaimer:'研究與回測結果不是未來報酬保證。使用下一根 K 線開盤成交以避免同根收盤訊號前視偏誤，區間結束時將未平倉部位按最後收盤價估值並計入退出成本；仍未完整模擬限價排隊、停牌、漲跌停、融券限制及實際市場微結構。未通過樣本外規則的策略不得當作推薦訊號。'};
 }
 
 module.exports={runStrategyLab,validateCandles,STRATEGIES};
