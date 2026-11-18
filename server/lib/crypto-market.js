@@ -10,7 +10,7 @@ async function getJson(url,timeout=14000){
 }
 async function cached(key,ttl,loader){return marketCache.get(key,ttl,loader);}
 const n=v=>Number.isFinite(Number(v))?Number(v):null;
-function row(exchange,marketType,symbol,baseAsset,quoteAsset,price,changePct,quoteVolume,extra={}){const p=n(price);if(!(p>0))return null;return {id:exchange+':'+marketType+':'+symbol,exchange,marketType,symbol,baseAsset,quoteAsset,price:p,changePct:n(changePct),quoteVolume:n(quoteVolume)||0,high24h:n(extra.high24h),low24h:n(extra.low24h),volume:n(extra.volume),timestamp:extra.timestamp||now(),sourceTimestamp:extra.sourceTimestamp||null,nativeSymbol:extra.nativeSymbol||symbol,nativeType:extra.nativeType||marketType};}
+function row(exchange,marketType,symbol,baseAsset,quoteAsset,price,changePct,quoteVolume,extra={}){const p=n(price);if(!(p>0))return null;const sourceTimestamp=extra.sourceTimestamp&&Number.isFinite(Date.parse(extra.sourceTimestamp))?new Date(extra.sourceTimestamp).toISOString():null;return {id:exchange+':'+marketType+':'+symbol,exchange,marketType,symbol,baseAsset,quoteAsset,price:p,changePct:n(changePct),quoteVolume:n(quoteVolume)||0,high24h:n(extra.high24h),low24h:n(extra.low24h),volume:n(extra.volume),timestamp:sourceTimestamp,sourceTimestamp,receivedAt:now(),nativeSymbol:extra.nativeSymbol||symbol,nativeType:extra.nativeType||marketType};}
 async function mapLimit(items,limit,worker){const out=new Array(items.length);let next=0;await Promise.all(Array.from({length:Math.min(limit,items.length)},async()=>{while(true){const i=next++;if(i>=items.length)return;try{out[i]=await worker(items[i],i);}catch(_){out[i]=null;}}}));return out;}
 async function binanceMarkets(){
  const jobs=await Promise.allSettled([getJson('https://api.binance.com/api/v3/exchangeInfo'),getJson('https://api.binance.com/api/v3/ticker/24hr'),getJson('https://fapi.binance.com/fapi/v1/exchangeInfo'),getJson('https://fapi.binance.com/fapi/v1/ticker/24hr')]);
@@ -64,9 +64,11 @@ async function loadMarket(){
   const settled=await Promise.allSettled(jobs.map(async([name,loader])=>{const started=Date.now();const data=await loader();return {data,updatedAt:now(),latencyMs:Date.now()-started};}));
   const markets=settled.flatMap(x=>x.status==='fulfilled'?x.value.data:[]).filter(x=>x&&Number.isFinite(x.price)&&x.price>0);
   if(!markets.length)throw new Error('所有交易所公開市場 API 均無法連線');
-  const exchanges=jobs.map((j,i)=>{const result=settled[i].status==='fulfilled'?settled[i].value:null;const count=result?result.data.filter(x=>x&&x.price>0).length:0;return {name:j[0],status:count?'connected':'unavailable',markets:count,updatedAt:result?.updatedAt||null,latencyMs:result?.latencyMs??null,quoteMode:'REST snapshot polling',error:count?null:settled[i].status==='rejected'?String(settled[i].reason?.message||'API error'):'上游未回傳有效價格'};});
+  const coverageNotes={Binance:'公開現貨與 USDT 永續商品清單；不含所有交易所衍生商品類型',Bybit:'商品清單最多讀取 8 頁、每頁最多 1,000 筆；若尚有 nextPageCursor，結果可能截斷',OKX:'讀取公開 SPOT 與 SWAP 商品清單',Coinbase:'目前僅掃描商品清單前 100 個可交易產品，非全商品覆蓋',Kraken:'目前僅掃描商品清單前 100 個可交易交易對，非全商品覆蓋'};
+  const exchanges=jobs.map((j,i)=>{const result=settled[i].status==='fulfilled'?settled[i].value:null;const rows=result?.data||[];const count=rows.filter(x=>x&&x.price>0).length;return {name:j[0],status:count?'connected':'unavailable',markets:count,updatedAt:result?.updatedAt||null,latencyMs:result?.latencyMs??null,quoteMode:'REST snapshot polling',sourceTimestampCount:rows.filter(x=>x.sourceTimestamp).length,coverageNote:coverageNotes[j[0]],error:count?null:settled[i].status==='rejected'?String(settled[i].reason?.message||'API error'):'上游未回傳有效價格'};});
   markets.sort((a,b)=>b.quoteVolume-a.quoteVolume);
-  return {markets,summary:{total:markets.length,spot:markets.filter(x=>x.marketType==='spot').length,perpetual:markets.filter(x=>x.marketType==='perpetual').length,exchanges:exchanges.filter(x=>x.status==='connected').map(x=>x.name),connectedExchangeCount:exchanges.filter(x=>x.status==='connected').length},exchanges,source:'Binance／Bybit／OKX／Coinbase／Kraken 各自公開行情 API；價格不跨交易所混合',quoteMode:'REST snapshot polling；非 WebSocket 逐筆推送',refreshIntervalMs:15000,timestamp:now()};
+  const receivedAt=now(),sourceTimestampCount=markets.filter(x=>x.sourceTimestamp).length;
+  return {markets,summary:{total:markets.length,spot:markets.filter(x=>x.marketType==='spot').length,perpetual:markets.filter(x=>x.marketType==='perpetual').length,exchanges:exchanges.filter(x=>x.status==='connected').map(x=>x.name),connectedExchangeCount:exchanges.filter(x=>x.status==='connected').length,sourceTimestampCount,sourceTimestampCoveragePct:markets.length?Math.round(sourceTimestampCount/markets.length*100):0},exchanges,coverage:{scope:'僅涵蓋下列五家交易所公開 API 可取得的商品；不代表全世界所有交易所或所有商品',partialProviders:exchanges.filter(x=>x.coverageNote).map(x=>x.name),timestampLimit:'沒有來源時間戳的報價只標示伺服器接收時間，不推定為交易所報價時間'},source:'Binance／Bybit／OKX／Coinbase／Kraken 各自公開行情 API；價格不跨交易所混合',quoteMode:'REST snapshot polling；非 WebSocket 逐筆推送',refreshIntervalMs:15000,receivedAt,timestamp:null};
  });
 }
 function normalizeKlines(rows,exchange){
@@ -76,7 +78,9 @@ function normalizeKlines(rows,exchange){
  if(exchange==='Coinbase')candles=rows.map(x=>({time:new Date(Number(x[0])*1000).toISOString(),low:+x[1],high:+x[2],open:+x[3],close:+x[4],volume:+x[5]}));
  if(exchange==='Kraken')candles=rows.map(x=>({time:new Date(Number(x[0])*1000).toISOString(),open:+x[1],high:+x[2],low:+x[3],close:+x[4],volume:+x[6]}));
  if(exchange==='Binance')candles=rows.map(x=>({time:new Date(Number(x[0])).toISOString(),open:+x[1],high:+x[2],low:+x[3],close:+x[4],volume:+x[5]}));
- return candles.filter(x=>[x.open,x.high,x.low,x.close,x.volume].every(Number.isFinite)).sort((a,b)=>Date.parse(a.time)-Date.parse(b.time));
+ const valid=candles.filter(x=>Number.isFinite(Date.parse(x.time))&&[x.open,x.high,x.low,x.close,x.volume].every(Number.isFinite)&&x.open>0&&x.high>0&&x.low>0&&x.close>0&&x.volume>=0&&x.high>=Math.max(x.open,x.close,x.low)&&x.low<=Math.min(x.open,x.close,x.high));
+ const unique=new Map();for(const candle of valid)unique.set(candle.time,candle);
+ return [...unique.values()].sort((a,b)=>Date.parse(a.time)-Date.parse(b.time));
 }
 async function getHistory(symbol,marketType='spot',interval='1d',exchange='Binance',nativeSymbol=''){
  const clean=String(nativeSymbol||symbol||'').toUpperCase();

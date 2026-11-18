@@ -32,18 +32,21 @@ async function getChart(symbol, range='1y', interval='1d') {
     const meta=result.meta||{},q=result.indicators?.quote?.[0]||{},adj=result.indicators?.adjclose?.[0]?.adjclose||[];
     const candles=(result.timestamp||[]).map((stamp,i)=>{
       const open=Number(q.open?.[i]),high=Number(q.high?.[i]),low=Number(q.low?.[i]),close=Number(q.close?.[i]),volume=Number(q.volume?.[i]||0);
-      if(![open,high,low,close].every(Number.isFinite))return null;
-      return {time:new Date(stamp*1000).toISOString().slice(0,10),timestamp:new Date(stamp*1000).toISOString(),open,high,low,close,adjustedClose:Number.isFinite(Number(adj[i]))?Number(adj[i]):null,volume:Number.isFinite(volume)?volume:0};
-    }).filter(Boolean);
+      if(!Number.isFinite(stamp)||![open,high,low,close].every(Number.isFinite)||![open,high,low,close].every(x=>x>0)||!Number.isFinite(volume)||volume<0||high<Math.max(open,close,low)||low>Math.min(open,close,high))return null;
+      return {time:new Date(stamp*1000).toISOString().slice(0,10),timestamp:new Date(stamp*1000).toISOString(),open,high,low,close,adjustedClose:Number.isFinite(Number(adj[i]))&&Number(adj[i])>0?Number(adj[i]):null,volume};
+    }).filter(Boolean).sort((a,b)=>Date.parse(a.timestamp)-Date.parse(b.timestamp));
+    const candleMap=new Map();for(const candle of candles)candleMap.set(candle.time,candle);
+    candles.splice(0,candles.length,...candleMap.values());
     const marketTime=Number(meta.regularMarketTime||result.timestamp?.at(-1)||0);
     const timestamp=marketTime?new Date(marketTime*1000).toISOString():null;
-    const price=Number(meta.regularMarketPrice);
-    const previous=Number(meta.chartPreviousClose??meta.previousClose);
-    const changePct=Number.isFinite(price)&&Number.isFinite(previous)&&previous>0?(price/previous-1)*100:null;
+    const rawPrice=Number(meta.regularMarketPrice),price=Number.isFinite(rawPrice)&&rawPrice>0?rawPrice:null;
+    const rawPrevious=Number(meta.chartPreviousClose??meta.previousClose),previous=Number.isFinite(rawPrevious)&&rawPrevious>0?rawPrevious:null;
+    const changePct=price!==null&&previous!==null?(price/previous-1)*100:null;
     const marketState=String(meta.marketState||'UNKNOWN');
     const ageMs=timestamp?Date.now()-Date.parse(timestamp):Infinity;
-    const delayed=!timestamp||!Number.isFinite(price)||ageMs>15*60*1000||ageMs< -60000||marketState!=='REGULAR';
-    return {symbol,name:STOCKS.find(x=>x[0]===symbol)?.[1]||meta.longName||meta.shortName||symbol,exchange:meta.exchangeName||meta.fullExchangeName||'US',currency:meta.currency||'USD',price:Number.isFinite(price)?price:null,previousClose:Number.isFinite(previous)?previous:null,changePct,volume:Number(q.volume?.at(-1))||Number(meta.regularMarketVolume)||null,timestamp,marketState,delayed,quoteType:delayed?'delayed-or-closed':'timestamped-snapshot',source:'Yahoo Finance Chart（非官方公開端點；可能延遲／限流）',candles,meta:{fiftyTwoWeekHigh:meta.fiftyTwoWeekHigh,fiftyTwoWeekLow:meta.fiftyTwoWeekLow,exchangeTimezoneName:meta.exchangeTimezoneName}};
+    const delayed=!timestamp||price===null||!Number.isFinite(ageMs)||ageMs>15*60*1000||ageMs< -60000;
+    const rawVolume=q.volume?.at(-1)??meta.regularMarketVolume,volume=rawVolume!==null&&rawVolume!==undefined&&Number.isFinite(Number(rawVolume))&&Number(rawVolume)>=0?Number(rawVolume):null;
+    return {symbol,name:STOCKS.find(x=>x[0]===symbol)?.[1]||meta.longName||meta.shortName||symbol,exchange:meta.exchangeName||meta.fullExchangeName||'US',currency:meta.currency||'USD',price,previousClose:previous,changePct,volume,timestamp,sourceTimestamp:timestamp,receivedAt:new Date().toISOString(),marketState,session:marketState,delayed,quoteType:delayed?'stale-or-unavailable':'fresh-timestamped-snapshot',source:'Yahoo Finance Chart（非官方公開端點；供應商延遲狀態未必可驗證）',candles,meta:{fiftyTwoWeekHigh:meta.fiftyTwoWeekHigh,fiftyTwoWeekLow:meta.fiftyTwoWeekLow,exchangeTimezoneName:meta.exchangeTimezoneName}};
   } finally {clearTimeout(timer);}
 }
 
@@ -96,7 +99,8 @@ async function loadMarket(){
     const scorecard=ind&&last?scoreStock({...ind,signal:ind.macdSignal,asOf:quote.timestamp||last.timestamp,maxAgeMs:5*24*60*60*1000,dailyChangePct:quote.changePct,priceVsEma20Pct:ind.ema20?(last.close/ind.ema20-1)*100:null,priceVsEma60Pct:ind.ema60?(last.close/ind.ema60-1)*100:null,return5dPct:candles.length>=6?(last.close/candles.at(-6).close-1)*100:null,return20dPct:candles.length>=21?(last.close/candles.at(-21).close-1)*100:null}):null;
     return {symbol,name,sector,...quoteSummary,indicators:ind,scorecard};
   }).filter(Boolean);
-  return {data,indices,scan:scanned,news,source:'Yahoo Finance Chart 非官方端點；美股涵蓋清單 30 檔大型股／ETF，不代表全市場',timestamp:new Date().toISOString(),market:'US',coverage:{stocks:scanned.length,universe:STOCKS.length,indices:indices.length},disclaimer:'非官方免費端點，可能延遲、限流或中斷；不得作為券商即時報價或下單依據。'};
+  const failedSymbols=rows.filter(x=>x&&x.error).map(x=>x.symbol);
+  return {data,indices,scan:scanned,news,source:'Yahoo Finance Chart 非官方端點；美股涵蓋清單 30 檔大型股／ETF，不代表全市場',timestamp:new Date().toISOString(),market:'US',coverage:{stocks:scanned.length,universe:STOCKS.length,indices:indices.length,failedSymbols,partial:failedSymbols.length>0||scanned.length<STOCKS.length},disclaimer:'非官方免費端點，可能延遲、限流或中斷；不得作為券商即時報價或下單依據。'};
 }
 
 

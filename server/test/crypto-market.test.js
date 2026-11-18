@@ -15,6 +15,9 @@ test('crypto quote rows preserve valid exchange prices and metadata',()=>{
   assert.equal(row.changePct,1.5);
   assert.equal(row.quoteVolume,1000000);
   assert.equal(row.exchange,'Binance');
+  assert.equal(row.timestamp,null,'missing exchange timestamps must not be replaced by server time');
+  assert.equal(row.sourceTimestamp,null);
+  assert.ok(Number.isFinite(Date.parse(row.receivedAt)),'server receive time is kept separately');
 });
 
 test('limited quote requests tolerate an individual exchange ticker failure',async()=>{
