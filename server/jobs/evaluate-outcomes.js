@@ -76,7 +76,8 @@ async function main(){
  if(!reportPath||!fs.existsSync(reportPath))throw new Error('Historical close-review JSON file is required');
  const previous=JSON.parse(fs.readFileSync(reportPath,'utf8'));
  const snapshot=await get('/api/market/snapshot');
- const configuredCost=process.env.ROUND_TRIP_COST_PCT===undefined?0.785:Number(process.env.ROUND_TRIP_COST_PCT);\n const rawCost=Number.isFinite(configuredCost)&&configuredCost>=0&&configuredCost<=10?configuredCost:0.785;
+ const configuredCost=process.env.ROUND_TRIP_COST_PCT===undefined?0.785:Number(process.env.ROUND_TRIP_COST_PCT);
+ const rawCost=Number.isFinite(configuredCost)&&configuredCost>=0&&configuredCost<=10?configuredCost:0.785;
  const report=evaluateOutcomes(previous,snapshot,{horizon,sessions,costPct:rawCost});
  fs.mkdirSync('reports',{recursive:true});
  const date=new Date().toISOString().slice(0,10),stem='outcome-review-'+horizon+'-'+date;
