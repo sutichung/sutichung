@@ -21,7 +21,7 @@ test('order book normalizes level ordering and exposes quote-notional weighted i
   assert.equal(book.bestAsk, 102);
   assert.equal(book.bids[0][0], 100);
   assert.equal(book.asks[0][0], 102);
-  assert.ok(book.obiNotional > 0);
+  assert.ok(Math.abs(book.obiNotional - ((1090 - 1123) / (1090 + 1123))) < 1e-12);
   assert.ok(book.bidNotional > 0);
   assert.ok(book.askNotional > 0);
   assert.equal(book.timestamp, new Date(1700000000000).toISOString());
