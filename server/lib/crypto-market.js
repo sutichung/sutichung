@@ -31,7 +31,7 @@ async function bybitCategory(category){
  const t=await getJson('https://api.bybit.com/v5/market/tickers?category='+category);
  if(t.retCode!==0)throw new Error(t.retMsg||'Bybit tickers error');
  const map=new Map((t.result?.list||[]).map(x=>[x.symbol,x]));
- return items.filter(x=>x.status==='Trading').map(x=>{const q=map.get(x.symbol)||{};return row('Bybit',category==='spot'?'spot':'perpetual',x.symbol,x.baseCoin,x.quoteCoin,q.lastPrice,Number(q.price24hPcnt)*100,q.turnover24h,{high24h:q.highPrice24h,low24h:q.lowPrice24h,volume:q.volume24h,sourceTimestamp:t.time?new Date(Number(t.time)).toISOString():null,nativeSymbol:x.symbol,nativeType:category});});
+ return items.filter(x=>x.status==='Trading').map(x=>{const q=map.get(x.symbol)||{};return row('Bybit',category==='spot'?'spot':'perpetual',x.symbol,x.baseCoin,x.quoteCoin,q.lastPrice,Number(q.price24hPcnt)*100,q.turnover24h,{high24h:q.highPrice24h,low24h:q.lowPrice24h,volume:q.volume24h,nativeSymbol:x.symbol,nativeType:category});});
 }
 async function bybitMarkets(){const r=await Promise.allSettled([bybitCategory('spot'),bybitCategory('linear')]);const out=r.flatMap(x=>x.status==='fulfilled'?x.value:[]);if(!out.length)throw new Error(r.filter(x=>x.status==='rejected').map(x=>x.reason.message).join('; '));return out;}
 async function okxCategory(instType,marketType){
