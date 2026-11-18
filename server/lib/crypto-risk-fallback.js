@@ -1,12 +1,13 @@
 'use strict';
 
 const SUPPORTED_EXCHANGES=['Binance','Bybit','OKX'];
+const HISTORY_EXCHANGES=['Binance','Bybit','OKX','Coinbase','Kraken'];
 function candidates(primary,preferred){
   return [...new Set([preferred,primary,...SUPPORTED_EXCHANGES].filter(x=>SUPPORTED_EXCHANGES.includes(x)))];
 }
 async function loadRiskHistory({getHistory,symbol,marketType,interval='1d',exchange='Binance',nativeSymbol=symbol,limit=240}){
   const errors=[];
-  const order=candidates(exchange,exchange);
+  const order=[...new Set([exchange,...SUPPORTED_EXCHANGES])].filter(x=>HISTORY_EXCHANGES.includes(x));
   for(const candidate of order){
     try{
       const history=await getHistory(symbol,marketType,interval,candidate,candidate===exchange?nativeSymbol:symbol,limit);
@@ -33,4 +34,4 @@ async function loadFreshMicrostructure({safeLoad,fetchMicrostructure,symbol,mark
   }
   return {data:null,exchange:null,fallbackUsed:false,errors};
 }
-module.exports={loadRiskHistory,loadFreshMicrostructure,candidates};
+module.exports={loadRiskHistory,loadFreshMicrostructure,candidates,HISTORY_EXCHANGES};
