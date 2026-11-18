@@ -2,8 +2,8 @@ name: Taiwan market scan and close review
 on:
   schedule:
     # Taiwan cash market: 09:00–13:59 (UTC+8 = 01:00–05:59 UTC), weekdays.
-    - cron: "*/5 1-4 * * 1-5"
-    - cron: "0-30/5 5 * * 1-5"
+    - cron: "*/15 1-4 * * 1-5"
+    - cron: "0,15,30 5 * * 1-5"
     # One-hour outcome checkpoints: 10:00–13:00 Taiwan time.
     - cron: "0 2-5 * * 1-5"
     # Close review after the cash session: 13:40 Taiwan time.
