@@ -110,3 +110,13 @@ Reference standards and initiatives:
 - Separate worker/cron deployment and persistent storage may require a paid Render plan or external managed service; do not incur costs without approval.
 - Start with schema, public-data adapters, registry, and UI behind feature flags. Do not add placeholder live bank links or claim global bank coverage.
 - Existing market modules remain separate connectors and feed only the normalized asset aggregation layer.
+
+## Implementation status (2026-11-18)
+- Added `src/GlobalFinance.jsx` as the responsive Global Finance zone.
+- Added `server/lib/global-finance.js` and read-only endpoints `/api/finance/registry` and `/api/finance/fx`.
+- The initial directory lists 17 official institutions/data entry points across six regions. Directory status is not evidence of personal-account connectivity.
+- Implemented an ECB daily reference-rate connector for a set of major currencies. Rates are daily reference observations, not tick-by-tick FX quotes; unsupported or unavailable currencies are reported as missing.
+- Added `server/test/global-finance.test.js` for directory integrity.
+- Added `supabase/migrations/202611180001_global_finance_foundation.sql` with RLS and least-privilege grants. This SQL migration is committed but has **not** been applied to the live Supabase project.
+- No bank account credentials, refresh tokens, personal balances, or transactions are connected or stored.
+- GitHub main includes the implementation; production deployment and live upstream FX response still require independent verification before describing the feature as live.
