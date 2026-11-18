@@ -10,18 +10,27 @@ test('global finance registry clearly separates public sources from bank account
   assert.ok(registry.institutions.every(x=>x.code&&x.country&&x.url&&x.status));
 });
 
-test('global macro connector returns timestamped observations and explicit coverage',async()=>{
+test('global macro connector batches countries per indicator and returns timestamped observations',async()=>{
   const original=global.fetch;
-  global.fetch=async url=>({ok:true,status:200,json:async()=>[{},[{date:'2024',value:2.5}]]});
+  const countries=['USA','CHN','JPN','GBR','DEU','IND','BRA','CAN','AUS','KOR','TWN'];
+  const calls=[];
+  global.fetch=async url=>{
+    calls.push(String(url));
+    const countryRows=countries.map(code=>({countryiso3code:code,country:{id:code},date:'2024',value:2.5}));
+    return {ok:true,status:200,json:async()=>[{},countryRows]};
+  };
   try{
     const {loadMacro}=require('../lib/global-finance');
     const result=await loadMacro();
+    assert.equal(calls.length,3);
+    assert.ok(calls.every(url=>countries.every(code=>url.includes(code))));
     assert.equal(result.status,'connected');
     assert.equal(result.data.length,33);
     assert.equal(result.summary.received,33);
     assert.ok(result.data.every(x=>x.source==='World Bank Open Data'&&x.year&&Number.isFinite(x.value)));
   }finally{global.fetch=original;}
 });
+
 test('global macro connector reports empty upstream responses instead of fake values',async()=>{
   const original=global.fetch;
   global.fetch=async()=>({ok:true,status:200,json:async()=>[{},[]]});
