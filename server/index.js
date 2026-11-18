@@ -8,6 +8,7 @@ const { scoreStock } = require('./lib/scoring');
 const { getTradingReadiness } = require('./lib/trading-readiness');
 const { buildAiCommittee } = require('./lib/agents');
 const { applyFirewall } = require('./lib/firewall');
+const { loadMarket: loadUsMarket, getChart: getUsChart } = require('./lib/us-market');
 
 const PORT = Number(process.env.PORT || 8787);
 const FINMIND_BASE = process.env.FINMIND_BASE || 'https://api.finmindtrade.com/api/v4/data';
@@ -500,6 +501,36 @@ async function route(req,res){
       if(!events.length)throw new Error('TWSE 官方行事曆格式尚未辨識');
       return {events,source:'TWSE 官方 OpenAPI holidaySchedule',timestamp:now(),asOf:events.map(x=>x.date).sort().at(-1)};
     },e=>({events:[],source:'unavailable',timestamp:now(),error:e.message}));
+    return json(res,200,result);
+  }
+  if(u.pathname==='/api/us/market'){
+    const result=await safeLoad('us-market',5*60*1000,loadUsMarket,e=>({market:'US',data:{},indices:[],scan:[],source:'unavailable',timestamp:now(),error:e.message,coverage:{stocks:0,universe:30,indices:0}}));
+    return json(res,result.error?503:200,result);
+  }
+  if(u.pathname.startsWith('/api/us/history/')){
+    const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase();
+    if(!/^[A-Z0-9.^=-]{1,12}$/.test(symbol))return json(res,400,{error:'invalid_us_symbol'});
+    const result=await safeLoad('us-history:'+symbol,60*60*1000,async()=>{
+      const chart=await getUsChart(symbol,'2y','1d');
+      if(!chart.candles.length)throw new Error('此美股代號沒有可用日 K 資料');
+      return {symbol:chart.symbol,data:chart.candles,asOf:chart.candles.at(-1).time,source:chart.source,timestamp:now(),quote:((({candles,...quote})=>quote)(chart))};
+    },e=>({symbol,data:[],asOf:null,source:'unavailable',timestamp:now(),error:e.message}));
+    return json(res,result.error?502:200,result);
+  }
+  if(u.pathname.startsWith('/api/us/agents/')){
+    const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase();
+    if(!/^[A-Z0-9.^=-]{1,12}$/.test(symbol))return json(res,400,{error:'invalid_us_symbol'});
+    const load=async()=>{
+      const history=await safeLoad('us-history:'+symbol,60*60*1000,async()=>{
+        const chart=await getUsChart(symbol,'2y','1d');
+        return {symbol:chart.symbol,data:chart.candles,asOf:chart.candles.at(-1)?.time,source:chart.source,indicators:indicators(chart.candles)};
+      },e=>({data:[],error:e.message}));
+      const market=stale('us-market')||{};
+      const quote=market.data?.[symbol]||history.quote||{};
+      const scan=(market.scan||[]).find(x=>x.symbol===symbol)||{};
+      return buildAiCommittee(symbol,{getHistory:async()=>history,quotes:{[symbol]:quote},scan:{[symbol]:scan},flows:{},fundamentals:null,quoteSource:quote.source||history.source,env:process.env});
+    };
+    const result=u.searchParams.get('refresh')==='1'?await load():await safeLoad('us-agents:'+symbol,10*60*1000,load,e=>({symbol,agents:['gemini','groq','cloudflare'].map(provider=>({provider,status:'error',message:e.message})),consensus:null,analysisTime:now()}));
     return json(res,200,result);
   }
   if(u.pathname==='/api/trading/readiness')return json(res,200,getTradingReadiness());
