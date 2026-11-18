@@ -15,9 +15,10 @@ async function getJson(url, timeoutMs = 10000) {
   return response.json();
 }
 function normalizeBook(exchange, bids, asks, timestamp, depth = 10) {
-  const clean = rows => (rows || []).slice(0, depth).map(x => [number(x[0]), number(x[1])])
+  const clean = rows => (rows || []).map(x => [number(x[0]), number(x[1])])
     .filter(x => x[0] !== null && x[1] !== null && x[0] > 0 && x[1] > 0);
-  const bidRows = clean(bids).sort((a, b) => b[0] - a[0]), askRows = clean(asks).sort((a, b) => a[0] - b[0]);
+  const bidRows = clean(bids).sort((a, b) => b[0] - a[0]).slice(0, depth);
+  const askRows = clean(asks).sort((a, b) => a[0] - b[0]).slice(0, depth);
   if (!bidRows.length || !askRows.length) throw new Error('orderbook_empty');
   const bid = bidRows[0][0], ask = askRows[0][0];
   if (!(ask > bid)) throw new Error('orderbook_crossed_or_invalid');
