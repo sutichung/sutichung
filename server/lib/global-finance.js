@@ -54,7 +54,7 @@ async function loadFx() {
 }
 
 function getRegistry() {
-  return {institutions:INSTITUTIONS,jurisdictions:new Set(INSTITUTIONS.map(x=>x.country)).size,livePublicConnectors:1,privateAccountConnectors:0,source:'Curated official institution directory',timestamp:new Date().toISOString()};
+  return {institutions:INSTITUTIONS,jurisdictions:new Set(INSTITUTIONS.map(x=>x.country)).size,publicDataConnectorsImplemented:1,privateAccountConnectors:0,source:'Curated official institution directory',timestamp:new Date().toISOString()};
 }
 
 module.exports = {getRegistry,loadFx};
