@@ -157,6 +157,9 @@ jobs:
               vulnerabilityCount: Number(vulnerabilities.vulnerabilityCount || 0),
               severityCounts: vulnerabilities.severityCounts || {},
               productionVulnerabilityCount: Number(vulnerabilities.productionVulnerabilityCount || 0),
+              developmentVulnerabilityCount: Number(vulnerabilities.developmentVulnerabilityCount || 0),
+              unknownScopeVulnerabilityCount: Number(vulnerabilities.unknownScopeVulnerabilityCount || 0),
+              findings: (vulnerabilities.findings || []).slice(0,12).map(x => ({ package:x.package, version:x.version, scope:x.scope, id:x.id, severity:x.severity, summary:x.summary, affectedRange:x.affectedRange, fixedVersions:x.fixedVersions, fixAvailable:x.fixAvailable })),
               error: vulnerabilities.error || null
             },
             ciDependencyAudit,
