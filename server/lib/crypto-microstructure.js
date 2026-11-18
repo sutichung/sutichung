@@ -2,6 +2,7 @@
 
 const now = () => new Date().toISOString();
 const number = value => {
+  if (value === null || value === undefined || value === '') return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 };
@@ -15,10 +16,11 @@ async function getJson(url, timeoutMs = 10000) {
 }
 function normalizeBook(exchange, bids, asks, timestamp, depth = 10) {
   const clean = rows => (rows || []).slice(0, depth).map(x => [number(x[0]), number(x[1])])
-    .filter(x => x[0] > 0 && x[1] >= 0);
+    .filter(x => x[0] !== null && x[1] !== null && x[0] > 0 && x[1] > 0);
   const bidRows = clean(bids), askRows = clean(asks);
   if (!bidRows.length || !askRows.length) throw new Error('orderbook_empty');
   const bid = bidRows[0][0], ask = askRows[0][0], mid = (bid + ask) / 2;
+  if (ask < bid) throw new Error('orderbook_crossed');
   const bidVolume = bidRows.reduce((sum, x) => sum + x[1], 0);
   const askVolume = askRows.reduce((sum, x) => sum + x[1], 0);
   const total = bidVolume + askVolume;
@@ -35,10 +37,12 @@ function normalizeTrades(exchange, rows, thresholdUsd = 50000) {
   return (rows || []).map(t => {
     const price = number(t.price), amount = number(t.amount), side = t.side;
     const cost = number(t.cost) ?? (price !== null && amount !== null ? price * amount : null);
+    const quoteCurrency = String(t.quoteCurrency || 'USDT').toUpperCase();
+    const usdComparable = ['USD','USDT','USDC','BUSD','FDUSD','TUSD'].includes(quoteCurrency);
     return {
       id: t.id == null ? null : String(t.id), timestamp: number(t.timestamp),
       side: side === 'buy' || side === 'sell' ? side : null,
-      price, amount, quoteValue: cost, large: cost !== null && cost >= thresholdUsd
+      price, amount, quoteCurrency, quoteValue: cost, large: usdComparable && cost !== null ? cost >= thresholdUsd : null
     };
   }).filter(t => t.price > 0 && t.amount > 0)
     .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
@@ -57,8 +61,8 @@ async function fetchMicrostructure({ exchange = 'Binance', symbol, marketType = 
       getJson(host + path + '/depth?' + new URLSearchParams({ symbol: safeSymbol, limit: String(levels) })),
       getJson(host + path + '/trades?' + new URLSearchParams({ symbol: safeSymbol, limit: '100' }))
     ]);
-    book = normalizeBook(exchange, b.bids, b.asks, b.lastUpdateId ? Date.now() : Date.now(), levels);
-    trades = normalizeTrades(exchange, t.map(x => ({ id: x.id, timestamp: x.time, side: x.isBuyerMaker ? 'sell' : 'buy', price: x.price, amount: x.qty })), whaleThresholdUsd);
+    book = normalizeBook(exchange, b.bids, b.asks, null, levels);
+    trades = normalizeTrades(exchange, t.map(x => ({ id: x.id, timestamp: x.time, side: x.isBuyerMaker ? 'sell' : 'buy', price: x.price, amount: x.qty, quoteCurrency })), whaleThresholdUsd);
     source = 'Binance public REST order book + recent trades';
   } else if (exchange === 'Bybit') {
     const category = marketType === 'perpetual' ? 'linear' : 'spot';
@@ -68,7 +72,7 @@ async function fetchMicrostructure({ exchange = 'Binance', symbol, marketType = 
     ]);
     if (b.retCode !== 0 || t.retCode !== 0) throw new Error(b.retMsg || t.retMsg || 'bybit_api_error');
     book = normalizeBook(exchange, b.result?.b || [], b.result?.a || [], b.time, levels);
-    trades = normalizeTrades(exchange, (t.result?.list || []).map(x => ({ id: x.execId, timestamp: Number(x.time), side: String(x.side).toLowerCase(), price: x.price, amount: x.size })), whaleThresholdUsd);
+    trades = normalizeTrades(exchange, (t.result?.list || []).map(x => ({ id: x.execId, timestamp: Number(x.time), side: String(x.side).toLowerCase(), price: x.price, amount: x.size, quoteCurrency })), whaleThresholdUsd);
     source = 'Bybit V5 public order book + recent trades';
   } else if (exchange === 'OKX') {
     const instId = safeSymbol.includes('-') ? safeSymbol : safeSymbol.replace(/(USDT|USDC|USD)$/, '-$1') + (marketType === 'perpetual' ? '-SWAP' : '');
@@ -79,18 +83,20 @@ async function fetchMicrostructure({ exchange = 'Binance', symbol, marketType = 
     if (b.code !== '0' || t.code !== '0') throw new Error(b.msg || t.msg || 'okx_api_error');
     const row = b.data?.[0];
     book = normalizeBook(exchange, row?.bids || [], row?.asks || [], row?.ts, levels);
-    trades = normalizeTrades(exchange, (t.data || []).map(x => ({ id: x.tradeId, timestamp: Number(x.ts), side: x.side, price: x.px, amount: x.sz })), whaleThresholdUsd);
+    trades = normalizeTrades(exchange, (t.data || []).map(x => ({ id: x.tradeId, timestamp: Number(x.ts), side: x.side, price: x.px, amount: x.sz, quoteCurrency })), whaleThresholdUsd);
     source = 'OKX public order book + recent trades';
   } else {
     throw new Error('unsupported_exchange');
   }
-  const largeTrades = trades.filter(x => x.large);
+  const quoteCurrency = base ? safeSymbol.slice(base.length) : '';
+  const whaleClassificationAvailable = ['USD','USDT','USDC','BUSD','FDUSD','TUSD'].includes(quoteCurrency);
+  const largeTrades = trades.filter(x => x.large === true);
   const buyValue = trades.filter(x => x.side === 'buy').reduce((s, x) => s + (x.quoteValue || 0), 0);
   const sellValue = trades.filter(x => x.side === 'sell').reduce((s, x) => s + (x.quoteValue || 0), 0);
   return {
     exchange, symbol: safeSymbol, marketType, source, timestamp: book.timestamp,
     receivedAt: now(), book,
-    tape: { count: trades.length, largeTradeCount: largeTrades.length, largeTrades: largeTrades.slice(0, 20), buyQuoteValue: buyValue, sellQuoteValue: sellValue, netAggressiveQuoteValue: buyValue - sellValue, whaleThresholdUsd }
+    tape: { count: trades.length, largeTradeCount: whaleClassificationAvailable ? largeTrades.length : null, largeTrades: whaleClassificationAvailable ? largeTrades.slice(0, 20) : [], whaleClassificationAvailable, quoteCurrency, buyQuoteValue: buyValue, sellQuoteValue: sellValue, netAggressiveQuoteValue: buyValue - sellValue, whaleThresholdUsd: whaleClassificationAvailable ? whaleThresholdUsd : null }
   };
 }
 module.exports = { fetchMicrostructure, normalizeBook, normalizeTrades };
