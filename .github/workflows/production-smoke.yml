@@ -58,7 +58,7 @@ jobs:
         if: steps.wait-live.outputs.skip != 'true'
         env:
           MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
-          EXPECTED_COMMIT: ${{ github.sha }}
+          EXPECTED_COMMIT: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
           OIDC_TOKEN=$(curl --fail --silent --show-error --get --data-urlencode "audience=taiwan-stock-hunter-automation" "$ACTIONS_ID_TOKEN_REQUEST_URL" -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r '.value')
