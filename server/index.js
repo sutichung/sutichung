@@ -602,13 +602,22 @@ async function route(req,res){
     if(market==='us-stock'&&!/^[A-Z0-9.^=-]{1,12}$/.test(symbol))return json(res,400,{status:'invalid_symbol',error:'invalid US symbol'});
     if(market==='crypto'&&!/^[A-Z0-9_-]{2,30}$/.test(symbol))return json(res,400,{status:'invalid_symbol',error:'invalid crypto symbol'});
     try{
-      let history;
-      if(market==='crypto')history=await cryptoMarket.getHistory(symbol,u.searchParams.get('type')==='perpetual'?'perpetual':'spot',u.searchParams.get('interval')||'1d',u.searchParams.get('exchange')||'Binance',u.searchParams.get('nativeSymbol')||symbol);
-      else if(market==='us-stock'){
+      let history,htfCandles;
+      if(market==='crypto'){
+        const type=u.searchParams.get('type')==='perpetual'?'perpetual':'spot';
+        const exchange=u.searchParams.get('exchange')||'Binance';
+        const native=u.searchParams.get('nativeSymbol')||symbol;
+        const [fourHour,daily]=await Promise.all([
+          cryptoMarket.getHistory(symbol,type,'4h',exchange,native),
+          cryptoMarket.getHistory(symbol,type,'1d',exchange,native)
+        ]);
+        history={...fourHour,source:fourHour.source+' + '+daily.source};
+        htfCandles=daily.data;
+      }else if(market==='us-stock'){
         const chart=await getUsChart(symbol,'2y','1d');
         history={data:chart.candles,source:chart.source,asOf:chart.candles.at(-1)?.time};
       }else history=await loadStockHistory(symbol);
-      const result=runStrategyLab(history.data,{market,symbol,source:history.source,feeBps:u.searchParams.has('feeBps')?Number(u.searchParams.get('feeBps')):undefined,slippageBps:u.searchParams.has('slippageBps')?Number(u.searchParams.get('slippageBps')):undefined,sellTaxBps:u.searchParams.has('sellTaxBps')?Number(u.searchParams.get('sellTaxBps')):undefined});
+      const result=runStrategyLab(history.data,{market,symbol,source:history.source,htfCandles,feeBps:u.searchParams.has('feeBps')?Number(u.searchParams.get('feeBps')):undefined,slippageBps:u.searchParams.has('slippageBps')?Number(u.searchParams.get('slippageBps')):undefined,sellTaxBps:u.searchParams.has('sellTaxBps')?Number(u.searchParams.get('sellTaxBps')):undefined});
       return json(res,result.status==='ok'?200:422,{...result,source:history.source||result.source,asOf:history.asOf||result.asOf});
     }catch(e){return json(res,502,{status:'data_unavailable',symbol,market,error:e.message,strategies:[]});}
   }
