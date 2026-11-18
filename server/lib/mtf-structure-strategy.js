@@ -6,7 +6,7 @@
 const mean = xs => xs.length ? xs.reduce((a,b)=>a+b,0)/xs.length : null;
 const round = (x,d=2) => Number.isFinite(x) ? Number(x.toFixed(d)) : null;
 const DAY = 86400000;
-function timeMs(x){const n=Date.parse(x);return Number.isFinite(n)?n:NaN;}
+function timeMs(x){if(typeof x==='number'&&Number.isFinite(x))return x<1e12?x*1000:x;const s=String(x??'').trim();if(/^\\d{10,13}$/.test(s)){const n=Number(s);return n<1e12?n*1000:n;}const n=Date.parse(s);return Number.isFinite(n)?n:NaN;}
 function validate(rows,label){
   if(!Array.isArray(rows)||rows.length<1)throw new Error(label+' 缺少 K 線資料');
   let last=-Infinity;
