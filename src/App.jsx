@@ -7,6 +7,7 @@ import MarketOverview from './MarketOverview';
 import QuantResearch from './QuantResearch';
 import USMarket from './USMarket';
 import CryptoMarket from './CryptoMarket';
+import AntColony from './AntColony';
 import GlobalFinance from './GlobalFinance';
 
 const API = (process.env.REACT_APP_MARKET_API || '/api/market').replace(/\/$/, '');
@@ -78,6 +79,7 @@ export default function App(){
   <a href="#crypto-market" style={{flex:'1 0 130px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#382b19',border:'1px solid #745323',color:'#fde68a',fontWeight:800,fontSize:13}}>₿ 加密貨幣專區</a>
   <a href="#global-finance" style={{flex:'1 0 140px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#252342',border:'1px solid #514b82',color:'#ddd6fe',fontWeight:800,fontSize:13}}>🌐 全球金融中心</a>
  </nav>
+ <AntColony/>
  <GlobalFinance/>
  <USMarket/>
  <CryptoMarket/>
