@@ -490,6 +490,39 @@ async function route(req,res){
         const data=await supabaseRequest('/auth/v1/admin/users?page='+page+'&per_page='+perPage,{admin:true});
         return json(res,200,{users:(data.users||[]).map(x=>({id:x.id,email:x.email,created_at:x.created_at,last_sign_in_at:x.last_sign_in_at,banned_until:x.banned_until})),nextPage:(data.users||[]).length===perPage?page+1:null});
       }
+      if(u.pathname==='/api/admin/members/rebuild'&&req.method==='POST'){
+        const body=await readRequestJson(req);
+        const email=String(body.email||'').trim().toLowerCase();
+        const confirmation=String(body.confirmEmail||'').trim().toLowerCase();
+        if(!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email))return json(res,400,{error:'請輸入有效的會員 Email'});
+        if(confirmation!==email)return json(res,400,{error:'安全確認失敗：請再次輸入完全相同的會員 Email'});
+        let member=null,page=1;
+        for(;page<=20;page++){
+          const listed=await supabaseRequest('/auth/v1/admin/users?page='+page+'&per_page=100',{admin:true});
+          const users=listed.users||[];
+          member=users.find(x=>String(x.email||'').trim().toLowerCase()===email)||null;
+          if(member||users.length<100)break;
+        }
+        const origin=(req.headers['x-forwarded-proto']||'https')+'://'+(req.headers['x-forwarded-host']||req.headers.host);
+        let action,userId;
+        if(member){
+          const updated=await supabaseRequest('/auth/v1/admin/users/'+member.id,{method:'PUT',admin:true,body:{ban_duration:'none',email_confirm:true}});
+          userId=updated.id||member.id;
+          action='restored_existing_identity';
+          try{
+            await supabaseRequest('/auth/v1/recover',{method:'POST',body:{email,redirect_to:origin+'/'}});
+          }catch(error){
+            console.error('[admin-account-rebuild] recovery email failed',JSON.stringify({admin:user.email,target:email,userId,error:String(error.message||error)}));
+            return json(res,502,{ok:false,accountRestored:true,userId,identityPreserved:true,error:'帳號已恢復且保留原使用者 ID，但密碼重設信寄送失敗：'+error.message});
+          }
+        }else{
+          const invited=await supabaseRequest('/auth/v1/invite',{method:'POST',admin:true,body:{email,redirect_to:origin+'/'}});
+          userId=invited.id;
+          action='invited_new_identity';
+        }
+        console.info('[admin-account-rebuild]',JSON.stringify({admin:user.email,target:email,userId,action,at:now()}));
+        return json(res,member?200:201,{ok:true,action,user:{id:userId,email},identityPreserved:!!member,message:member?'已恢復原帳號並寄送密碼重設信；原使用者 ID 保留。':'找不到既有帳號，已重新寄送邀請。新帳號會有新的使用者 ID，舊帳號關聯資料不會自動搬移，必須先核對後再人工處理。'});
+      }
       if(u.pathname==='/api/admin/members/invite'&&req.method==='POST'){
         const body=await readRequestJson(req),email=String(body.email||'').trim().toLowerCase();
         if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))return json(res,400,{error:'請輸入有效的會員 Email'});
