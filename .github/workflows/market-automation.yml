@@ -12,6 +12,7 @@ on:
 permissions:
   contents: read
   actions: read
+  id-token: write
 concurrency:
   group: taiwan-market-automation
   cancel-in-progress: false
@@ -23,13 +24,19 @@ jobs:
       - name: Refresh full-market scan
         env:
           MARKET_APP_URL: ${{ secrets.MARKET_APP_URL }}
+          ACTIONS_ID_TOKEN_REQUEST_URL: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL }}
+          ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${{ env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
         run: |
           test -n "$MARKET_APP_URL" || { echo "Set GitHub Actions secret MARKET_APP_URL to the deployed app URL"; exit 1; }
-          curl --fail --silent --show-error --max-time 45 "$MARKET_APP_URL/api/market/snapshot" -o /tmp/snapshot.json
-          curl --fail --silent --show-error --max-time 45 "$MARKET_APP_URL/api/market/institutional-flows" -o /tmp/flows.json
-          curl --fail --silent --show-error --max-time 45 "$MARKET_APP_URL/api/market/futures" -o /tmp/futures.json
-          curl --fail --silent --show-error --max-time 45 "$MARKET_APP_URL/api/market/sentiment" -o /tmp/sentiment.json
-          curl --fail --silent --show-error --max-time 180 "$MARKET_APP_URL/api/market/scan" -o /tmp/scan.json
+          OIDC_TOKEN=$(curl --fail --silent --show-error --get --data-urlencode "audience=taiwan-stock-hunter-automation" "$ACTIONS_ID_TOKEN_REQUEST_URL" -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r '.value')
+          test -n "$OIDC_TOKEN" && test "$OIDC_TOKEN" != "null" || { echo "Unable to obtain GitHub Actions OIDC token"; exit 1; }
+          echo "::add-mask::$OIDC_TOKEN"
+          AUTH_HEADER="Authorization: Bearer $OIDC_TOKEN"
+          curl --fail --silent --show-error --max-time 45 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/market/snapshot" -o /tmp/snapshot.json
+          curl --fail --silent --show-error --max-time 45 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/market/institutional-flows" -o /tmp/flows.json
+          curl --fail --silent --show-error --max-time 45 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/market/futures" -o /tmp/futures.json
+          curl --fail --silent --show-error --max-time 45 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/market/sentiment" -o /tmp/sentiment.json
+          curl --fail --silent --show-error --max-time 180 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/market/scan" -o /tmp/scan.json
           node -e "const x=require('/tmp/scan.json'); console.log('Scanned symbols:', x.scannedCount ?? Object.keys(x.data||{}).length, 'source:', x.source||'unknown')"
   close-review:
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '40 5 * * 1-5' || github.event.schedule == '10 13 * * 1-5'
