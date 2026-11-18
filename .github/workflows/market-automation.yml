@@ -126,6 +126,7 @@ jobs:
           curl --fail --silent --show-error --max-time 90 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/providers" -o /tmp/providers.json
           node server/jobs/health-review.js /tmp/health.json /tmp/providers.json
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: taiwan-market-daily-system-health-${{ github.run_id }}
           path: reports/daily-system-health.json
