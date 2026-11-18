@@ -35,7 +35,7 @@ export default function GlobalFinance() {
   const cards = [
     {label:'登錄機構／官方來源',value:registry?.institutions?.length ?? '—'},
     {label:'國家／司法管轄區',value:registry?.jurisdictions ?? '—'},
-    {label:'已接入即時公開資料',value:registry?.livePublicConnectors ?? '—'},
+    {label:'已實作公開資料介接',value:registry?.publicDataConnectorsImplemented ?? '—',note:'ECB 每日參考匯率 API 模組'},
     {label:'私人銀行帳戶連線',value:'0',note:'尚未取得銀行／聚合商授權'}
   ];
   return <section id="global-finance" style={{scrollMarginTop:78,margin:'14px 0',color:'#e8eef8',fontFamily:'Inter,system-ui,sans-serif'}}>
@@ -71,7 +71,7 @@ export default function GlobalFinance() {
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',fontSize:10,...muted,paddingBottom:5,borderBottom:'1px solid #293951'}}><span>幣別</span><span>每 1 EUR</span><span>日期</span></div>
             {fx.rates.map(x=><div key={x.currency} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',fontSize:12,fontVariantNumeric:'tabular-nums'}}><b>{x.currency}</b><span>{Number(x.rate).toLocaleString('en-US',{maximumFractionDigits:5})}</span><span style={muted}>{x.asOf}</span></div>)}
           </div>:<div style={{fontSize:12,...muted}}>尚未取得官方匯率資料；不顯示估算值。</div>}
-          <small style={{display:'block',...muted,marginTop:9}}>來源：{fx?.source||'European Central Bank Data Portal'}<br/>抓取時間：{fx?.fetchedAt?new Date(fx.fetchedAt).toLocaleString('zh-TW'):'—'}｜基準貨幣 EUR</small>
+          <small style={{display:'block',...muted,marginTop:9}}>來源：{fx?.source||'European Central Bank Data Portal'}<br/>抓取時間：{fx?.fetchedAt?new Date(fx.fetchedAt).toLocaleString('zh-TW'):'—'}｜基準貨幣 EUR；每日參考匯率，非逐筆即時報價</small>
           {fx?.errors?.length>0&&<small style={{display:'block',color:'#fbbf24',marginTop:5}}>部分幣別暫缺：{fx.errors.map(x=>x.currency).join('、')}</small>}
         </div>
         <div style={panel}>
