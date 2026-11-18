@@ -121,6 +121,8 @@ function runMtfStrategy(intraday,daily,costs){
   const bars=intraday.map(x=>({time:x.time??x.openTime,open:+x.open,high:+x.high,low:+x.low,close:+x.close,volume:+x.volume}));
   const days=daily.map(x=>({time:x.time??x.openTime,open:+x.open,high:+x.high,low:+x.low,close:+x.close,volume:+x.volume}));
   const htf=dailyTrendMap(days,bars.map(x=>x.time)),fs=buildFeatures(bars),split=Math.floor(bars.length*0.6),periods=[];
+  const barsPerYear=costs.market==='crypto'?6*365:costs.market==='us-stock'?2*252:252;
+  const mtfCosts={...costs,annualization:barsPerYear};
   for(const p of [{id:'in_sample',label:'訓練區間',start:60,end:split},{id:'out_of_sample',label:'樣本外區間',start:split,end:bars.length}])periods.push({...p,metrics:simulate(bars,fs,htf,p.start,p.end,mtfCosts)});
   const folds=[],size=Math.floor((bars.length-split)/3);
   if(size>=3)for(let k=0;k<3;k++){const a=split+k*size,b=k===2?bars.length:split+(k+1)*size;folds.push({fold:k+1,metrics:simulate(bars,fs,htf,a,b,mtfCosts)});}
