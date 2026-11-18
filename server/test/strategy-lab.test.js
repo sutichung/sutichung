@@ -25,8 +25,10 @@ test('strategy lab produces separate in-sample and out-of-sample results with ex
  assert.equal(result.barCount,240);
  assert.equal(result.split.ratio,'60/40');
  assert.equal(result.split.walkForwardFolds,3);
- assert.equal(result.strategies.length,3);
+ assert.equal(result.strategies.length,8);
  assert.ok(result.strategies.every(s=>s.periods.length===2&&s.validation.status));
+ assert.ok(result.strategies.some(s=>s.id==='consensus_market_structure'));
+ assert.ok(['sma_cross_20_50','donchian_20_10','bollinger_rsi','supertrend_atr'].every(id=>result.strategies.some(s=>s.id===id)));
  assert.ok(result.strategies.every(s=>s.walkForward.folds.length===3));
  assert.ok(result.strategies.every(s=>s.costSensitivity.halfCost&&s.costSensitivity.doubleCost));
  assert.ok(result.strategies.every(s=>s.validation.status!=='preliminary_pass'||s.walkForward.passed));
