@@ -49,8 +49,13 @@ function buildNpmAuditReport(lock,manifest,audit,generatedAt=new Date().toISOStr
   const advisoryRows=(Array.isArray(vuln.via)?vuln.via:[]).filter(x=>x&&typeof x==='object');
   const advisories=advisoryRows.length?advisoryRows:[{name:'npm:'+name,title:'npm audit reports a vulnerability affecting '+name,severity:vuln.severity,range:vuln.range}];
   for(const row of rows)for(const advisory of advisories){
-   const fixed=advisory.fixAvailable??vuln.fixAvailable;
-   const fixedVersion=fixed&&typeof fixed==='object'&&fixed.version?String(fixed.version):null;
+   const fixedVersions=Array.isArray(advisory.fixedVersions)?advisory.fixedVersions.map(String):advisory.fixedVersion?[String(advisory.fixedVersion)]:[];
+   const advisoryFix=advisory.fixAvailable===true;
+   const suggested=vuln.fixAvailable&&typeof vuln.fixAvailable==='object'?{
+    package:String(vuln.fixAvailable.name||name),
+    version:vuln.fixAvailable.version?String(vuln.fixAvailable.version):null,
+    isSemVerMajor:vuln.fixAvailable.isSemVerMajor===true
+   }:null;
    findings.push({
     package:name,version:row.entry?.version?String(row.entry.version):null,
     scope:scopeForFinding(name,vuln,row.node,lock,manifest),direct:vuln.isDirect===true,
@@ -58,8 +63,9 @@ function buildNpmAuditReport(lock,manifest,audit,generatedAt=new Date().toISOStr
     summary:String(advisory.title||('Affected version range: '+(advisory.range||vuln.range||'not specified'))).slice(0,500),
     severity:normalizeSeverity(advisory.severity||vuln.severity),
     affectedRange:String(advisory.range||vuln.range||'not specified'),
-    fixedVersions:fixedVersion?[fixedVersion]:[],
-    fixAvailable:fixed===true||!!fixedVersion,
+    fixedVersions,
+    fixAvailable:fixedVersions.length>0||advisoryFix||advisory.fixAvailable===true,
+    suggestedTopLevelChange:suggested,
     references:advisory.url?[String(advisory.url)]:[],
     cwe:Array.isArray(advisory.cwe)?advisory.cwe.slice(0,8):[]
    });
