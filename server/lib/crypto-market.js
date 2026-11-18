@@ -140,15 +140,15 @@ async function getDerivatives(symbol,exchange='Binance',nativeSymbol=''){
  const bq=bybit?.result?.list?.[0],of=okxFunding?.data?.[0],oi=okxOi?.data?.[0],om=okxMark?.data?.[0];
  const toIso=value=>{const ms=Number(value);return value!==null&&value!==undefined&&Number.isFinite(ms)&&ms>0?new Date(ms).toISOString():null;};
  const rows=[
-  {exchange:'Binance',fundingRate:n(binance?.lastFundingRate),markPrice:n(binance?.markPrice),openInterest:n(binanceOi?.openInterest),sourceTime:toIso(binance?.time)},
-  {exchange:'Bybit',fundingRate:n(bq?.fundingRate),markPrice:n(bq?.markPrice),openInterest:n(bq?.openInterest),sourceTime:toIso(bybit?.time)},
-  {exchange:'OKX',fundingRate:n(of?.fundingRate),markPrice:n(om?.markPx),openInterest:n(oi?.oiCcy),sourceTime:toIso(om?.ts)||toIso(of?.fundingTime)}
+  {exchange:'Binance',fundingRate:n(binance?.lastFundingRate),markPrice:n(binance?.markPrice),indexPrice:n(binance?.indexPrice),openInterest:n(binanceOi?.openInterest),sourceTime:toIso(binance?.time)},
+  {exchange:'Bybit',fundingRate:n(bq?.fundingRate),markPrice:n(bq?.markPrice),indexPrice:n(bq?.indexPrice),openInterest:n(bq?.openInterest),sourceTime:toIso(bybit?.time)},
+  {exchange:'OKX',fundingRate:n(of?.fundingRate),markPrice:n(om?.markPx),indexPrice:n(om?.idxPx),openInterest:n(oi?.oiCcy),sourceTime:toIso(om?.ts)||toIso(of?.fundingTime)}
  ];
  const ratios=battle.filter(x=>x&&Number.isFinite(x.longPct)&&Number.isFinite(x.shortPct));
  const longPct=ratios.length?ratios.reduce((sum,x)=>sum+x.longPct,0)/ratios.length:null;
  const selected=rows.find(x=>x.exchange===exchange)||rows[0];
  const receivedAt=now();
- return {exchange,openInterest:selected?.openInterest??null,openInterestAsset:base,fundingRate:selected?.fundingRate??null,markPrice:selected?.markPrice??null,indexPrice:n(binance?.indexPrice)??n(om?.idxPx),source:'Binance/Bybit/OKX official public funding, mark-price and open-interest endpoints',timestamp:receivedAt,receivedAt,sourceTime:selected?.sourceTime??null,battle:{exchanges:battle,validExchanges:ratios.length,longPct,shortPct:longPct===null?null:100-longPct,stance:longPct===null?'資料不足':longPct>55?'多方佔優':longPct<45?'空方佔優':'多空拉鋸'},liquidationMap:liquidationMap(selected?.markPrice,selected?.openInterest,base)};
+ return {exchange,openInterest:selected?.openInterest??null,openInterestAsset:base,fundingRate:selected?.fundingRate??null,markPrice:selected?.markPrice??null,indexPrice:selected?.indexPrice??null,source:'Binance/Bybit/OKX official public funding, mark-price and open-interest endpoints',timestamp:receivedAt,receivedAt,sourceTime:selected?.sourceTime??null,battle:{exchanges:battle,validExchanges:ratios.length,longPct,shortPct:longPct===null?null:100-longPct,stance:longPct===null?'資料不足':longPct>55?'多方佔優':longPct<45?'空方佔優':'多空拉鋸'},liquidationMap:liquidationMap(selected?.markPrice,selected?.openInterest,base)};
 }
 function liquidationMap(price,openInterest,baseAsset){
  if(!(price>0)||!(openInterest>0))return {levels:[],method:'資料不足',note:'缺少未平倉量或標記價格'};
