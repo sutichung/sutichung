@@ -125,6 +125,8 @@ async function diagnoseProviders(env = process.env) {
     ['gemini', 'Gemini 模型目錄 API', env.GEMINI_API_KEY, 'https://generativelanguage.googleapis.com/v1beta/models', 'google'],
     ['groq', 'Groq 模型目錄 API', env.GROQ_API_KEY, 'https://api.groq.com/openai/v1/models', 'bearer'],
     ['openai', 'OpenAI 模型目錄 API', env.OPENAI_API_KEY, 'https://api.openai.com/v1/models', 'bearer'],
+    ['xai', 'xAI Grok 模型目錄 API', env.XAI_API_KEY, 'https://api.x.ai/v1/models', 'bearer'],
+    ['deepseek', 'DeepSeek 模型目錄 API', env.DEEPSEEK_API_KEY, 'https://api.deepseek.com/models', 'bearer'],
     ['cloudflare', 'Cloudflare Workers AI 模型目錄 API', env.CLOUDFLARE_API_TOKEN, 'https://api.cloudflare.com/client/v4/accounts/' + encodeURIComponent(env.CLOUDFLARE_ACCOUNT_ID || '') + '/ai/models/search', 'cloudflare']
   ];
   for (const [id, label, key, endpoint, authType] of ai) {
