@@ -98,3 +98,34 @@ test('official Binance market-data host is tried before alternate official REST 
   assert.equal(calls.length,2);
  }finally{global.fetch=original;}
 });
+
+test('OKX derivatives use official funding, mark-price and base-currency open-interest fields',async()=>{
+ const original=global.fetch;
+ const now=Date.parse('2026-11-18T00:00:00.000Z');
+ global.fetch=async url=>{
+  const u=String(url);
+  const ok=(data)=>({ok:true,status:200,json:async()=>data});
+  if(u.includes('api.bybit.com'))return {ok:false,status:403,json:async()=>({})};
+  if(u.includes('api.bytick.com/v5/market/account-ratio'))return ok({retCode:0,result:{list:[{buyRatio:'0.55',sellRatio:'0.45'}]}});
+  if(u.includes('api.bytick.com/v5/market/tickers'))return ok({retCode:0,time:now,result:{list:[{fundingRate:'0.0001',markPrice:'65000',openInterest:'2'}]}});
+  if(u.includes('fapi.binance.com/futures/data/globalLongShortAccountRatio'))return ok([{longAccount:'0.6',shortAccount:'0.4',longShortRatio:'1.5'}]);
+  if(u.includes('fapi.binance.com/fapi/v1/premiumIndex'))return ok({lastFundingRate:'0.0001',markPrice:'65000',indexPrice:'64990',time:now});
+  if(u.includes('fapi.binance.com/fapi/v1/openInterest'))return ok({openInterest:'2'});
+  if(u.includes('rubik/stat/contracts/long-short-account-ratio'))return ok({data:[['2026-11-18','1.2']]});
+  if(u.includes('/public/funding-rate'))return ok({data:[{fundingRate:'0.0002',fundingTime:String(now)}]});
+  if(u.includes('/public/open-interest'))return ok({data:[{oi:'100',oiCcy:'1.5'}]});
+  if(u.includes('/public/mark-price'))return ok({data:[{markPx:'65010',idxPx:'65000',ts:String(now)}]});
+  return {ok:false,status:404,json:async()=>({})};
+ };
+ try{
+  const result=await getDerivatives('BTCUSDT','OKX');
+  assert.equal(result.exchange,'OKX');
+  assert.equal(result.fundingRate,0.0002);
+  assert.equal(result.markPrice,65010);
+  assert.equal(result.openInterest,1.5);
+  assert.equal(result.openInterestAsset,'BTC');
+  assert.equal(result.indexPrice,65000);
+  assert.equal(result.sourceTime,'2026-11-18T00:00:00.000Z');
+  assert.equal(result.liquidationMap.levels.length,16);
+ }finally{global.fetch=original;}
+});
