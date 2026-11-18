@@ -28,10 +28,30 @@ export default function CryptoMicrostructure({ symbol, type, exchange, nativeSym
    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 8, marginTop: 10 }}>
     <div style={stat}><small>買一／賣一</small><div>{fmt(book.bestBid, 8)} / {fmt(book.bestAsk, 8)}</div></div>
     <div style={stat}><small>價差</small><div>{fmt(book.spreadPct, 4)}%</div></div>
-    <div style={stat}><small>OBI 盤口失衡</small><div style={{ color: book.obi > 0 ? '#34d399' : book.obi < 0 ? '#fb7185' : '#fbbf24' }}>{fmt(book.obi)}</div></div>
-    <div style={stat}><small>前十檔買量／賣量</small><div>{fmt(book.bidDepth)} / {fmt(book.askDepth)}</div></div>
+    <div style={stat}><small>OBI 盤口失衡</small><div style={{ color: book.obi > 0 ? '#34d399' : book.obi < 0 ? '#fb7185' : '#fbbf24' }}>{fmt(book.obi)}</div><small>加權 OBI：{fmt(book.weightedObi)}</small></div>
+    <div style={stat}><small>前十檔買量／賣量</small><div>{fmt(book.bidDepth)} / {fmt(book.askDepth)}</div><small>微價格偏移：{fmt(book.microPriceDeviationBps, 2)} bps</small></div>
     <div style={stat}><small>大額成交筆數</small><div>{tape?.whaleClassificationAvailable ? fmt(tape.largeTradeCount, 0) : '未提供'}</div></div>
-    <div style={stat}><small>主動買入／賣出額（{tape?.quoteCurrency || '—'}）</small><div>{'$'}{fmt(tape?.buyQuoteValue, 0)} / {'$'}{fmt(tape?.sellQuoteValue, 0)}</div></div>
+    <div style={stat}><small>主動買入／賣出額（{tape?.quoteCurrency || '—'}）</small><div>{'
+   </div>
+   <b style={{ display: 'block', marginTop: 12 }}>{tape?.whaleClassificationAvailable ? '大額成交（單筆至少 50,000 ' + tape.quoteCurrency + '）' : '大額成交分類暫不可用'}</b>
+   {tape?.whaleClassificationAvailable ? (tape.largeTrades || []).slice(0, 6).map((trade, index) => <div key={trade.id || index} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '7px 0', borderBottom: '1px solid #293951', fontSize: 12 }}>
+    <b style={{ color: trade.side === 'buy' ? '#34d399' : '#fb7185' }}>{trade.side === 'buy' ? '主動買入' : '主動賣出'}</b>
+    <span>{fmt(trade.price, 8)} × {fmt(trade.amount, 5)}</span><b>{fmt(trade.quoteValue, 0)} {tape.quoteCurrency}</b>
+   </div>) : <small style={{ display: 'block', color: '#fbbf24', marginTop: 6 }}>報價幣別或合約數量單位無法可靠換算美元，不顯示巨額判定。</small>}
+   <small style={{ display: 'block', color: '#91a1b8', marginTop: 8 }}>來源：{data.source}｜交易所來源時間：{data.timestamp ? new Date(data.timestamp).toLocaleString('zh-TW') : '未提供'}｜伺服器接收時間：{data.receivedAt ? new Date(data.receivedAt).toLocaleString('zh-TW') : '—'}。公開 REST 快照，每 15 秒輪詢；不是 WebSocket 逐筆串流。OBI 只代表可見掛單深度，可能受撤單及隱藏流動性影響。</small>
+  </> : <small style={{ display: 'block', color: '#91a1b8', marginTop: 8 }}>{data?.error || '盤口資料載入中…'}</small>}
+ </section>;
+}}{fmt(tape?.buyQuoteValue, 0)} / {'
+   </div>
+   <b style={{ display: 'block', marginTop: 12 }}>{tape?.whaleClassificationAvailable ? '大額成交（單筆至少 50,000 ' + tape.quoteCurrency + '）' : '大額成交分類暫不可用'}</b>
+   {tape?.whaleClassificationAvailable ? (tape.largeTrades || []).slice(0, 6).map((trade, index) => <div key={trade.id || index} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '7px 0', borderBottom: '1px solid #293951', fontSize: 12 }}>
+    <b style={{ color: trade.side === 'buy' ? '#34d399' : '#fb7185' }}>{trade.side === 'buy' ? '主動買入' : '主動賣出'}</b>
+    <span>{fmt(trade.price, 8)} × {fmt(trade.amount, 5)}</span><b>{fmt(trade.quoteValue, 0)} {tape.quoteCurrency}</b>
+   </div>) : <small style={{ display: 'block', color: '#fbbf24', marginTop: 6 }}>報價幣別或合約數量單位無法可靠換算美元，不顯示巨額判定。</small>}
+   <small style={{ display: 'block', color: '#91a1b8', marginTop: 8 }}>來源：{data.source}｜交易所來源時間：{data.timestamp ? new Date(data.timestamp).toLocaleString('zh-TW') : '未提供'}｜伺服器接收時間：{data.receivedAt ? new Date(data.receivedAt).toLocaleString('zh-TW') : '—'}。公開 REST 快照，每 15 秒輪詢；不是 WebSocket 逐筆串流。OBI 只代表可見掛單深度，可能受撤單及隱藏流動性影響。</small>
+  </> : <small style={{ display: 'block', color: '#91a1b8', marginTop: 8 }}>{data?.error || '盤口資料載入中…'}</small>}
+ </section>;
+}}{fmt(tape?.sellQuoteValue, 0)}</div><small>主動買入占比：{fmt(tape?.aggressiveBuyPct, 1)}%</small></div>
    </div>
    <b style={{ display: 'block', marginTop: 12 }}>{tape?.whaleClassificationAvailable ? '大額成交（單筆至少 50,000 ' + tape.quoteCurrency + '）' : '大額成交分類暫不可用'}</b>
    {tape?.whaleClassificationAvailable ? (tape.largeTrades || []).slice(0, 6).map((trade, index) => <div key={trade.id || index} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '7px 0', borderBottom: '1px solid #293951', fontSize: 12 }}>
