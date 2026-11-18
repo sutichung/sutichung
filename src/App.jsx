@@ -7,9 +7,10 @@ import MarketOverview from './MarketOverview';
 import QuantResearch from './QuantResearch';
 import USMarket from './USMarket';
 import CryptoMarket from './CryptoMarket';
+import GlobalFinance from './GlobalFinance';
 
 const API = (process.env.REACT_APP_MARKET_API || '/api/market').replace(/\/$/, '');
-const APP_VERSION = '2026.11.18.47';
+const APP_VERSION = '2026.11.18.48';
 
 const C = { bg:'#080d18', panel:'#111a2b', panel2:'#172338', border:'#293951', text:'#e8eef8', muted:'#91a1b8', blue:'#60a5fa', green:'#34d399', red:'#fb7185', yellow:'#fbbf24' };
 const fmt = (v,d=2) => Number.isFinite(Number(v)) ? Number(v).toLocaleString('zh-TW',{minimumFractionDigits:d,maximumFractionDigits:d}) : '—';
@@ -75,7 +76,9 @@ export default function App(){
   <a href="#tw-market" style={{flex:'1 0 110px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#18304b',border:'1px solid #315579',color:'#bfdbfe',fontWeight:800,fontSize:13}}>🇹🇼 台股專區</a>
   <a href="#us-market" style={{flex:'1 0 110px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#18372f',border:'1px solid #28634f',color:'#a7f3d0',fontWeight:800,fontSize:13}}>🇺🇸 美股專區</a>
   <a href="#crypto-market" style={{flex:'1 0 130px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#382b19',border:'1px solid #745323',color:'#fde68a',fontWeight:800,fontSize:13}}>₿ 加密貨幣專區</a>
+  <a href="#global-finance" style={{flex:'1 0 140px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#252342',border:'1px solid #514b82',color:'#ddd6fe',fontWeight:800,fontSize:13}}>🌐 全球金融中心</a>
  </nav>
+ <GlobalFinance/>
  <USMarket/>
  <CryptoMarket/>
  <div id="tw-market" style={{scrollMarginTop:78,margin:'12px 0 8px',padding:'13px 14px',borderRadius:12,background:'linear-gradient(100deg,#12263c,#0d1727)',border:'1px solid #315579'}}>
