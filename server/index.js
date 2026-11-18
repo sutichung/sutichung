@@ -39,9 +39,10 @@ async function fetchJson(url, timeoutMs=8000, extraHeaders={}) {
   try { const r=await fetch(url,{signal:controller.signal,headers:{accept:'application/json',...extraHeaders}}); if(!r.ok) throw new Error('upstream_http_'+r.status); return await r.json(); }
   finally { clearTimeout(timer); }
 }
-async function twseMisSnapshot(){
+async function twseMisSnapshot(symbolLimit=null){
   const listed=await safeLoad('universe',TTL.universe,twseListedUniverse);
-  const symbols=(listed.data||[]).filter(x=>(x.exchange||'TWSE')==='TWSE').map(x=>x.symbol).filter(x=>/^[0-9]{4,6}$/.test(x));
+  const allSymbols=(listed.data||[]).filter(x=>(x.exchange||'TWSE')==='TWSE').map(x=>x.symbol).filter(x=>/^[0-9]{4,6}$/.test(x));
+  const symbols=Number.isInteger(symbolLimit)&&symbolLimit>0?allSymbols.slice(0,symbolLimit):allSymbols;
   if(!symbols.length)throw new Error('無上市股票清單，無法連接證交所行情');
   const headers={'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36','Referer':'https://mis.twse.com.tw/stock/index.jsp','Origin':'https://mis.twse.com.tw','Accept':'application/json, text/plain, */*'};
   const warmUrl='https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_2330.tw&json=1&delay=0&_='+Date.now();
@@ -51,10 +52,10 @@ async function twseMisSnapshot(){
   const warmBody=await warm.json();
   if(warmBody.rtmessage && warmBody.rtmessage!=='OK')throw new Error('證交所 MIS 初始化回應：'+warmBody.rtmessage);
   const chunks=[];for(let i=0;i<symbols.length;i+=25)chunks.push(symbols.slice(i,i+25));
-  const payloads=await mapLimit(chunks,2,async chunk=>{
+  const payloads=await mapLimit(chunks,4,async chunk=>{
     const params=new URLSearchParams({ex_ch:chunk.map(x=>'tse_'+x+'.tw').join('|'),json:'1',delay:'0',_:String(Date.now())});
     const h={...headers};if(cookies)h.Cookie=cookies;
-    const payload=await fetchJson('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?'+params.toString(),12000,h);
+    const payload=await fetchJson('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?'+params.toString(),10000,h);
     if(payload.rtmessage && payload.rtmessage!=='OK')throw new Error('證交所 MIS 回應：'+payload.rtmessage);
     return payload;
   });
@@ -70,7 +71,7 @@ async function twseMisSnapshot(){
   }
   if(!Object.keys(data).length)throw new Error('證交所 MIS 已連線但未回傳股票報價；回應 '+(payloads[0]?.rtmessage||'無有效 msgArray'));
   const delayedCount=Object.values(data).filter(x=>x.delayed).length;
-  return {data,source:'證交所 TWSE MIS 官方行情（逐檔依來源時間戳判定新鮮度）',timestamp:now(),delayed:delayedCount===Object.keys(data).length,mixedFreshness:delayedCount>0&&delayedCount<Object.keys(data).length,delayedCount,scannedCount:Object.keys(data).length,listedCount:symbols.length};
+  return {data,source:'證交所 TWSE MIS 官方行情（逐檔依來源時間戳判定新鮮度）',timestamp:now(),delayed:delayedCount===Object.keys(data).length,mixedFreshness:delayedCount>0&&delayedCount<Object.keys(data).length,delayedCount,scannedCount:Object.keys(data).length,requestedCount:symbols.length,coveragePct:symbols.length?Math.round(Object.keys(data).length/symbols.length*100):0,listedCount:allSymbols.length};
 }
 async function finmind(dataset, extra={}, timeoutMs=8000) {
   if(!FINMIND_TOKEN) throw new Error('未設定 FINMIND_TOKEN');
@@ -708,10 +709,9 @@ async function route(req,res){
   }
   if(u.pathname==='/api/diagnostics/market'){
     try{
-      const listed=await twseListedUniverse();
-      const live=await twseMisSnapshot();
-      const sample=Object.values(live.data).slice(0,5).map(x=>({symbol:x.symbol,name:x.name,price:x.price,timestamp:x.timestamp}));
-      return json(res,200,{ok:true,connection:'connected',source:live.source,listedCount:listed.data.length,quoteCount:live.scannedCount,serverTime:now(),sample});
+      const live=await twseMisSnapshot(5);
+      const sample=Object.values(live.data).slice(0,5).map(x=>({symbol:x.symbol,name:x.name,price:x.price,timestamp:x.timestamp,delayed:x.delayed,quoteType:x.quoteType}));
+      return json(res,200,{ok:true,connection:'connected',source:live.source,listedCount:live.listedCount,requestedCount:live.requestedCount,quoteCount:live.scannedCount,coveragePct:live.coveragePct,delayedCount:live.delayedCount,serverTime:now(),sample});
     }catch(e){
       console.error('[market-diagnostics] '+(e.stack||e.message));
       return json(res,200,{ok:false,connection:'disconnected',error:e.message,serverTime:now()});
