@@ -19,7 +19,6 @@ const globalFinance = require('./lib/global-finance');
 const globalIntelligence = require('./lib/intelligence');
 const { diagnoseProviders } = require('./lib/provider-diagnostics');
 const { createDependencyVulnerabilityScanner } = require('./lib/dependency-vulnerabilities');
-const { loadCryptoRiskInputs } = require('./lib/crypto-risk-loader');
 const { verifyGitHubActionsToken } = require('./lib/github-oidc');
 const researchStorage = require('./lib/research-storage').createResearchStorage();
 const dependencyVulnerabilityScanner = createDependencyVulnerabilityScanner({ lockPath: path.join(__dirname, '..', 'package-lock.json'), manifestPath: path.join(__dirname, '..', 'package.json') });
