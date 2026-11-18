@@ -14,7 +14,7 @@
 2. 複製環境設定：`cp .env.example .env`，填入可用資料供應商設定。
 3. 安裝前端依賴：`npm install`。
 4. 終端機 A 啟動後端：`npm run server`（預設 http://localhost:8787）。
-5. 終端機 B 啟動前端：`npm start`（CRA dev server 透過 package.json proxy 連後端）。
+5. 終端機 B 啟動前端：`npm start`（Vite dev server 透過 vite.config.js proxy 連後端）。
 6. 測試：`npm run test:server`；正式前端建置：`npm run build`。
 
 正式部署：可直接使用根目錄 Dockerfile 與 render.yaml，在 Render 建立 Blueprint 服務；詳細步驟見 [DEPLOYMENT.md](./DEPLOYMENT.md)。Docker 正式模式由同一個 Node 服務提供 React 網頁與 /api，不必另設前端代理。不可將 FinMind Token 或其他 API 金鑰放在瀏覽器環境變數。
