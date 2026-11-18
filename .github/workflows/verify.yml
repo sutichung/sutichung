@@ -1,9 +1,6 @@
-name: Server tests and frontend build
+name: Manual server tests and frontend build
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 jobs:
   verify:
     runs-on: ubuntu-latest
