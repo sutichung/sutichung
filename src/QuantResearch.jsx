@@ -28,9 +28,9 @@ function runBacktest(candles,cost){
  const net=trades.reduce((s,t)=>s+t.net,0);
  return {insufficient:false,bars:rows.length,count:trades.length,wins:wins.length,losses:losses.length,winRate:trades.length?wins.length/trades.length*100:null,expectancy:trades.length?net/trades.length:null,profitFactor:grossLoss?grossWin/grossLoss:grossWin>0?Infinity:null,totalNet:(equity-1)*100,mdd,openPosition:entry,first:rows[0].time,last:rows.at(-1).time,trades:trades.slice(-8)};
 }
-export default function QuantResearch({candles=[],symbol='—',source='',asOf=''}) {
- const [commission,setCommission]=useState('0.1425');
- const [tax,setTax]=useState('0.30');
+export default function QuantResearch({candles=[],symbol='—',source='',asOf='',market='TW'}) {
+ const [commission,setCommission]=useState(market==='US'?'0':'0.1425');
+ const [tax,setTax]=useState(market==='US'?'0':'0.30');
  const [slippage,setSlippage]=useState('0.05');
  const inputs=[commission,tax,slippage];
  const validCost=inputs.every(v=>String(v).trim()!==''&&Number.isFinite(Number(v))&&Number(v)>=0&&Number(v)<=10);
