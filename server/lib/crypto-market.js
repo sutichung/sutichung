@@ -136,4 +136,4 @@ async function loadNews(){
   return {data:data.sort((a,b)=>Date.parse(b.publishedAt||0)-Date.parse(a.publishedAt||0)).slice(0,30),source:'CoinDesk／Cointelegraph RSS',timestamp:now(),errors:feeds.filter(x=>x.status==='rejected').length};
  });
 }
-module.exports={loadMarket,getHistory,getDerivatives,liquidationMap,loadNews};
+module.exports={loadMarket,getHistory,getDerivatives,liquidationMap,loadNews,buildQuoteRow:row,mapLimit};
