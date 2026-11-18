@@ -8,7 +8,7 @@ const { scoreStock } = require('./lib/scoring');
 const { getTradingReadiness } = require('./lib/trading-readiness');
 const { buildAiCommittee } = require('./lib/agents');
 const { applyFirewall } = require('./lib/firewall');
-const { loadMarket: loadUsMarket, getChart: getUsChart, searchSymbols: searchUsSymbols } = require('./lib/us-market');
+const { loadMarket: loadUsMarket, getChart: getUsChart, searchSymbols: searchUsSymbols, getUniversePage: getUsUniversePage } = require('./lib/us-market');
 const cryptoMarket = require('./lib/crypto-market');
 
 const PORT = Number(process.env.PORT || 8787);
@@ -560,6 +560,12 @@ async function route(req,res){
     if(!query)return json(res,200,{results:[],source:'Yahoo Finance Search'});
     try{return json(res,200,{results:await searchUsSymbols(query),source:'Yahoo Finance Search（非官方公開端點）',timestamp:now()});}
     catch(e){return json(res,502,{results:[],error:e.message,source:'unavailable',timestamp:now()});}
+  }
+  if(u.pathname==='/api/us/universe'){
+    try{
+      const result=await getUsUniversePage({query:u.searchParams.get('q')||'',exchange:u.searchParams.get('exchange')||'',page:u.searchParams.get('page')||1,limit:u.searchParams.get('limit')||100});
+      return json(res,200,result);
+    }catch(e){return json(res,503,{data:[],total:0,totalUniverse:0,error:e.message,source:'SEC reference unavailable'});}
   }
   if(u.pathname==='/api/us/market'){
     const result=await safeLoad('us-market',5*60*1000,loadUsMarket,e=>({market:'US',data:{},indices:[],scan:[],source:'unavailable',timestamp:now(),error:e.message,coverage:{stocks:0,universe:30,indices:0}}));
