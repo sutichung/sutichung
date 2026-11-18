@@ -28,6 +28,8 @@ jobs:
           done
       - run: npm run test:server
       - run: npm install --no-audit --no-fund
+      - name: Generate temporary lockfile for dependency audit
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
       - name: Report dependency vulnerabilities
         if: always()
         run: |
