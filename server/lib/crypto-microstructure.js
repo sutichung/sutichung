@@ -14,7 +14,7 @@ async function getJson(url, timeoutMs = 10000) {
   if (!response.ok) throw new Error('upstream_http_' + response.status);
   return response.json();
 }
-function normalizeBook(exchange, bids, asks, timestamp, depth = 10) {
+function normalizeBook(exchange, bids, asks, timestamp, depth = 10, { notionalAvailable = true } = {}) {
   const clean = rows => (rows || []).map(x => [number(x[0]), number(x[1])])
     .filter(x => x[0] !== null && x[1] !== null && x[0] > 0 && x[1] > 0);
   const bidRows = clean(bids).sort((a, b) => b[0] - a[0]).slice(0, depth);
@@ -47,7 +47,7 @@ function normalizeBook(exchange, bids, asks, timestamp, depth = 10) {
     bidDepth: bidVolume, askDepth: askVolume,
     obi: total > 0 ? (bidVolume - askVolume) / total : null,
     weightedObi: weightedTotal > 0 ? (weightedBid - weightedAsk) / weightedTotal : null,
-    obiNotional: notionalTotal > 0 ? (bidNotional - askNotional) / notionalTotal : null,
+    obiNotional: notionalAvailable && notionalTotal > 0 ? (bidNotional - askNotional) / notionalTotal : null,
     depthBands,
     timestamp: timestamp && Number.isFinite(Number(timestamp)) ? new Date(Number(timestamp)).toISOString() : null,
     receivedAt: now(), depth: Math.min(depth, Math.min(bidRows.length, askRows.length))
@@ -93,7 +93,7 @@ async function fetchMicrostructure({ exchange = 'Binance', symbol, marketType = 
       getJson('https://api.bybit.com/v5/market/recent-trade?' + new URLSearchParams({ category, symbol: safeSymbol, limit: '100' }))
     ]);
     if (b.retCode !== 0 || t.retCode !== 0) throw new Error(b.retMsg || t.retMsg || 'bybit_api_error');
-    book = normalizeBook(exchange, b.result?.b || [], b.result?.a || [], b.time, levels);
+    book = normalizeBook(exchange, b.result?.b || [], b.result?.a || [], b.result?.ts, levels);
     trades = normalizeTrades(exchange, (t.result?.list || []).map(x => ({ id: x.execId, timestamp: Number(x.time), side: String(x.side).toLowerCase(), price: x.price, amount: x.size, quoteCurrency, whaleClassificationAvailable })), whaleThresholdUsd);
     source = 'Bybit V5 public order book + recent trades';
   } else if (exchange === 'OKX') {
@@ -104,7 +104,7 @@ async function fetchMicrostructure({ exchange = 'Binance', symbol, marketType = 
     ]);
     if (b.code !== '0' || t.code !== '0') throw new Error(b.msg || t.msg || 'okx_api_error');
     const row = b.data?.[0];
-    book = normalizeBook(exchange, row?.bids || [], row?.asks || [], row?.ts, levels);
+    book = normalizeBook(exchange, row?.bids || [], row?.asks || [], row?.ts, levels, { notionalAvailable: !(marketType === 'perpetual') });
     trades = normalizeTrades(exchange, (t.data || []).map(x => ({ id: x.tradeId, timestamp: Number(x.ts), side: x.side, price: x.px, amount: x.sz, quoteCurrency, whaleClassificationAvailable })), whaleThresholdUsd);
     source = 'OKX public order book + recent trades';
   } else {
