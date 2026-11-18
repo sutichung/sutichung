@@ -54,7 +54,7 @@ async function krakenMarkets(){
  const tick=await getJson('https://api.kraken.com/0/public/Ticker?pair='+encodeURIComponent(names.join(',')));
  if(tick.error?.length)throw new Error(tick.error.join(','));
  const tmap=tick.result||{};
- return entries.map(([key,x])=>{const base=(x.wsname.split('/')[0]||'').replace(/^XBT$/,'BTC'),quote=(x.wsname.split('/')[1]||'').replace(/^XBT$/,'BTC'),native=x.altname||key,q=tmap[native]||tmap[key]||{};return row('Kraken','spot',(base+quote).replace(/[^A-Z0-9]/g,''),base,quote,q.c?.[0],q.p?.[1]?null:null,Number(q.v?.[1])&&Number(q.c?.[0])?Number(q.v[1])*Number(q.c[0]):0,{high24h:q.h?.[1],low24h:q.l?.[1],volume:q.v?.[1],nativeSymbol:native,nativeType:'spot'});});
+ return entries.map(([key,x])=>{const base=(x.wsname.split('/')[0]||'').replace(/^XBT$/,'BTC'),quote=(x.wsname.split('/')[1]||'').replace(/^XBT$/,'BTC'),native=x.altname||key,q=tmap[native]||tmap[key]||{};return row('Kraken','spot',(base+quote).replace(/[^A-Z0-9]/g,''),base,quote,q.c?.[0],q.o&&Number(q.o)>0?(Number(q.c?.[0])/Number(q.o)-1)*100:null,Number(q.v?.[1])&&Number(q.c?.[0])?Number(q.v[1])*Number(q.c[0]):0,{high24h:q.h?.[1],low24h:q.l?.[1],volume:q.v?.[1],nativeSymbol:native,nativeType:'spot'});});
 }
 async function loadMarket(){
  return cached('market-multi',60000,async()=>{
@@ -101,15 +101,16 @@ async function ratioFor(exchange,base){
 }
 async function getDerivatives(symbol,exchange='Binance',nativeSymbol=''){
  const base=String(symbol).toUpperCase().replace(/(USDT|USDC|USD)$/,'');
- const [battle,binance,bybit,okx]=await Promise.all([
+ const [battle,binance,binanceOi,bybit,okx]=await Promise.all([
   Promise.all(['Binance','Bybit','OKX'].map(x=>ratioFor(x,base))),
   getJson('https://fapi.binance.com/fapi/v1/premiumIndex?symbol='+base+'USDT').catch(()=>null),
+  getJson('https://fapi.binance.com/fapi/v1/openInterest?symbol='+base+'USDT').catch(()=>null),
   getJson('https://api.bybit.com/v5/market/tickers?category=linear&symbol='+base+'USDT').catch(()=>null),
   getJson('https://www.okx.com/api/v5/market/ticker?instId='+base+'-USDT-SWAP').catch(()=>null)
  ]);
  const bq=bybit?.result?.list?.[0],oq=okx?.data?.[0];
  const rows=[
-  {exchange:'Binance',fundingRate:n(binance?.lastFundingRate),markPrice:n(binance?.markPrice),openInterest:null},
+  {exchange:'Binance',fundingRate:n(binance?.lastFundingRate),markPrice:n(binance?.markPrice),openInterest:n(binanceOi?.openInterest)},
   {exchange:'Bybit',fundingRate:n(bq?.fundingRate),markPrice:n(bq?.markPrice),openInterest:n(bq?.openInterest)},
   {exchange:'OKX',fundingRate:n(oq?.fundingRate),markPrice:n(oq?.last),openInterest:n(oq?.oi)}
  ];
