@@ -61,3 +61,14 @@ test('strategy lab rejects duplicate timestamps even when OHLCV values are valid
   assert.notEqual(result.status,'ok');
   assert.match(result.error,/嚴格遞增/);
 });
+
+test('strategy lab normalizes Unix seconds and milliseconds timestamps',()=>{
+ const millis=makeCandles(140);millis.forEach(x=>{x.time=Date.parse(x.time);});
+ const seconds=makeCandles(140);seconds.forEach(x=>{x.time=Math.floor(Date.parse(x.time)/1000);});
+ const msResult=runStrategyLab(millis,{market:'tw-stock'});
+ const secResult=runStrategyLab(seconds,{market:'tw-stock'});
+ assert.equal(msResult.status,'ok');
+ assert.equal(secResult.status,'ok');
+ assert.equal(typeof msResult.asOf,'string');
+ assert.equal(typeof secResult.asOf,'string');
+});
