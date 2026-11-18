@@ -2,6 +2,7 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const {runStrategyLab,validateCandles}=require('../lib/strategy-lab');
+const {dailyTrendMap}=require('../lib/mtf-structure-strategy');
 
 function candles(n=240,mode='trend'){
  let price=100;
@@ -71,4 +72,30 @@ test('strategy lab normalizes Unix seconds and milliseconds timestamps',()=>{
  assert.equal(secResult.status,'ok');
  assert.equal(typeof msResult.asOf,'string');
  assert.equal(typeof secResult.asOf,'string');
+});
+
+test('MTF daily filter only exposes fully closed daily candles',()=>{
+ const daily=Array.from({length:201},(_,i)=>{
+  const close=i<200?100+i:1;
+  return {time:new Date(Date.UTC(2024,0,1+i)).toISOString(),open:close,high:close+1,low:close-1,close,volume:1000};
+ });
+ const times=[new Date(Date.UTC(2024,0,1+200)).toISOString(),new Date(Date.UTC(2024,0,1+201)).toISOString()];
+ const aligned=dailyTrendMap(daily,times);
+ assert.equal(aligned[0],1,'the still-forming day 200 must not be used');
+ assert.equal(aligned[1],-1,'day 200 becomes available only after it closes');
+});
+
+test('strategy lab adds MTF structure strategy only when higher-timeframe candles are supplied',()=>{
+ const ltf=Array.from({length:240},(_,i)=>{
+  const t=new Date(Date.UTC(2024,6,1)+i*4*60*60*1000).toISOString();
+  const close=100+i*0.08+Math.sin(i/4)*0.3,open=close-0.1;
+  return {time:t,open,high:Math.max(open,close)+0.3,low:Math.min(open,close)-0.3,close,volume:1000+(i%17)*10};
+ });
+ const htf=candles(240,'trend');
+ const withMtf=runStrategyLab(ltf,{market:'crypto',htfCandles:htf});
+ assert.equal(withMtf.status,'ok');
+ assert.ok(withMtf.strategies.some(s=>s.id==='mtf_structure_4h_1d'));
+ assert.equal(withMtf.strategyCount,9);
+ const withoutMtf=runStrategyLab(ltf,{market:'crypto'});
+ assert.equal(withoutMtf.strategyCount,8);
 });
