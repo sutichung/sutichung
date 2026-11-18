@@ -118,10 +118,10 @@ function runStrategyLab(input, options={}) {
   const strategies=STRATEGIES.map(strategy=>{
     const results=periods.map(period=>({...period,metrics:runStrategy(strategy.id,candles,period.start,period.end,costs),marketRegime:classifyRegime(candles.slice(period.start,period.end))}));
     const oos=results[1].metrics;
-    const passed=oos.status==='ok'&&oos.trades>=5&&oos.netReturnPct>0&&oos.maxDrawdownPct<=20&&oos.sharpe!==null&&oos.sharpe>0;
-    return {...strategy,periods:results,validation:{status:passed?'candidate_pass':'not_validated',rules:['樣本外至少 5 筆交易','樣本外淨報酬大於 0（已扣估算成本）','樣本外最大回撤不超過 20%','樣本外 Sharpe 大於 0'],passed}};
+    const passed=oos.status==='ok'&&oos.trades>=10&&oos.netReturnPct>0&&oos.maxDrawdownPct<=15&&oos.sharpe!==null&&oos.sharpe>0&&oos.profitFactor!==null&&oos.profitFactor>1.1;
+    return {...strategy,periods:results,validation:{status:passed?'preliminary_pass':'not_validated',level:'single_holdout_preliminary',rules:['單一樣本外區間至少 10 筆交易','樣本外淨報酬大於 0（已扣估算成本）','樣本外最大回撤不超過 15%','樣本外 Sharpe 大於 0','Profit Factor 大於 1.1'],passed}};
   });
-  return {status:'ok',symbol:options.symbol||null,market,source:options.source||'provided OHLCV',asOf:candles.at(-1).time,barCount:candles.length,split:{trainBars:trainEnd-trainStart,outOfSampleBars:testEnd-testStart,ratio:'60/40'},costs:{feeBps:costs.feeBps,slippageBps:costs.slippageBps,sellTaxBps:costs.sellTaxBps,annualization:costs.annualization,unit:'bps per side; sell tax charged on exit'},strategies,disclaimer:'研究與回測結果不是未來報酬保證。使用下一根 K 線開盤成交以避免同根收盤訊號前視偏誤，區間結束時將未平倉部位按最後收盤價估值並計入退出成本；仍未完整模擬限價排隊、停牌、漲跌停、融券限制及實際市場微結構。未通過樣本外規則的策略不得當作推薦訊號。'};
+  return {status:'ok',symbol:options.symbol||null,market,source:options.source||'provided OHLCV',asOf:candles.at(-1).time,barCount:candles.length,split:{trainBars:trainEnd-trainStart,outOfSampleBars:testEnd-testStart,ratio:'60/40',method:'single_holdout_preliminary'},costs:{feeBps:costs.feeBps,slippageBps:costs.slippageBps,sellTaxBps:costs.sellTaxBps,annualization:costs.annualization,unit:'bps per side; sell tax charged on exit'},strategies,disclaimer:'研究與回測結果不是未來報酬保證。使用下一根 K 線開盤成交以避免同根收盤訊號前視偏誤，區間結束時將未平倉部位按最後收盤價估值並計入退出成本；仍未完整模擬限價排隊、停牌、漲跌停、融券限制及實際市場微結構。單一 60/40 樣本外通過僅代表初步候選，仍須多市場、多週期、不同景氣環境與交易樣本驗證；未通過者不得當作推薦訊號。'};
 }
 
 module.exports={runStrategyLab,validateCandles,STRATEGIES};
