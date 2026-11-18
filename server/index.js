@@ -668,12 +668,16 @@ async function route(req,res){
     const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase(),type=u.searchParams.get('type')==='perpetual'?'perpetual':'spot',exchange=u.searchParams.get('exchange')||'Binance',nativeSymbol=u.searchParams.get('nativeSymbol')||symbol,interval=u.searchParams.get('interval')||'1d';
     try{
       const historyResult=await loadRiskHistory({getHistory:cryptoMarket.getHistory,symbol,marketType:type,interval,exchange,nativeSymbol,limit:240});
-      const [derivatives,microResult]=await Promise.all([
+      const [derivativesResult,microResultSettled]=await Promise.allSettled([
         type==='perpetual'?cryptoMarket.getDerivatives(symbol,historyResult.exchange,historyResult.exchange===exchange?nativeSymbol:symbol):Promise.resolve(null),
         loadFreshMicrostructure({safeLoad,fetchMicrostructure:cryptoMicrostructure.fetchMicrostructure,symbol,marketType:type,requestedExchange:exchange,preferredExchange:historyResult.exchange,nativeSymbol,depth:10,whaleThresholdUsd:50000})
       ]);
+      const derivatives=derivativesResult.status==='fulfilled'?derivativesResult.value:null;
+      const microResult=microResultSettled.status==='fulfilled'?microResultSettled.value:{data:null,errors:[{exchange:historyResult.exchange,error:String(microResultSettled.reason?.message||'microstructure_unavailable').slice(0,160)}]};
       const micro=microResult.data;
       const result=assessMarketRisk(historyResult.history,derivatives,micro);
+      result.derivativesStatus=result.coverage?.derivatives?'connected':'unavailable';
+      if(derivativesResult.status==='rejected')result.derivativesWarning='衍生品資料暫不可用，風險計算仍使用有效 K 線與可取得的委託簿資料：'+String(derivativesResult.reason?.message||'upstream_unavailable').slice(0,160);
       if(!micro){
         result.microstructureStatus='unavailable';
         result.microstructureAttempts=microResult.errors;
