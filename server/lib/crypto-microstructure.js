@@ -1,0 +1,96 @@
+'use strict';
+
+const now = () => new Date().toISOString();
+const number = value => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
+async function getJson(url, timeoutMs = 10000) {
+  const response = await fetch(url, {
+    headers: { accept: 'application/json', 'user-agent': 'TaiwanStockHunter/1.0' },
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+  if (!response.ok) throw new Error('upstream_http_' + response.status);
+  return response.json();
+}
+function normalizeBook(exchange, bids, asks, timestamp, depth = 10) {
+  const clean = rows => (rows || []).slice(0, depth).map(x => [number(x[0]), number(x[1])])
+    .filter(x => x[0] > 0 && x[1] >= 0);
+  const bidRows = clean(bids), askRows = clean(asks);
+  if (!bidRows.length || !askRows.length) throw new Error('orderbook_empty');
+  const bid = bidRows[0][0], ask = askRows[0][0], mid = (bid + ask) / 2;
+  const bidVolume = bidRows.reduce((sum, x) => sum + x[1], 0);
+  const askVolume = askRows.reduce((sum, x) => sum + x[1], 0);
+  const total = bidVolume + askVolume;
+  return {
+    exchange, bids: bidRows, asks: askRows, bestBid: bid, bestAsk: ask,
+    midPrice: mid, spreadPct: mid > 0 ? (ask - bid) / mid * 100 : null,
+    bidDepth: bidVolume, askDepth: askVolume,
+    obi: total > 0 ? (bidVolume - askVolume) / total : null,
+    timestamp: timestamp && Number.isFinite(Number(timestamp)) ? new Date(Number(timestamp)).toISOString() : null,
+    receivedAt: now(), depth: Math.min(depth, Math.min(bidRows.length, askRows.length))
+  };
+}
+function normalizeTrades(exchange, rows, thresholdUsd = 50000) {
+  return (rows || []).map(t => {
+    const price = number(t.price), amount = number(t.amount), side = t.side;
+    const cost = number(t.cost) ?? (price !== null && amount !== null ? price * amount : null);
+    return {
+      id: t.id == null ? null : String(t.id), timestamp: number(t.timestamp),
+      side: side === 'buy' || side === 'sell' ? side : null,
+      price, amount, quoteValue: cost, large: cost !== null && cost >= thresholdUsd
+    };
+  }).filter(t => t.price > 0 && t.amount > 0)
+    .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+    .slice(0, 100);
+}
+async function fetchMicrostructure({ exchange = 'Binance', symbol, marketType = 'perpetual', depth = 10, whaleThresholdUsd = 50000 }) {
+  const safeSymbol = String(symbol || '').toUpperCase();
+  if (!/^[A-Z0-9-]{2,30}$/.test(safeSymbol)) throw new Error('invalid_symbol');
+  const levels = Math.min(50, Math.max(5, Number(depth) || 10));
+  const base = safeSymbol.replace(/(USDT|USDC|USD|BTC|ETH)$/, '');
+  let book, trades, source;
+  if (exchange === 'Binance') {
+    const host = marketType === 'perpetual' ? 'https://fapi.binance.com' : 'https://api.binance.com';
+    const path = marketType === 'perpetual' ? '/fapi/v1' : '/api/v3';
+    const [b, t] = await Promise.all([
+      getJson(host + path + '/depth?' + new URLSearchParams({ symbol: safeSymbol, limit: String(levels) })),
+      getJson(host + path + '/trades?' + new URLSearchParams({ symbol: safeSymbol, limit: '100' }))
+    ]);
+    book = normalizeBook(exchange, b.bids, b.asks, b.lastUpdateId ? Date.now() : Date.now(), levels);
+    trades = normalizeTrades(exchange, t.map(x => ({ id: x.id, timestamp: x.time, side: x.isBuyerMaker ? 'sell' : 'buy', price: x.price, amount: x.qty })), whaleThresholdUsd);
+    source = 'Binance public REST order book + recent trades';
+  } else if (exchange === 'Bybit') {
+    const category = marketType === 'perpetual' ? 'linear' : 'spot';
+    const [b, t] = await Promise.all([
+      getJson('https://api.bybit.com/v5/market/orderbook?' + new URLSearchParams({ category, symbol: safeSymbol, limit: String(levels) })),
+      getJson('https://api.bybit.com/v5/market/recent-trade?' + new URLSearchParams({ category, symbol: safeSymbol, limit: '100' }))
+    ]);
+    if (b.retCode !== 0 || t.retCode !== 0) throw new Error(b.retMsg || t.retMsg || 'bybit_api_error');
+    book = normalizeBook(exchange, b.result?.b || [], b.result?.a || [], b.time, levels);
+    trades = normalizeTrades(exchange, (t.result?.list || []).map(x => ({ id: x.execId, timestamp: Number(x.time), side: String(x.side).toLowerCase(), price: x.price, amount: x.size })), whaleThresholdUsd);
+    source = 'Bybit V5 public order book + recent trades';
+  } else if (exchange === 'OKX') {
+    const instId = safeSymbol.includes('-') ? safeSymbol : safeSymbol.replace(/(USDT|USDC|USD)$/, '-$1') + (marketType === 'perpetual' ? '-SWAP' : '');
+    const [b, t] = await Promise.all([
+      getJson('https://www.okx.com/api/v5/market/books?' + new URLSearchParams({ instId, sz: String(levels) })),
+      getJson('https://www.okx.com/api/v5/market/trades?' + new URLSearchParams({ instId, limit: '100' }))
+    ]);
+    if (b.code !== '0' || t.code !== '0') throw new Error(b.msg || t.msg || 'okx_api_error');
+    const row = b.data?.[0];
+    book = normalizeBook(exchange, row?.bids || [], row?.asks || [], row?.ts, levels);
+    trades = normalizeTrades(exchange, (t.data || []).map(x => ({ id: x.tradeId, timestamp: Number(x.ts), side: x.side, price: x.px, amount: x.sz })), whaleThresholdUsd);
+    source = 'OKX public order book + recent trades';
+  } else {
+    throw new Error('unsupported_exchange');
+  }
+  const largeTrades = trades.filter(x => x.large);
+  const buyValue = trades.filter(x => x.side === 'buy').reduce((s, x) => s + (x.quoteValue || 0), 0);
+  const sellValue = trades.filter(x => x.side === 'sell').reduce((s, x) => s + (x.quoteValue || 0), 0);
+  return {
+    exchange, symbol: safeSymbol, marketType, source, timestamp: book.timestamp,
+    receivedAt: now(), book,
+    tape: { count: trades.length, largeTradeCount: largeTrades.length, largeTrades: largeTrades.slice(0, 20), buyQuoteValue: buyValue, sellQuoteValue: sellValue, netAggressiveQuoteValue: buyValue - sellValue, whaleThresholdUsd }
+  };
+}
+module.exports = { fetchMicrostructure, normalizeBook, normalizeTrades };
