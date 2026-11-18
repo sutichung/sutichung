@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('node:fs');
 const path=require('node:path');
-const base=String(process.env.MARKET_APP_URL||'').replace(/\\/$/,'');
+const base=String(process.env.MARKET_APP_URL||'').replace(/\/$/,'');
 const reportPath=process.argv[2];
 const horizon=process.argv[3]||'1d';
 const sessions=process.argv[4]===undefined?1:Number(process.argv[4]);
@@ -75,6 +75,6 @@ async function get(endpoint){
  const lines=['# '+horizon+' 訊號結果檢查 '+date,'',`歷史訊號日期：${report.evaluatedSignalDate||'未提供'}`,`有效比較：${results.length}/${signals.length}；排除：${excluded.length}`,`假設來回成本：${costPct}%`,`方向命中率：${report.directionalHitRatePct==null?'樣本不足':report.directionalHitRatePct.toFixed(1)+'%'}`,`平均方向報酬：${report.averageDirectionalReturnPct==null?'—':report.averageDirectionalReturnPct.toFixed(3)+'%'}`,`平均扣除假設成本後報酬：${report.averageNetReturnPct==null?'—':report.averageNetReturnPct.toFixed(3)+'%'}`,`多方：${report.long.count} 筆；空方：${report.short.count} 筆`,'','## 個別訊號'];
  for(const x of results)lines.push(`- ${x.symbol} ${x.side==='long'?'多方':'空方'}：方向報酬 ${x.directionalReturnPct.toFixed(2)}%；淨報酬假設 ${x.netReturnPct.toFixed(2)}%`);
  lines.push('','## 排除原因',...excluded.map(x=>`- ${x.symbol}：${x.reason}`),'','> '+report.caveat,'');
- fs.writeFileSync(path.join('reports',stem+'.md'),lines.join('\\n'));
+ fs.writeFileSync(path.join('reports',stem+'.md'),lines.join('\n'));
  process.stdout.write(JSON.stringify({horizon,evaluatedCount:results.length,excludedCount:excluded.length,hitRatePct:report.directionalHitRatePct}));
 })().catch(error=>{process.stderr.write(error.stack||String(error));process.exit(1);});
