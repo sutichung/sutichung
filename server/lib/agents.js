@@ -25,6 +25,8 @@ async function runAgent(provider, prompt, env) {
     gemini: { key: env.GEMINI_API_KEY, model: env.GEMINI_MODEL || 'gemini-3.8-flash' },
     groq: { key: env.GROQ_API_KEY, model: env.GROQ_MODEL || 'openai/gpt-oss-20b' },
     cloudflare: { key: env.CLOUDFLARE_API_TOKEN && env.CLOUDFLARE_ACCOUNT_ID ? env.CLOUDFLARE_API_TOKEN : '', accountId: env.CLOUDFLARE_ACCOUNT_ID, model: env.CLOUDFLARE_AI_MODEL || '@cf/meta/llama-3.3-70b-instruct-fp8-fast' },
+    xai: { key: env.XAI_API_KEY, model: env.XAI_MODEL || 'grok-4.1' },
+    deepseek: { key: env.DEEPSEEK_API_KEY, model: env.DEEPSEEK_MODEL || 'deepseek-chat' },
     openai: { key: env.OPENAI_API_KEY, model: env.OPENAI_MODEL || 'gpt-6-luna' }
   };
   const config = configs[provider];
@@ -69,7 +71,11 @@ async function runAgent(provider, prompt, env) {
         const body = { model: config.model, messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }], temperature: 0.2, max_tokens: 1100, response_format: { type: 'json_object' } };
         const url = provider === 'groq'
           ? 'https://api.groq.com/openai/v1/chat/completions'
-          : 'https://api.cloudflare.com/client/v4/accounts/' + encodeURIComponent(config.accountId) + '/ai/v1/chat/completions';
+          : provider === 'xai'
+            ? 'https://api.x.ai/v1/chat/completions'
+            : provider === 'deepseek'
+              ? 'https://api.deepseek.com/chat/completions'
+              : 'https://api.cloudflare.com/client/v4/accounts/' + encodeURIComponent(config.accountId) + '/ai/v1/chat/completions';
         const result = await postJson(url, body, { Authorization: 'Bearer ' + config.key });
         raw = result.choices && result.choices[0] && result.choices[0].message && result.choices[0].message.content || '';
         if (!raw) throw new Error(provider + ' 未回傳分析內容');
@@ -191,9 +197,11 @@ async function buildAiCommittee(symbol, options) {
     gemini: '技術分析專家，重點研判K線型態、SMA/EMA、MACD、RSI、KD、布林通道、ADX、CCI、MFI、ATR、VWAP、支撐壓力與量價結構。',
     groq: '市場情境與事件風險分析師，重點評估市場環境、波動風險、可能催化因素；未提供新聞時明確說明沒有新聞資料。',
     cloudflare: '財務品質與風險報酬分析師，檢查可取得的財務資料、現金流、估值、波動度與風險界線；美股資料若未提供 SEC 財報數據，必須明確指出資料缺口，不得假設台股法人籌碼或集保資料存在。',
-    openai: '獨立總體與交叉驗證分析師，檢查資料時效、指標是否互相矛盾、估值與風險報酬；提出反方論點，不可沿用其他 Agent 結論。'
+    openai: '獨立總體與交叉驗證分析師，檢查資料時效、指標是否互相矛盾、估值與風險報酬；提出反方論點，不可沿用其他 Agent 結論。',
+    xai: '獨立反方與市場操縱風險分析師，主動尋找看多論點的反證、流動性風險、消息來源缺陷及可能的誘多誘空情境。',
+    deepseek: '量化與統計驗證分析師，檢查訊號樣本、指標一致性、資料偏誤、期望值與風險報酬；缺少統計資料時不得宣稱勝率。'
   };
-  const providers = ['gemini', 'groq', 'cloudflare'];
+  const providers = ['gemini', 'groq', 'cloudflare', 'xai', 'deepseek'];
   const agents = await Promise.all(providers.map(async provider => {
     const prompt = '股票 ' + facts.symbol + ' ' + facts.name + '。你的專長：' + roles[provider] + '\n請只使用以下資料，資料時間不一致時要指出，禁止推測缺漏值。請給出獨立多空評分與可驗證邏輯。\n資料：' + JSON.stringify(facts);
     try { return await runAgent(provider, prompt, options.env || process.env); }
