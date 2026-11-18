@@ -76,14 +76,15 @@ function timestampIso(value,multiplier=1){
  const ms=Number(value)*multiplier;
  return Number.isFinite(ms)&&ms>0?new Date(ms).toISOString():null;
 }
-function normalizeKlines(rows,exchange){
+function normalizeKlines(rows,exchange,interval='1d',asOf=Date.now()){
  let candles=[];
  if(exchange==='Bybit')candles=rows.map(x=>({time:timestampIso(x[0]),open:n(x[1]),high:n(x[2]),low:n(x[3]),close:n(x[4]),volume:n(x[5])}));
  if(exchange==='OKX')candles=rows.map(x=>({time:timestampIso(x[0]),open:n(x[1]),high:n(x[2]),low:n(x[3]),close:n(x[4]),volume:n(x[5])}));
  if(exchange==='Coinbase')candles=rows.map(x=>({time:timestampIso(x[0],1000),low:n(x[1]),high:n(x[2]),open:n(x[3]),close:n(x[4]),volume:n(x[5])}));
  if(exchange==='Kraken')candles=rows.map(x=>({time:timestampIso(x[0],1000),open:n(x[1]),high:n(x[2]),low:n(x[3]),close:n(x[4]),volume:n(x[6])}));
  if(exchange==='Binance')candles=rows.map(x=>({time:timestampIso(x[0]),open:n(x[1]),high:n(x[2]),low:n(x[3]),close:n(x[4]),volume:n(x[5])}));
- const valid=candles.filter(x=>x.time&&Number.isFinite(Date.parse(x.time))&&[x.open,x.high,x.low,x.close,x.volume].every(Number.isFinite)&&x.open>0&&x.high>0&&x.low>0&&x.close>0&&x.volume>=0&&x.high>=Math.max(x.open,x.close,x.low)&&x.low<=Math.min(x.open,x.close,x.high));
+ const duration=({'15m':900000,'1h':3600000,'4h':14400000,'1d':86400000}[interval]||86400000);
+ const valid=candles.filter(x=>x.time&&Number.isFinite(Date.parse(x.time))&&Date.parse(x.time)+duration<=asOf&&[x.open,x.high,x.low,x.close,x.volume].every(Number.isFinite)&&x.open>0&&x.high>0&&x.low>0&&x.close>0&&x.volume>=0&&x.high>=Math.max(x.open,x.close,x.low)&&x.low<=Math.min(x.open,x.close,x.high));
  const unique=new Map();for(const candle of valid)unique.set(candle.time,candle);
  return [...unique.values()].sort((a,b)=>Date.parse(a.time)-Date.parse(b.time));
 }
@@ -98,7 +99,7 @@ async function getHistory(symbol,marketType='spot',interval='1d',exchange='Binan
   else if(exchange==='OKX'){const inst=clean.includes('-')?clean:clean.replace(/(USDT|USDC|USD)$/,'-$1')+(marketType==='perpetual'?'-SWAP':'');const x=await getJson('https://www.okx.com/api/v5/market/candles?'+new URLSearchParams({instId:inst,bar:iv==='1d'?'1D':iv,limit:'240'}));if(x.code!=='0')throw new Error(x.msg);rows=x.data;}
   else if(exchange==='Coinbase'){const product=clean.includes('-')?clean:clean.replace(/(USDT|USDC|USD)$/,'-$1');rows=await getJson('https://api.exchange.coinbase.com/products/'+encodeURIComponent(product)+'/candles?granularity=86400');}
   else if(exchange==='Kraken'){const x=await getJson('https://api.kraken.com/0/public/OHLC?'+new URLSearchParams({pair:clean,interval:'1440'}));if(x.error?.length)throw new Error(x.error.join(','));const key=Object.keys(x.result||{}).find(k=>k!=='last');rows=x.result?.[key]||[];}
-  const candles=normalizeKlines(rows,exchange);
+  const candles=normalizeKlines(rows,exchange,iv);
   if(!candles.length)throw new Error(exchange+' 此市場沒有可用 K 線');
   return {symbol,marketType,exchange,interval,data:candles,indicators:indicators(candles),asOf:candles.at(-1).time,source,timestamp:now()};
  });
