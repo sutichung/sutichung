@@ -86,6 +86,7 @@ jobs:
             done
           fi
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: taiwan-market-1h-outcome-${{ github.run_id }}
           path: reports/
@@ -180,6 +181,7 @@ jobs:
             done
           fi
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: taiwan-market-outcome-review-${{ github.run_id }}
           path: reports/
