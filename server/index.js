@@ -18,6 +18,7 @@ const globalFinance = require('./lib/global-finance');
 const globalIntelligence = require('./lib/intelligence');
 const { diagnoseProviders } = require('./lib/provider-diagnostics');
 const { verifyGitHubActionsToken } = require('./lib/github-oidc');
+const researchStorage = require('./lib/research-storage').createResearchStorage();
 
 const PORT = Number(process.env.PORT || 8787);
 const FINMIND_BASE = process.env.FINMIND_BASE || 'https://api.finmindtrade.com/api/v4/data';
@@ -369,8 +370,8 @@ const SUPABASE_ANON_KEY=process.env.SUPABASE_ANON_KEY||'';
 const SUPABASE_SERVICE_ROLE_KEY=process.env.SUPABASE_SERVICE_ROLE_KEY||'';
 const SUPABASE_ADMIN_EMAIL=String(process.env.SUPABASE_ADMIN_EMAIL||'').trim().toLowerCase();
 const SUPABASE_CONFIGURED=!!(SUPABASE_URL&&SUPABASE_ANON_KEY);
-async function readRequestJson(req){
-  let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>16384)throw new Error('request_body_too_large');}
+async function readRequestJson(req,maxBytes=16384){
+  let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw,'utf8')>maxBytes)throw new Error('request_body_too_large');}
   try{return raw?JSON.parse(raw):{};}catch(_){throw new Error('invalid_json');}
 }
 function bearerToken(req){const h=String(req.headers.authorization||'');return /^Bearer\s+\S+$/i.test(h)?h.replace(/^Bearer\s+/i,''):'';}
@@ -393,6 +394,17 @@ function isAdminUser(user){return !!(user&&user.email&&SUPABASE_ADMIN_EMAIL&&Str
 
 async function route(req,res){
   const u=new URL(req.url,'http://localhost');
+  if(req.method==='POST'&&u.pathname==='/api/automation/research/outcomes'){
+    if(!await verifyGitHubActionsToken(bearerToken(req)))return json(res,401,{error:'automation_authentication_required'});
+    try{
+      const report=await readRequestJson(req,256*1024);
+      const stored=await researchStorage.saveReport(report);
+      return json(res,201,{ok:true,...stored});
+    }catch(e){
+      const status=e.code==='invalid_report'||e.code==='report_too_large'?400:e.code==='storage_not_configured'?503:502;
+      return json(res,status,{error:e.code||'research_storage_error',message:e.message});
+    }
+  }
   if(u.pathname==='/api/auth/config'&&req.method==='GET')return json(res,200,{configured:SUPABASE_CONFIGURED,registrationEnabled:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY,oauthProviders:['apple','facebook'],phoneOtp:true});
   const oauthMatch=u.pathname.match(/^\/api\/auth\/oauth\/(apple|facebook)$/);
   if(oauthMatch&&req.method==='GET'){
@@ -489,6 +501,10 @@ async function route(req,res){
   if(u.pathname==='/api/diagnostics/providers'){
     const result=await diagnoseProviders();
     return json(res,200,result);
+  }
+  if(u.pathname==='/api/research/outcomes'){
+    const result=await safeLoad('research-outcomes',60000,()=>researchStorage.listReports(30),e=>({status:'unavailable',source:'Supabase private Storage',fetchedAt:now(),count:0,data:[],error:e.message}));
+    return json(res,result.status==='unavailable'?503:200,result);
   }
   if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,auth:{configured:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY},provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),providers:{finmind:!!FINMIND_TOKEN,fugle:!!FUGLE_API_KEY,youtubeApiKeyConfigured:!!process.env.YOUTUBE_API_KEY,youtubeLiveResolver:!!process.env.YOUTUBE_API_KEY,youtubeChannelEmbedFallback:true,openrouter:!!process.env.OPENROUTER_API_KEY,gemini:!!process.env.GEMINI_API_KEY,groq:!!process.env.GROQ_API_KEY,xai:!!process.env.XAI_API_KEY,deepseek:!!process.env.DEEPSEEK_API_KEY,cloudflare:!!(process.env.CLOUDFLARE_API_TOKEN&&process.env.CLOUDFLARE_ACCOUNT_ID),realtime:null,realtimeProviderConfigured:!!(FUGLE_API_KEY||process.env.MARKET_REALTIME_URL),twseMisFallback:true,tpexRealtimeConfigured:!!FUGLE_API_KEY,tpexHistoricalFallback:true,scan:true,flows:true,futures:true,sentiment:true,news:true,openDataArchive:true},mode:process.env.NODE_ENV==='production'?'production':'development'});
   if(SUPABASE_CONFIGURED&&u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/api/auth/')){
