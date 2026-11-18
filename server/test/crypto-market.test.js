@@ -33,3 +33,20 @@ test('crypto quote rows preserve a valid exchange event timestamp separately fro
   assert.ok(Number.isFinite(Date.parse(row.receivedAt)));
   assert.notEqual(row.receivedAt,row.sourceTimestamp);
 });
+
+test('missing crypto quote fields remain null rather than being coerced to zero',()=>{
+  const row=buildQuoteRow('Bybit','spot','ABCUSDT','ABC','USDT','1.25',null,null,{high24h:null,low24h:undefined,volume:null});
+  assert.equal(row.price,1.25);
+  assert.equal(row.changePct,null);
+  assert.equal(row.quoteVolume,null);
+  assert.equal(row.high24h,null);
+  assert.equal(row.low24h,null);
+  assert.equal(row.volume,null);
+});
+
+test('a genuine zero remains distinguishable from a missing value',()=>{
+  const row=buildQuoteRow('Bybit','spot','ABCUSDT','ABC','USDT','1.25',0,0,{volume:0});
+  assert.equal(row.changePct,0);
+  assert.equal(row.quoteVolume,0);
+  assert.equal(row.volume,0);
+});
