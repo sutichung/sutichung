@@ -91,3 +91,15 @@ test('order book normalizes unsorted levels before calculating best bid and ask'
   assert.equal(book.bids[0][0], 101);
   assert.equal(book.asks[0][0], 102);
 });
+
+test('contract order books do not publish quote-notional imbalance without a verified multiplier', () => {
+  const book = normalizeBook('OKX', [[60000, 12], [59900, 8]], [[60100, 10], [60200, 9]], 1700000000000, 10, { notionalAvailable: false });
+  assert.equal(book.obiNotional, null);
+  assert.ok(Number.isFinite(book.obi), 'unit-based visible depth imbalance remains available');
+});
+
+test('exchange timestamp is sourced from the order book snapshot timestamp', () => {
+  const timestamp = 1700000000123;
+  const book = normalizeBook('Bybit', [[100, 2]], [[101, 2]], timestamp, 10);
+  assert.equal(book.timestamp, new Date(timestamp).toISOString());
+});
