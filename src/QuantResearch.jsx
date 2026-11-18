@@ -45,6 +45,14 @@ export default function QuantResearch({symbol='2330',source='',asOf='',market='t
     <div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:8}}>
      {strategy.periods.map(period=><div key={period.id} style={metric}><b style={{fontSize:12}}>{period.label}</b><div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:7,marginTop:8}}>{metrics(period.metrics).map(([k,v])=><div key={k}><small style={label}>{k}</small><div style={{...value,fontSize:15,color:k==='淨報酬'?(Number(period.metrics.netReturnPct)>0?'#34d399':'#fb7185'):'#e8eef8'}}>{v}</div></div>)}</div><small style={{display:'block',marginTop:7,color:'#91a1b8'}}>市場狀態：{period.marketRegime?.regime||'—'}｜區間報酬 {fmt(period.marketRegime?.periodReturnPct,'%')}</small></div>)}
     </div>
+    <div style={{marginTop:9,padding:9,borderRadius:8,background:'#111a2b'}}>
+     <div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap'}}><b style={{fontSize:12}}>Walk-forward 三段樣本外驗證</b><span style={{fontSize:11,color:strategy.walkForward?.passed?'#34d399':'#fbbf24'}}>{strategy.walkForward?.passed?'三段條件通過':'尚未通過／樣本不足'}</span></div>
+     <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:6,marginTop:8}}>
+      {(strategy.walkForward?.folds||[]).map(fold=><div key={fold.fold} style={{background:'#172338',borderRadius:7,padding:7,minWidth:0}}><small style={label}>Fold {fold.fold}｜{fold.marketRegime?.regime||'—'}</small><div style={{fontSize:14,fontWeight:800,marginTop:4}}>{fmt(fold.metrics?.netReturnPct,'%')}</div><small style={label}>{fold.metrics?.trades??0} 筆交易</small></div>)}
+     </div>
+     <small style={{display:'block',marginTop:7,color:'#91a1b8'}}>總交易 {strategy.walkForward?.totalTrades??0} 筆｜正報酬區段 {strategy.walkForward?.positiveFolds??0}/3｜平均報酬 {fmt(strategy.walkForward?.averageNetReturnPct,'%')}｜最差回撤 {fmt(strategy.walkForward?.worstMaxDrawdownPct,'%')}</small>
+     <small style={{display:'block',marginTop:6,color:'#91a1b8'}}>成本敏感度：半成本 {fmt(strategy.costSensitivity?.halfCost?.netReturnPct,'%')}｜基準 {fmt(strategy.costSensitivity?.baseCost?.netReturnPct,'%')}｜雙倍成本 {fmt(strategy.costSensitivity?.doubleCost?.netReturnPct,'%')}（雙倍成本仍為正：{strategy.costSensitivity?.doubleCostStillPositive?'是':'否／無有效交易'}）</small>
+    </div>
    </div>)}
   </div>:<div style={{...metric,color:'#91a1b8'}}>尚未取得可用的策略研究結果。</div>}
   <small style={{display:'block',marginTop:10,color:'#91a1b8',lineHeight:1.7}}>研究限制：策略結果不是未來報酬保證。使用下一根 K 線開盤成交以避免同根收盤前視偏誤；尚未完整模擬限價排隊、漲跌停、停牌、融券限制、成交量容量與市場微結構。樣本外不足 10 筆交易、淨報酬不正、回撤超過 15%、Sharpe 不正、Profit Factor 不大於 1.1，或三段 Walk-forward 不符合條件，均不會列為通過。</small>
