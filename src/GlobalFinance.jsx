@@ -42,7 +42,7 @@ export default function GlobalFinance() {
   const cards = [
     {label:'登錄機構／官方來源',value:registry?.institutions?.length ?? '—'},
     {label:'國家／司法管轄區',value:registry?.jurisdictions ?? '—'},
-    {label:'已實作公開資料介接',value:registry?.publicDataConnectorsImplemented ?? '—',note:'ECB 外匯＋World Bank 總體經濟 API'},
+    {label:'已實作公開資料介接',value:registry?.publicDataConnectorsImplemented ?? '—',note:'ECB 外匯＋BoC 匯率＋World Bank 總體經濟 API'},
     {label:'私人銀行帳戶連線',value:'0',note:'尚未取得銀行／聚合商授權'}
   ];
   return <section id="global-finance" style={{scrollMarginTop:78,margin:'14px 0',color:'#e8eef8',fontFamily:'Inter,system-ui,sans-serif'}}>
@@ -79,7 +79,8 @@ export default function GlobalFinance() {
             {fx.rates.map(x=><div key={x.currency} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',fontSize:12,fontVariantNumeric:'tabular-nums'}}><b>{x.currency}</b><span>{Number(x.rate).toLocaleString('en-US',{maximumFractionDigits:5})}</span><span style={muted}>{x.asOf}</span></div>)}
           </div>:<div style={{fontSize:12,...muted}}>尚未取得官方匯率資料；不顯示估算值。</div>}
           <small style={{display:'block',...muted,marginTop:9}}>來源：{fx?.source||'European Central Bank Data Portal'}<br/>抓取時間：{fx?.fetchedAt?new Date(fx.fetchedAt).toLocaleString('zh-TW'):'—'}｜基準貨幣 EUR；每日參考匯率，非逐筆即時報價</small>
-          {fx?.errors?.length>0&&<small style={{display:'block',color:'#fbbf24',marginTop:5}}>部分幣別暫缺：{fx.errors.map(x=>x.currency).join('、')}</small>}
+          {fx?.crossChecks?.map(x=><div key={x.series} style={{marginTop:10,padding:9,background:'#172338',borderRadius:8}}><div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center'}}><b style={{fontSize:12}}>🇨🇦 Bank of Canada · CAD/USD</b><small style={{color:x.status==='connected'?'#34d399':'#fbbf24'}}>{x.status==='connected'?'官方來源已連線':'來源暫不可用'}</small></div>{x.status==='connected'?<div style={{fontSize:17,fontWeight:850,marginTop:4,fontVariantNumeric:'tabular-nums'}}>{Number(x.rate).toFixed(5)} <small style={{fontSize:10,...muted}}>USD per CAD</small></div>:<div style={{fontSize:11,color:'#fbbf24',marginTop:4}}>{x.error||'未取得觀測值'}</div>}<small style={{display:'block',...muted,marginTop:4}}>Valet {x.series} · {x.asOf||'—'} · 每日平均指示性匯率，非即時／收盤價</small></div>)}
+          {fx?.errors?.length>0&&<small style={{display:'block',color:'#fbbf24',marginTop:5}}>部分 ECB 幣別暫缺：{fx.errors.map(x=>x.currency).join('、')}</small>}
         </div>
         <div style={panel}>
           <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center',marginBottom:8}}><b>📈 全球總體經濟資料</b><small style={muted}>{macro?.status==='connected'?'來源已連線':'來源待修復'}</small></div>
