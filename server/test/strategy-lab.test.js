@@ -56,8 +56,8 @@ test('strategy lab rejects missing volume and missing timestamps instead of coer
 });
 
 test('strategy lab rejects duplicate timestamps even when OHLCV values are valid',()=>{
-  const candles=candles(140);candles[100].time=candles[99].time;
-  const result=runStrategyLab(candles,{market:'tw-stock'});
+  const data=candles(140);data[100].time=data[99].time;
+  const result=runStrategyLab(data,{market:'tw-stock'});
   assert.notEqual(result.status,'ok');
   assert.match(result.error,/嚴格遞增/);
 });
