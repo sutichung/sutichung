@@ -18,6 +18,7 @@ const globalFinance = require('./lib/global-finance');
 const globalIntelligence = require('./lib/intelligence');
 const { diagnoseProviders } = require('./lib/provider-diagnostics');
 const { createDependencyVulnerabilityScanner } = require('./lib/dependency-vulnerabilities');
+const { loadCryptoRiskInputs } = require('./lib/crypto-risk-loader');
 const { verifyGitHubActionsToken } = require('./lib/github-oidc');
 const researchStorage = require('./lib/research-storage').createResearchStorage();
 const dependencyVulnerabilityScanner = createDependencyVulnerabilityScanner({ lockPath: path.join(__dirname, '..', 'package-lock.json'), manifestPath: path.join(__dirname, '..', 'package.json') });
@@ -666,18 +667,30 @@ async function route(req,res){
   if(u.pathname.startsWith('/api/crypto/risk/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase(),type=u.searchParams.get('type')==='perpetual'?'perpetual':'spot',exchange=u.searchParams.get('exchange')||'Binance',nativeSymbol=u.searchParams.get('nativeSymbol')||symbol;
     try{
-      const microSupported=['Binance','Bybit','OKX'].includes(exchange);
-      const microKey='crypto-microstructure:'+exchange+':'+type+':'+nativeSymbol+':10:50000';
-      const [history,derivatives,micro]=await Promise.all([
-        cryptoMarket.getHistory(symbol,type,u.searchParams.get('interval')||'1d',exchange,nativeSymbol),
-        type==='perpetual'?cryptoMarket.getDerivatives(symbol,exchange,nativeSymbol):Promise.resolve(null),
-        microSupported?safeLoad(microKey,3000,()=>cryptoMicrostructure.fetchMicrostructure({exchange,symbol:nativeSymbol,marketType:type,depth:10,whaleThresholdUsd:50000}),e=>({status:'unavailable',error:e.message})):Promise.resolve(null)
-      ]);
+      const riskInputs=await loadCryptoRiskInputs({
+        symbol,type,interval:u.searchParams.get('interval')||'1d',exchange,nativeSymbol,
+        getHistory:(s,t,interval,ex,native)=>cryptoMarket.getHistory(s,t,interval,ex,native),
+        getDerivatives:(s,ex,native)=>cryptoMarket.getDerivatives(s,ex,native),
+        getMicrostructure:(ex,native)=>{
+          if(!['Binance','Bybit','OKX'].includes(ex))return Promise.resolve(null);
+          const microKey='crypto-microstructure:'+ex+':'+type+':'+(native||symbol)+':10:50000';
+          return safeLoad(microKey,3000,()=>cryptoMicrostructure.fetchMicrostructure({exchange:ex,symbol:native||symbol,marketType:type,depth:10,whaleThresholdUsd:50000}),e=>({status:'unavailable',error:e.message}));
+        }
+      });
+      const micro=riskInputs.microstructure;
       const received=Date.parse(micro?.receivedAt||'');
       const microFresh=!!(micro&&!micro.stale&&Number.isFinite(received)&&Date.now()-received<=30000);
-      const result=assessMarketRisk(history,derivatives,microFresh?micro:null);
-      if(!microFresh)result.microstructureStatus=micro?.stale?'stale':microSupported?'unavailable':'unsupported_exchange';
+      const result=assessMarketRisk(riskInputs.history,riskInputs.derivatives,microFresh?micro:null);
+      result.requestedExchange=riskInputs.requestedExchange;
+      result.dataExchange=riskInputs.dataExchange;
+      result.exchangeFallback=riskInputs.exchangeFallback;
+      result.derivativesStatus=result.coverage?.derivatives?'connected':'unavailable';
+      if(riskInputs.exchangeFallback)result.exchangeFallbackWarning=riskInputs.requestedExchange+' K 線資料不可用，已改用 '+riskInputs.dataExchange+' 官方公開行情；風險來源已明確標示，未混合不同交易所報價。';
+      if(riskInputs.derivativesError)result.derivativesWarning='衍生品資料暫不可用：'+riskInputs.derivativesError;
+      if(riskInputs.microstructureError)result.microstructureWarning='委託簿／成交資料暫不可用：'+riskInputs.microstructureError;
+      if(!microFresh)result.microstructureStatus=micro?.stale?'stale':micro?'unavailable':'unsupported_exchange';
       if(micro?.warning)result.microstructureWarning=micro.warning;
+      if(micro?.error)result.microstructureWarning=micro.error;
       return json(res,200,result);
     }catch(e){return json(res,502,{status:'unavailable',error:e.message,scenarios:[]});}
   }
