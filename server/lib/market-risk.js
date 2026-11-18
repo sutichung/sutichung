@@ -11,7 +11,7 @@ function assessMarketRisk(history,derivatives,microstructure=null){
  });
  const book=microstructure?.book||null,tape=microstructure?.tape||null;
  const hasBook=!!(Array.isArray(book?.bids)&&book.bids.length&&Array.isArray(book?.asks)&&book.asks.length);
- const hasTape=!!(tape&&Number.isFinite(Number(tape.count))&&Number.isFinite(Number(tape.knownSideCount)));
+ const hasTape=!!(tape&&Number.isFinite(Number(tape.count))&&Number.isFinite(Number(tape.knownSideCount))&&Number(tape.count)>0&&Number(tape.knownSideCount)>0);
  const obi=finite(book?.obi),weightedObi=finite(book?.weightedObi),obiNotional=finite(book?.obiNotional);
  const spreadPct=finite(book?.spreadPct),microPriceDeviationBps=finite(book?.microPriceDeviationBps);
  const tradeImbalance=finite(tape?.tradeImbalance),aggressiveBuyPct=finite(tape?.aggressiveBuyPct);
