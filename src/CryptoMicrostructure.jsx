@@ -31,7 +31,7 @@ export default function CryptoMicrostructure({ symbol, type, exchange, nativeSym
     <div style={stat}><small>OBI 盤口失衡</small><div style={{ color: book.obi > 0 ? '#34d399' : book.obi < 0 ? '#fb7185' : '#fbbf24' }}>{fmt(book.obi)}</div></div>
     <div style={stat}><small>前十檔買量／賣量</small><div>{fmt(book.bidDepth)} / {fmt(book.askDepth)}</div></div>
     <div style={stat}><small>大額成交筆數</small><div>{tape?.whaleClassificationAvailable ? fmt(tape.largeTradeCount, 0) : '未提供'}</div></div>
-    <div style={stat}><small>主動買入／賣出額</small><div>{'$'}{fmt(tape?.buyQuoteValue, 0)} / {'$'}{fmt(tape?.sellQuoteValue, 0)}</div></div>
+    <div style={stat}><small>主動買入／賣出額（{tape?.quoteCurrency || '—'}）</small><div>{'$'}{fmt(tape?.buyQuoteValue, 0)} / {'$'}{fmt(tape?.sellQuoteValue, 0)}</div></div>
    </div>
    <b style={{ display: 'block', marginTop: 12 }}>{tape?.whaleClassificationAvailable ? '大額成交（單筆至少 50,000 ' + tape.quoteCurrency + '）' : '大額成交分類暫不可用'}</b>
    {tape?.whaleClassificationAvailable ? (tape.largeTrades || []).slice(0, 6).map((trade, index) => <div key={trade.id || index} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '7px 0', borderBottom: '1px solid #293951', fontSize: 12 }}>
