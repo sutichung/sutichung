@@ -161,7 +161,9 @@ function runStrategyLab(input, options={}) {
   const market=options.market||'tw-stock';
   const defaults=market==='crypto'?{feeBps:10,slippageBps:5,sellTaxBps:0}:market==='us-stock'?{feeBps:1,slippageBps:5,sellTaxBps:0}:{feeBps:14.25,slippageBps:10,sellTaxBps:30};
   const inferred=inferAnnualization(candles,market);
-  const costs={...defaults,...inferred,...Object.fromEntries(Object.entries(options).filter(([,value])=>value!==undefined))};
+  const overrides={};
+  for(const key of ['feeBps','slippageBps','sellTaxBps','annualization'])if(options[key]!==undefined)overrides[key]=options[key];
+  const costs={...defaults,...inferred,market,...overrides};
   for(const key of ['feeBps','slippageBps','sellTaxBps'])if(!finite(costs[key])||Number(costs[key])<0||Number(costs[key])>1000)return {status:'invalid_costs',error:'交易成本參數必須介於 0 到 1000 bps',strategies:[]};
   const split=Math.floor(candles.length*0.6);
   const trainStart=60,trainEnd=split, testStart=split,testEnd=candles.length;
