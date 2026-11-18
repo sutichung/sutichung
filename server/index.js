@@ -533,7 +533,7 @@ async function route(req,res){
         return {...item,technical:{status:'research-ready',direction,score,confidence:Math.round(available.length/checks.length*100),checks:checks.map(x=>({name:x[0],bullish:x[1],bearish:x[2]})),indicators:v,asOf:h.asOf}};
       }catch(e){return {...item,technical:{status:'error',direction:'資料暫缺',score:null,error:e.message}};}
     }));
-    antColony.enqueue('CRYPTO',results,market.timestamp||now());
+    antColony.enqueue('CRYPTO',results,String(market.timestamp||'market')+':'+offset);
     return json(res,200,{results,offset,nextOffset:offset+batch.length,total:(market.markets||[]).length,done:offset+batch.length>=(market.markets||[]).length,source:'多交易所逐市場日K技術掃描',timestamp:now()});
   }
   if(u.pathname==='/api/crypto/news'){
