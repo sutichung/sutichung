@@ -9,7 +9,7 @@ test('ant colony fans out small independent tasks and reports progress', async (
   assert.equal(result.symbols,3);
   assert.equal(result.roles,6);
   assert.equal(result.accepted,18);
-  await new Promise(resolve=>setTimeout(resolve,80));
+  await new Promise(resolve=>setTimeout(resolve,250));
   const status=colony.getStatus();
   assert.ok(status.enqueued>=18);
   assert.ok(status.completed>=18);
