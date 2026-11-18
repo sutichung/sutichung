@@ -112,3 +112,10 @@ API Key 僅放後端環境變數；不要提交 .env、Token、券商帳密或�
 - 台股優先採 TWSE／TPEx／TAIFEX 官方資料；美股優先採 Nasdaq／NYSE 官方市場資料與 CTA／UTP SIP 授權資料。SEC／FINRA 僅依其資料集用途使用，不得冒充即時報價。
 - **重要：目前 README 所述美股 Yahoo Finance 非官方端點尚未完成替換；FinMind、Fugle 及 MARKET_* 自訂來源也尚須逐一核實資料來源、授權與即時性。** 在官方端點完成申請、接線及驗收前，必須標示非官方／未驗證／延遲或資料不足，不得宣稱已完成官方行情升級。
 - 此次提交完成的是工程規格文件，不代表已取得交易所即時行情授權或已完成程式接線。驗收清單未通過前，不得將來源標記為正式官方即時行情。
+
+## Crypto market microstructure (2026-11-18)
+
+- 加密貨幣研究中心新增唯讀盤口微結構 API：`GET /api/crypto/microstructure/:symbol`，支援 Binance、Bybit、OKX 公開 REST 盤口、OBI、價差與大額成交 tape。
+- 手機版加密貨幣專區新增盤口與鯨魚成交面板；資料每 15 秒輪詢，不標示為 WebSocket 即時串流。
+- 欄位來源、資料時間戳、單位限制與風險解讀見 [微結構模組說明](./docs/CRYPTO_MICROSTRUCTURE.md)。
+- 這是唯讀公開市場資料；CCXT Pro 私人帳戶串流及自動下單仍未啟用，實盤交易鎖定維持。
