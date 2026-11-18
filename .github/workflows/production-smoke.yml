@@ -102,6 +102,15 @@ jobs:
           const quoteCount = Number(market.quoteCount || 0);
           const taiwanConnected = market.ok === true && listedCount > 0;
           const officialUs = (providers.checks || []).find(x => x.id === 'us-equities-official') || null;
+          const vulnerabilitySeverity = vulnerabilities.severityCounts || {};
+          const warnings = [
+            ...(officialUs?.status === 'not_configured' ? ['us_official_equities_feed_not_configured'] : []),
+            ...(quoteCount === 0 ? ['taiwan_market_has_no_live_quotes_at_check_time'] : []),
+            ...((crypto.exchanges || []).some(x => x.status !== 'connected') ? ['some_crypto_exchanges_unavailable'] : []),
+            ...(providerFailures.length ? ['some_optional_providers_unavailable'] : []),
+            ...(!['clean','vulnerable'].includes(vulnerabilities.status) || Number(vulnerabilities.scannedPackageCount || 0) < 1 ? ['dependency_vulnerability_scan_incomplete'] : []),
+            ...(Number(vulnerabilitySeverity.critical || 0) + Number(vulnerabilitySeverity.high || 0) > 0 ? ['high_or_critical_dependency_vulnerabilities_found'] : [])
+          ];
           const connectedExchanges = Number(crypto.summary?.connectedExchangeCount || 0);
           const report = {
             generatedAt: new Date().toISOString(),
