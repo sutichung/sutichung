@@ -5,7 +5,7 @@ const HISTORY_EXCHANGES=['Binance','Bybit','OKX','Coinbase','Kraken'];
 function candidates(primary,preferred){
   return [...new Set([preferred,primary,...SUPPORTED_EXCHANGES].filter(x=>SUPPORTED_EXCHANGES.includes(x)))];
 }
-async function loadRiskHistory({getHistory,symbol,marketType,interval='1d',exchange='Binance',nativeSymbol=symbol,limit=240}){
+async function loadRiskHistory({getHistory,symbol,marketType,interval='15m',exchange='Binance',nativeSymbol=symbol,limit=240}){
   const errors=[];
   const eligible=marketType==='perpetual'?SUPPORTED_EXCHANGES:HISTORY_EXCHANGES;
   const order=[...new Set([exchange,...eligible])].filter(x=>eligible.includes(x));
