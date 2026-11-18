@@ -70,3 +70,10 @@ test('consensus research rejects negative or non-finite cost assumptions',()=>{
   const result=runConsensusResearch(bars(),{feeBps:-1});
   assert.equal(result.status,'invalid_options');
 });
+
+test('consensus research accepts Unix millisecond and second candle timestamps',()=>{
+  const millis=bars();millis.forEach(x=>{x.time=Date.parse(x.time);});
+  const seconds=bars();seconds.forEach(x=>{x.time=Math.floor(Date.parse(x.time)/1000);});
+  assert.equal(runConsensusResearch(millis).status,'ok');
+  assert.equal(runConsensusResearch(seconds).status,'ok');
+});
