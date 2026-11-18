@@ -10,6 +10,10 @@ const finiteOrNull = value => value === null || value === undefined || value ===
 function buildHealthReport(health, diagnostics, marketDiagnostics = null, cryptoMarket = null) {
   const checks = Array.isArray(diagnostics.checks) ? diagnostics.checks : [];
   const providerFailures = checks.filter(x => ['auth_error','permission_error','rate_limited','timeout','error','upstream_error','http_error','endpoint_error'].includes(x.status));
+  const requiredProviderIds = new Set(['twse','ecb','supabase']);
+  const criticalProviderFailures = providerFailures.filter(x => requiredProviderIds.has(x.id));
+  const requiredNotConfigured = checks.filter(x => requiredProviderIds.has(x.id) && x.status === 'not_configured');
+  const optionalProviderFailures = providerFailures.filter(x => !requiredProviderIds.has(x.id));
   const counts = checks.reduce((out, item) => {
     out[item.status] = (out[item.status] || 0) + 1;
     return out;
@@ -77,8 +81,11 @@ function buildHealthReport(health, diagnostics, marketDiagnostics = null, crypto
   if (security.status === 'observed' && security.rateLimited >= 10) securityWarnings.push('elevated_rate_limiting');
   if (security.status === 'observed' && security.probes >= 50) securityWarnings.push('elevated_probe_activity');
   warnings.push(...securityWarnings);
+  if (optionalProviderFailures.length) warnings.push('some_optional_providers_unavailable');
+  if (requiredNotConfigured.length) warnings.push('required_provider_not_configured');
   const failures = [
-    ...providerFailures.map(x => ({ id: x.id, status: x.status, message: x.message || '' })),
+    ...criticalProviderFailures.map(x => ({ id: x.id, status: x.status, message: x.message || '' })),
+    ...requiredNotConfigured.map(x => ({ id: x.id, status: 'not_configured', message: x.message || 'required provider is not configured' })),
     ...dataFailures
   ];
   const application = {
@@ -102,8 +109,12 @@ function buildHealthReport(health, diagnostics, marketDiagnostics = null, crypto
       connected: counts.connected || 0,
       notConfigured: counts.not_configured || 0,
       failing: providerFailures.length,
+      criticalFailing: criticalProviderFailures.length + requiredNotConfigured.length,
+      optionalFailing: optionalProviderFailures.length,
       statuses: counts
     },
+    providerFailures: providerFailures.map(x => ({ id:x.id, status:x.status, httpStatus:x.httpStatus ?? null, message:x.message || '' })),
+    optionalProviderFailures: optionalProviderFailures.map(x => ({ id:x.id, status:x.status, httpStatus:x.httpStatus ?? null, message:x.message || '' })),
     providers: checks.map(x => ({
       id: x.id, label: x.label, status: x.status,
       httpStatus: x.httpStatus ?? null, latencyMs: x.latencyMs ?? null,
