@@ -32,6 +32,16 @@ function normalizeCandleTime(value) {
   return Number.isFinite(date.getTime())?date.toISOString():null;
 }
 
+function inferAnnualization(candles,market='tw-stock'){
+  const times=candles.map(x=>parseCandleTime(x.time??x.openTime)).filter(Number.isFinite);
+  const diffs=times.slice(1).map((t,i)=>t-times[i]).filter(x=>x>0&&x<=7*86400000).sort((a,b)=>a-b);
+  const intervalMs=diffs.length?diffs[Math.floor(diffs.length/2)]:86400000;
+  if(intervalMs>=18*3600000)return {annualization:market==='crypto'?365:252,barIntervalMs:intervalMs};
+  const tradingHours=market==='crypto'?24:market==='us-stock'?6.5:4.5;
+  const base=market==='crypto'?365:252;
+  return {annualization:Math.max(1,Math.round(base*tradingHours*3600000/intervalMs)),barIntervalMs:intervalMs};
+}
+
 function validateCandles(input) {
   if (!Array.isArray(input) || input.length < 130) return {ok:false,error:'至少需要 130 根有效 OHLCV K 線（含暖機與樣本外區間）'};
   const rows=input.map(x=>({
@@ -150,7 +160,8 @@ function runStrategyLab(input, options={}) {
   const candles=checked.rows;
   const market=options.market||'tw-stock';
   const defaults=market==='crypto'?{feeBps:10,slippageBps:5,sellTaxBps:0}:market==='us-stock'?{feeBps:1,slippageBps:5,sellTaxBps:0}:{feeBps:14.25,slippageBps:10,sellTaxBps:30};
-  const costs={...defaults,annualization:market==='crypto'?365:252,...Object.fromEntries(Object.entries(options).filter(([,value])=>value!==undefined))};
+  const inferred=inferAnnualization(candles,market);
+  const costs={...defaults,...inferred,...Object.fromEntries(Object.entries(options).filter(([,value])=>value!==undefined))};
   for(const key of ['feeBps','slippageBps','sellTaxBps'])if(!finite(costs[key])||Number(costs[key])<0||Number(costs[key])>1000)return {status:'invalid_costs',error:'交易成本參數必須介於 0 到 1000 bps',strategies:[]};
   const split=Math.floor(candles.length*0.6);
   const trainStart=60,trainEnd=split, testStart=split,testEnd=candles.length;
@@ -171,7 +182,7 @@ function runStrategyLab(input, options={}) {
   const advancedStrategies=runAdvancedStrategies(candles,split,costs);
   const mtf=options.htfCandles?runMtfStrategy(candles,options.htfCandles,costs):null;
   const strategies=[...baseStrategies,...advancedStrategies,...(consensus.status==='ok'?[consensus]:[]),...(mtf&&mtf.status==='ok'?[mtf]:[])];
-  return {status:'ok',symbol:options.symbol||null,market,source:options.source||'provided OHLCV',asOf:candles.at(-1).time,barCount:candles.length,strategyCount:strategies.length,split:{trainBars:trainEnd-trainStart,outOfSampleBars:testEnd-testStart,ratio:'60/40',walkForwardFolds:3,method:'single_holdout_plus_three_walk_forward_folds'},costs:{feeBps:costs.feeBps,slippageBps:costs.slippageBps,sellTaxBps:costs.sellTaxBps,annualization:costs.annualization,unit:'bps per side; sell tax charged on exit'},strategies,disclaimer:'研究與回測結果不是未來報酬保證。使用下一根 K 線開盤成交以避免同根收盤訊號前視偏誤，區間結束時將未平倉部位按最後收盤價估值並計入退出成本；仍未完整模擬限價排隊、停牌、漲跌停、融券限制及實際市場微結構。單一 60/40 樣本外與三段 Walk-forward 通過僅代表初步候選；另附半成本及雙倍成本敏感度，仍須多市場、多週期、不同景氣環境與交易樣本驗證；未校正多重策略比較偏誤，也未使用歷史時點成分股名單，存在多重測試與存活者偏誤；價格報酬未計股利及公司行動，空方未計融券借券費；未通過者不得當作推薦訊號。'};
+  return {status:'ok',symbol:options.symbol||null,market,source:options.source||'provided OHLCV',asOf:candles.at(-1).time,barCount:candles.length,strategyCount:strategies.length,split:{trainBars:trainEnd-trainStart,outOfSampleBars:testEnd-testStart,ratio:'60/40',walkForwardFolds:3,method:'single_holdout_plus_three_walk_forward_folds'},costs:{feeBps:costs.feeBps,slippageBps:costs.slippageBps,sellTaxBps:costs.sellTaxBps,annualization:costs.annualization,barIntervalMs:costs.barIntervalMs,unit:'bps per side; sell tax charged on exit'},strategies,disclaimer:'研究與回測結果不是未來報酬保證。使用下一根 K 線開盤成交以避免同根收盤訊號前視偏誤，區間結束時將未平倉部位按最後收盤價估值並計入退出成本；仍未完整模擬限價排隊、停牌、漲跌停、融券限制及實際市場微結構。單一 60/40 樣本外與三段 Walk-forward 通過僅代表初步候選；另附半成本及雙倍成本敏感度，仍須多市場、多週期、不同景氣環境與交易樣本驗證；未校正多重策略比較偏誤，也未使用歷史時點成分股名單，存在多重測試與存活者偏誤；價格報酬未計股利及公司行動，空方未計融券借券費；未通過者不得當作推薦訊號。'};
 }
 
-module.exports={runStrategyLab,validateCandles,walkForward,STRATEGIES,parseCandleTime};
+module.exports={runStrategyLab,validateCandles,walkForward,STRATEGIES,parseCandleTime,inferAnnualization};
