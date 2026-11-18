@@ -30,6 +30,7 @@ const PENDING = new Map();
 const RATE = new Map();
 const TTL = { universe: 6*60*60*1000, snapshot: 10000, scan: 10000, history: 5*60*1000, flows: 30*60*1000, futures: 5*60*1000, sentiment: 30*60*1000, news: 5*60*1000 };
 const now = () => new Date().toISOString();
+const parseMarketNumber = value => value===null||value===undefined||String(value).trim()===''?NaN:Number(String(value).replace(/,/g,'').trim());
 const json = (res, status, body) => { res.writeHead(status, {'content-type':'application/json; charset=utf-8','cache-control':'no-store'}); res.end(JSON.stringify(body)); };
 function cached(key, ttl) { const x=CACHE.get(key); return x && Date.now()-x.time<ttl ? x.value : null; }
 function put(key,value){ CACHE.set(key,{time:Date.now(),value}); return value; }
@@ -328,7 +329,8 @@ async function loadOpenArchiveStockHistory(symbol, kind='price_tpex') {
       if(!Array.isArray(values))return null;
       const idx={open:fields.indexOf('open'),high:fields.indexOf('high'),low:fields.indexOf('low'),close:fields.indexOf('close'),volume:fields.indexOf('volume_shares')};
       if(Object.values(idx).some(i=>i<0))return null;
-      const candle={time:doc.trade_date,open:Number(values[idx.open]),high:Number(values[idx.high]),low:Number(values[idx.low]),close:Number(values[idx.close]),volume:Number(values[idx.volume])};
+      if(!doc.trade_date||!Number.isFinite(Date.parse(String(doc.trade_date))))return null;
+      const candle={time:doc.trade_date,open:parseMarketNumber(values[idx.open]),high:parseMarketNumber(values[idx.high]),low:parseMarketNumber(values[idx.low]),close:parseMarketNumber(values[idx.close]),volume:parseMarketNumber(values[idx.volume])};
       if(![candle.open,candle.high,candle.low,candle.close,candle.volume].every(Number.isFinite)||candle.close<=0||candle.high<=0||candle.low<=0||candle.high<Math.max(candle.low,candle.close)||candle.low>Math.min(candle.high,candle.close)||candle.volume<0)return null;
       return candle;
     }catch(_){return null;}
@@ -343,7 +345,7 @@ async function loadStockHistory(symbol){
   if(FINMIND_TOKEN){
     const d=new Date();d.setDate(d.getDate()-260);const start=d.toISOString().slice(0,10);
     const rows=await finmind('TaiwanStockPrice',{data_id:symbol,start_date:start});
-    data=rows.map(x=>({time:x.date,open:Number(x.open),high:Number(x.max),low:Number(x.min),close:Number(x.close),volume:Number(x.Trading_Volume)})).filter(x=>[x.open,x.high,x.low,x.close,x.volume].every(Number.isFinite)).slice(-240);
+    data=rows.map(x=>({time:x.date,open:parseMarketNumber(x.open),high:parseMarketNumber(x.max),low:parseMarketNumber(x.min),close:parseMarketNumber(x.close),volume:parseMarketNumber(x.Trading_Volume)})).filter(x=>x.time&&Number.isFinite(Date.parse(String(x.time)))&&[x.open,x.high,x.low,x.close,x.volume].every(Number.isFinite)).slice(-240);
     source='FinMind TaiwanStockPrice（日資料，非逐筆即時）';
   }else{
     const listed=await safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],error:e.message}));
@@ -354,7 +356,7 @@ async function loadStockHistory(symbol){
       const date=month.replace(/-/g,'').slice(0,6)+'01';
       const url='https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date='+date+'&stockNo='+encodeURIComponent(symbol)+'&response=json';
       const payload=await fetchJson(url,12000,{'User-Agent':'Mozilla/5.0','Referer':'https://www.twse.com.tw/','Accept':'application/json'});
-      return (payload.data||[]).map(r=>{const parts=String(r[0]||'').split('/');const day=parts.length===3?String(Number(parts[0])+1911)+'-'+String(parts[1]).padStart(2,'0')+'-'+String(parts[2]).padStart(2,'0'):'';const n=v=>Number(String(v??'').replace(/,/g,'').trim());return {time:day,volume:n(r[1]),open:n(r[3]),high:n(r[4]),low:n(r[5]),close:n(r[6])};}).filter(x=>x.time&&[x.open,x.high,x.low,x.close,x.volume].every(Number.isFinite));
+      return (payload.data||[]).map(r=>{const parts=String(r[0]||'').split('/');const day=parts.length===3?String(Number(parts[0])+1911)+'-'+String(parts[1]).padStart(2,'0')+'-'+String(parts[2]).padStart(2,'0'):'';const n=parseMarketNumber;return {time:day,volume:n(r[1]),open:n(r[3]),high:n(r[4]),low:n(r[5]),close:n(r[6])};}).filter(x=>x.time&&[x.open,x.high,x.low,x.close,x.volume].every(Number.isFinite));
     });
     data=pages.flat().sort((a,b)=>a.time.localeCompare(b.time)).slice(-240);
     source='TWSE 官方 STOCK_DAY 月日線（日資料，非逐筆即時）';
