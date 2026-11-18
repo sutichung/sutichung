@@ -69,7 +69,7 @@ function liquidationMap(price,openInterest,baseAsset){
 async function loadNews(){
  return cached('news',300000,async()=>{
   const urls=['https://www.coindesk.com/arc/outboundfeeds/rss/','https://cointelegraph.com/rss'];
-  const feeds=await Promise.allSettled(urls.map(url=>fetch(url,{headers:{'user-agent':'Mozilla/5.0'},signal:AbortSignal.timeout(10000)})).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.text();})));
+  const feeds=await Promise.allSettled(urls.map(url=>fetch(url,{headers:{'user-agent':'Mozilla/5.0'},signal:AbortSignal.timeout(10000)}).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.text();})));
   const data=[];
   for(let i=0;i<feeds.length;i++)if(feeds[i].status==='fulfilled'){
    const xml=feeds[i].value,items=xml.match(/<item[\s\S]*?<\/item>/g)||[];
