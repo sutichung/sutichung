@@ -51,7 +51,7 @@ function summarize(trades, dailyReturns, annualization=252) {
   const mean=dailyReturns.length?dailyReturns.reduce((s,x)=>s+x,0)/dailyReturns.length:0;
   const variance=dailyReturns.length>1?dailyReturns.reduce((s,x)=>s+(x-mean)**2,0)/(dailyReturns.length-1):0;
   const sd=Math.sqrt(variance),down=dailyReturns.filter(x=>x<0),downDev=down.length?Math.sqrt(down.reduce((s,x)=>s+x*x,0)/down.length):0;
-  return {status:'ok',trades:trades.length,wins:wins.length,losses:losses.length,winRatePct:round(wins.length/trades.length*100),netReturnPct:round((equity-1)*100),maxDrawdownPct:round(maxDd),sharpe:sd?round(mean/sd*Math.sqrt(annualization),3):null,sortino:downDev?round(mean/downDev*Math.sqrt(252),3):null,profitFactor:grossLoss?round(grossWin/grossLoss,3):grossWin?null:0,expectancyPct:round(avg),averageHoldBars:round(trades.reduce((s,x)=>s+x.holdBars,0)/trades.length,1)};
+  return {status:'ok',trades:trades.length,wins:wins.length,losses:losses.length,winRatePct:round(wins.length/trades.length*100),netReturnPct:round((equity-1)*100),maxDrawdownPct:round(maxDd),sharpe:sd?round(mean/sd*Math.sqrt(annualization),3):null,sortino:downDev?round(mean/downDev*Math.sqrt(annualization),3):null,profitFactor:grossLoss?round(grossWin/grossLoss,3):grossWin?null:0,expectancyPct:round(avg),averageHoldBars:round(trades.reduce((s,x)=>s+x.holdBars,0)/trades.length,1)};
 }
 
 function runStrategy(id, candles, start, end, costs) {
