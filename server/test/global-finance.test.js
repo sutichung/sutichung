@@ -52,14 +52,19 @@ test('official Bank of Canada Valet FX is included as a separate daily-average c
     if(String(url).includes('/valet/observations/FXCADUSD/json')){
       return {ok:true,status:200,json:async()=>({observations:[{d:'2026-11-17',FXCADUSD:{v:'0.6997'}}]})};
     }
+    const currency=String(url).match(/EXR\/D\.([A-Z]{3})\.EUR/)?.[1]||'USD';
+    const rates={USD:'1.15',GBP:'0.86',JPY:'180',CHF:'0.93',AUD:'1.75',CAD:'1.60',CNY:'8.2',HKD:'9.0',SGD:'1.5',KRW:'1600',TWD:'34'};
     return {ok:true,status:200,text:async()=>[
       'FREQ,CURRENCY,CURRENCY_DENOM,EXR_TYPE,EXR_SUFFIX,TIME_PERIOD,OBS_VALUE',
-      'D,USD,EUR,SP00,A,2026-11-17,1.15'
+      'D,'+currency+',EUR,SP00,A,2026-11-17,'+rates[currency]
     ].join('\n')};
   };
   try{
     const result=await loadFx();
     assert.equal(result.rates.length,11);
+    assert.equal(result.rates.find(x=>x.currency==='USD').rate,1.15);
+    assert.equal(result.rates.find(x=>x.currency==='JPY').rate,180);
+    assert.equal(result.rates.find(x=>x.currency==='TWD').rate,34);
     assert.equal(result.crossChecks.length,1);
     assert.equal(result.crossChecks[0].status,'connected');
     assert.equal(result.crossChecks[0].pair,'CAD/USD');
