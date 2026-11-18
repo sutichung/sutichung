@@ -14,11 +14,12 @@ export default function MarketOverview({universe=[],snapshot={},flows={},sentime
  },[snapshot]);
  const institution=useMemo(()=>{
   const all=Object.entries(flows||{}).map(([symbol,f])=>({symbol,stock:universe.find(s=>s.symbol===symbol),...f}));
-  const total=key=>all.reduce((sum,x)=>sum+(num(x[key])??0),0);
+  const total=key=>{const values=all.map(x=>num(x[key])).filter(x=>x!==null);return values.length?values.reduce((sum,x)=>sum+x,0):null;};
+  const coverage={foreign:all.filter(x=>num(x.foreignNet)!==null).length,trust:all.filter(x=>num(x.trustNet)!==null).length,dealer:all.filter(x=>num(x.dealerNet)!==null).length,net:all.filter(x=>num(x.institutionalNet)!==null).length,net5d:all.filter(x=>num(x.institutionalNet5d)!==null).length};
   const sectorMap={};
   for(const x of all){const sector=x.stock?.sector||'產業未分類';const row=sectorMap[sector]||(sectorMap[sector]={sector,net:0,count:0});if(num(x.institutionalNet)!==null){row.net+=Number(x.institutionalNet);row.count++;}}
   const sectors=Object.values(sectorMap).filter(x=>x.count).sort((a,b)=>b.net-a.net);
-  return {all,foreign:total('foreignNet'),trust:total('trustNet'),dealer:total('dealerNet'),net:total('institutionalNet'),net5d:total('institutionalNet5d'),sectors,buy:all.filter(x=>num(x.institutionalNet)!==null).sort((a,b)=>b.institutionalNet-a.institutionalNet).slice(0,5),sell:all.filter(x=>num(x.institutionalNet)!==null).sort((a,b)=>a.institutionalNet-b.institutionalNet).slice(0,5),asOf:all.map(x=>x.asOf).filter(Boolean).sort().at(-1)};
+  return {all,coverage,foreign:total('foreignNet'),trust:total('trustNet'),dealer:total('dealerNet'),net:total('institutionalNet'),net5d:total('institutionalNet5d'),sectors,buy:all.filter(x=>num(x.institutionalNet)!==null).sort((a,b)=>b.institutionalNet-a.institutionalNet).slice(0,5),sell:all.filter(x=>num(x.institutionalNet)!==null).sort((a,b)=>a.institutionalNet-b.institutionalNet).slice(0,5),asOf:all.map(x=>x.asOf).filter(Boolean).sort().at(-1)};
  },[flows,universe]);
  const fear=num(sentiment?.fearGreed),futuresData=futures?.data||{};
  const card={background:'#111a2b',border:'1px solid #293951',borderRadius:12,padding:13,minWidth:0};
@@ -40,7 +41,7 @@ export default function MarketOverview({universe=[],snapshot={},flows={},sentime
   </div>
   <div style={card}>
    <div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap'}}><b>🏦 法人資金動向</b><small style={{color:'#91a1b8'}}>資料日 {localDate(institution.asOf)}｜單位：股數</small></div>
-   <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginTop:12}}><span style={{color:'#91a1b8',fontSize:12}}>三大法人合計買賣超</span><b style={{fontSize:22,color:tone(institution.net)}}>{moneyShares(institution.net)}</b></div>
+   <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginTop:12}}><span style={{color:'#91a1b8',fontSize:12}}>三大法人合計買賣超（有效 {institution.coverage.net}/{institution.all.length} 檔）</span><b style={{fontSize:22,color:tone(institution.net)}}>{moneyShares(institution.net)}</b></div>
    <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:8,marginTop:12}}>{[['外資',institution.foreign],['投信',institution.trust],['自營商',institution.dealer]].map(([label,v])=><div key={label} style={{minWidth:0,borderTop:'1px solid #293951',paddingTop:9}}><small style={{color:'#91a1b8'}}>{label}</small><b style={{display:'block',fontSize:14,color:tone(v),marginTop:4,overflowWrap:'anywhere'}}>{moneyShares(v)}</b></div>)}</div>
    <div style={{marginTop:12,paddingTop:10,borderTop:'1px solid #293951'}}><small style={{color:'#91a1b8'}}>近五個交易日三大法人合計</small><b style={{display:'block',fontSize:17,color:tone(institution.net5d),marginTop:3}}>{moneyShares(institution.net5d)}</b></div>
   </div>
