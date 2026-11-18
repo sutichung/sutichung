@@ -12,12 +12,15 @@ function makeToken(pair,overrides={}){
  const input=header+'.'+claims;
  return input+'.'+crypto.sign('RSA-SHA256',Buffer.from(input),pair.privateKey).toString('base64url');
 }
-test('accepts signed short-lived tokens from the exact workflow for schedule and workflow_dispatch',async()=>{
+test('accepts signed short-lived tokens only from the allowlisted market and production smoke workflows',async()=>{
  const pair=crypto.generateKeyPairSync('rsa',{modulusLength:2048});
  const jwk=pair.publicKey.export({format:'jwk'});Object.assign(jwk,{kid:'test-key',use:'sig',alg:'RS256'});
  const fetchImpl=async()=>({ok:true,json:async()=>({keys:[jwk]})});
  assert.equal(await verifyGitHubActionsToken(makeToken(pair),{fetchImpl}),true);
  assert.equal(await verifyGitHubActionsToken(makeToken(pair,{event_name:'workflow_dispatch'}),{fetchImpl}),true);
+ assert.equal(await verifyGitHubActionsToken(makeToken(pair,{workflow_ref:'sutichung/sutichung/.github/workflows/production-smoke.yml@refs/heads/main',event_name:'push'}),{fetchImpl}),true);
+ assert.equal(await verifyGitHubActionsToken(makeToken(pair,{workflow_ref:'sutichung/sutichung/.github/workflows/production-smoke.yml@refs/heads/main',event_name:'schedule'}),{fetchImpl}),false);
+ assert.equal(await verifyGitHubActionsToken(makeToken(pair,{event_name:'push'}),{fetchImpl}),false);
 });
 test('rejects wrong repository, branch, workflow, audience, event, expiry and signature',async()=>{
  const pair=crypto.generateKeyPairSync('rsa',{modulusLength:2048});
