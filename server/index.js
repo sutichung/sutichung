@@ -11,6 +11,7 @@ const { applyFirewall, getTelemetry } = require('./lib/firewall');
 const antColony = require('./lib/ant-colony');
 const { loadMarket: loadUsMarket, getChart: getUsChart, searchSymbols: searchUsSymbols, getUniversePage: getUsUniversePage } = require('./lib/us-market');
 const cryptoMarket = require('./lib/crypto-market');
+const cryptoMicrostructure = require('./lib/crypto-microstructure');
 const { assessMarketRisk } = require('./lib/market-risk');
 const { runStrategyLab } = require('./lib/strategy-lab');
 const globalFinance = require('./lib/global-finance');
@@ -525,6 +526,18 @@ async function route(req,res){
       return {events,source:'TWSE 官方 OpenAPI holidaySchedule',timestamp:now(),asOf:events.map(x=>x.date).sort().at(-1)};
     },e=>({events:[],source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
+  }
+  if(u.pathname.startsWith('/api/crypto/microstructure/')){
+    const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase();
+    const exchange=u.searchParams.get('exchange')||'Binance';
+    const marketType=u.searchParams.get('type')==='spot'?'spot':'perpetual';
+    const depth=Math.min(50,Math.max(5,Number(u.searchParams.get('depth'))||10));
+    const whaleThresholdUsd=Math.min(5000000,Math.max(1000,Number(u.searchParams.get('whaleUsd'))||50000));
+    try{
+      const key='crypto-microstructure:'+exchange+':'+marketType+':'+symbol+':'+depth+':'+whaleThresholdUsd;
+      const result=await safeLoad(key,3000,()=>cryptoMicrostructure.fetchMicrostructure({exchange,symbol,marketType,depth,whaleThresholdUsd}),e=>({status:'unavailable',exchange,symbol,error:e.message,book:null,tape:null,timestamp:null}));
+      return json(res,result.status==='unavailable'?502:200,result);
+    }catch(e){return json(res,400,{error:e.message});}
   }
   if(u.pathname==='/api/crypto/market'){
     const result=await safeLoad('crypto-market',60000,cryptoMarket.loadMarket,e=>({markets:[],summary:{total:0,spot:0,perpetual:0},source:'unavailable',timestamp:now(),error:e.message}));
