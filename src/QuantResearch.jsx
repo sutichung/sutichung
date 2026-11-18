@@ -1,13 +1,16 @@
 import React,{useEffect,useMemo,useState} from 'react';
 
 const fmt=(v,suffix='')=>Number.isFinite(Number(v))?Number(v).toFixed(2)+suffix:'—';
-const API=(process.env.REACT_APP_MARKET_API||'/api/market').replace(/\\/$/,'');
+const API=(process.env.REACT_APP_MARKET_API||'/api/market').replace(/\/$/,'');
 export default function QuantResearch({symbol='2330',source='',asOf='',market='tw-stock'}) {
  const defaults=market==='crypto'?{fee:0.10,tax:0,slippage:0.05}:market==='us-stock'?{fee:0.01,tax:0,slippage:0.05}:{fee:0.1425,tax:0.30,slippage:0.10};
- const [marketType,setMarketType]=useState(market),[targetSymbol,setTargetSymbol]=useState(symbol),[draftSymbol,setDraftSymbol]=useState(symbol);\n const [fee,setFee]=useState(String(defaults.fee)),[tax,setTax]=useState(String(defaults.tax)),[slippage,setSlippage]=useState(String(defaults.slippage));
+ const [marketType,setMarketType]=useState(market),[targetSymbol,setTargetSymbol]=useState(symbol),[draftSymbol,setDraftSymbol]=useState(symbol);
+ const [fee,setFee]=useState(String(defaults.fee)),[tax,setTax]=useState(String(defaults.tax)),[slippage,setSlippage]=useState(String(defaults.slippage));
  const [result,setResult]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState('');
  const [reload,setReload]=useState(0);
- useEffect(()=>{setTargetSymbol(symbol);setDraftSymbol(symbol);},[symbol]);\n useEffect(()=>{const d=marketType==='crypto'?{fee:0.10,tax:0,slippage:0.05}:marketType==='us-stock'?{fee:0.01,tax:0,slippage:0.05}:{fee:0.1425,tax:0.30,slippage:0.10};setFee(String(d.fee));setTax(String(d.tax));setSlippage(String(d.slippage));},[marketType]);\n const valid=[fee,tax,slippage].every(x=>x.trim()!==''&&Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=10);
+ useEffect(()=>{setTargetSymbol(symbol);setDraftSymbol(symbol);},[symbol]);
+ useEffect(()=>{const d=marketType==='crypto'?{fee:0.10,tax:0,slippage:0.05}:marketType==='us-stock'?{fee:0.01,tax:0,slippage:0.05}:{fee:0.1425,tax:0.30,slippage:0.10};setFee(String(d.fee));setTax(String(d.tax));setSlippage(String(d.slippage));},[marketType]);
+ const valid=[fee,tax,slippage].every(x=>x.trim()!==''&&Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=10);
  const params=useMemo(()=>new URLSearchParams({market:marketType,feeBps:String(Number(fee)*100),sellTaxBps:String(Number(tax)*100),slippageBps:String(Number(slippage)*100)}).toString(),[marketType,fee,tax,slippage]);
  useEffect(()=>{
   if(!targetSymbol||!valid){setResult(null);return;}
