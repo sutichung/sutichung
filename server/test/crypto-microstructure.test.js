@@ -54,3 +54,8 @@ test('unsupported exchanges and malformed symbols fail closed', async () => {
   await assert.rejects(() => fetchMicrostructure({ exchange: 'Unknown', symbol: 'BTCUSDT' }), /unsupported_exchange/);
   await assert.rejects(() => fetchMicrostructure({ exchange: 'Binance', symbol: '../../secret' }), /invalid_symbol/);
 });
+
+test('derivative contract sizing can be explicitly disabled when quote notional is not reliable', () => {
+  const trade = { id: 'swap-1', timestamp: 1700000000000, side: 'buy', price: '60000', amount: '1', quoteCurrency: 'USDT', whaleClassificationAvailable: false };
+  assert.equal(normalizeTrades('OKX', [trade], 50000)[0].large, null);
+});
