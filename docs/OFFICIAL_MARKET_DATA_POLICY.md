@@ -171,3 +171,73 @@
 
 ---
 本文件是工程規格與驗收標準，不代表上述 API 已完成申請、取得即時行情授權、已整合或已部署。每項狀態必須以實際端點測試、帳戶授權及部署紀錄為準。
+
+
+## 13. 備援資料來源與故障切換（Backup / Failover）
+
+備援的定義是「同等資料權利與資料品質的替代通路」，不是遇到官方 API 故障就改抓任意免費網站。每個市場至少設計 Primary、Secondary、Degraded 三種狀態。
+
+### 13.1 台股備援
+
+**上市（TWSE）**
+1. Primary：TWSE 官方 OpenAPI／官方市場資訊服務，依端點實際頻率標記。
+2. Secondary A：TWSE 官方核准資訊公司名單中的供應商；採購前逐一確認該供應商目前仍在名單、產品涵蓋上市股票、即時／延遲層級、API/串流介面、展示與再散布權利。
+3. Secondary B：TWSE Data E-Shop 的盤後、歷史或其他正式資料產品，僅在相應資料頻率下使用。
+4. Degraded：若官方與核准通路都不可用，顯示最後有效資料及時間，超過 freshness 門檻後停止即時訊號，不得用 Yahoo、爬蟲或未核准來源補位。
+
+TWSE 官方說明即時資訊可透過直接連線，或透過已與 TWSE 簽約的資訊公司間接取得；並提供核准資訊公司名單及 Data E-Shop。官方頁面：
+- 即時資料連線與費用：https://www.twse.com.tw/en/products/information/real-time.html
+- 核准資訊公司名單：https://www.twse.com.tw/en/products/information/list.html
+- Data E-Shop：https://eshop.twse.com.tw/en/home/index
+
+**上櫃／興櫃（TPEx）**
+1. Primary：TPEx 官方 OpenAPI／官方市場資訊服務。
+2. Secondary A：TPEx 官方公布的即時／延遲資訊使用者或核准資料通路；採購前核對產品與授權範圍。
+3. Secondary B：TPEx 官方盤後與歷史資料產品，僅用於盤後／歷史用途。
+4. Degraded：同上市市場規則；資料不足就停止訊號。
+
+TPEx 官方資料產品頁列有即時及延遲資料的申請方式與費用；即時與延遲產品不能混為一談：
+- 資料產品總覽：https://www.tpex.org.tw/en-us/service/data/overview.html
+- 即時交易資訊：https://www.tpex.org.tw/en-us/service/data/product/real-time.html
+- 延遲交易資訊：https://www.tpex.org.tw/en-us/service/data/product/delay.html
+
+**可列入採購評估、但必須重新核實授權的候選**
+- ICE Data Services：其資料目錄列有 TWSE、TPEx 市場的即時、延遲、歷史及 API/Feed 交付能力。這只代表有相關產品描述，不代表本系統已取得合約或特定 API 權限；需向 ICE 確認台灣股票涵蓋、實際 feed、時效、費用、展示與再散布權利。
+  - TWSE：https://developer.ice.com/fixed-income-data-services/catalog/taiwan-stock-exchange-twse
+  - TPEx：https://developer.ice.com/fixed-income-data-services/catalog/taipei-exchange-tpex
+
+### 13.2 美股備援
+
+1. Primary：依需求選擇 Nasdaq／NYSE 官方交易所產品；若要全市場整合報價，必須採用具適當授權的 CTA/UTP SIP 或其正式授權分發通路。
+2. Secondary A：同一交易所官方的另一個合約 feed / delivery path（例如官方雲端串流或另一個官方交付方式），須確認產品覆蓋和授權相同。
+3. Secondary B：CTA/UTP SIP 的正式授權分發通路，或交易所正式授權的 market-data redistributor；須標示為授權轉播，不得稱作交易所直連。
+4. Degraded：只剩單一交易所 direct feed 時，只能顯示該交易所市場資料，不能聲稱完整美股 NBBO／全市場成交；失去有效整合資料時停止依賴全市場報價的訊號。
+
+官方依據：
+- Nasdaq 市場資料產品：https://www.nasdaq.com/products/data
+- NYSE 市場資料產品：https://www.nyse.com/data-products/
+- UTP Plan：https://www.utpplan.com/
+- 美國 Consolidated Tape 計畫轉換資訊：https://consolidatedtape.com/
+
+**2027 計畫轉換注意**
+截至本規格更新時，官方 Consolidated Tape 網站說明新 CT Plan 預計於 2027-04-01 上線，並取代既有 CTA／UTP 計畫；資料 feed 技術本身不因此自動變更，但訂閱者／分發者需按新計畫完成協議與帳戶遷移。系統必須將授權與合約版本設為可配置，不可把 2026 年舊協議永久寫死。
+
+### 13.3 備援切換規則
+
+- 只有來源清單中已核准、授權有效且涵蓋相同商品／資料類型的來源，才能自動接手。
+- 切換前後記錄 sourceId、sourceTier、dataMode、eventTime、receivedAt、entitlement 與切換原因。
+- 不同來源若時間戳或報價有落差，標示 SOURCE_DIVERGENCE；不得將不同時間窗的報價平均。
+- 若備援資料比主來源更延遲，必須即時切換顯示為 DELAYED，並停用要求即時資料的策略。
+- 不能確認授權、來源或資料時效時，禁止自動切換；顯示 DATA_UNAVAILABLE。
+- 來源恢復後需先比對序號／時間缺口、資料完整性與市場狀態，再恢復 Primary。
+- 備援健康檢查必須定期執行，但不得為測試而違反 API 速率限制或產生未授權資料使用。
+
+### 13.4 備援驗收清單
+
+- [ ] Primary 斷線時只切換到已核准且授權有效的 Secondary。
+- [ ] 未授權備援來源永遠不能進入正式訊號。
+- [ ] 即時切換成延遲資料時，UI、API、AI 與掃描器同步顯示 DELAYED。
+- [ ] 單一交易所 feed 不會被標示為美股全市場 NBBO。
+- [ ] 台股上市與上櫃分開驗證，不以 TWSE 備援覆蓋 TPEx。
+- [ ] 備援恢復後完成缺口補抓與來源一致性檢查。
+- [ ] 無合格備援時，系統安全降級為 DATA_UNAVAILABLE，而不是假裝正常。
