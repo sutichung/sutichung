@@ -1,6 +1,7 @@
 'use strict';
 
 const { indicators } = require('./indicators');
+const { runAdvancedStrategies } = require('./advanced-strategies');
 const { runConsensusResearch } = require('./consensus-market-structure');
 const { runAdvancedStrategies } = require('./advanced-strategies');
 
@@ -136,7 +137,7 @@ function runStrategyLab(input, options={}) {
     {id:'in_sample',label:'訓練區間',start:trainStart,end:trainEnd},
     {id:'out_of_sample',label:'樣本外區間',start:testStart,end:testEnd}
   ];
-  const strategies=STRATEGIES.map(strategy=>{
+  const baseStrategies=STRATEGIES.map(strategy=>{
     const results=periods.map(period=>({...period,metrics:runStrategy(strategy.id,candles,period.start,period.end,costs),marketRegime:classifyRegime(candles.slice(period.start,period.end))}));
     const oos=results[1].metrics;
     const wf=walkForward(strategy.id,candles,testStart,testEnd,costs,3);
@@ -147,7 +148,9 @@ function runStrategyLab(input, options={}) {
   });
   const consensus=runConsensusResearch(candles,{market,feeBps:costs.feeBps,slippageBps:costs.slippageBps,sellTaxBps:costs.sellTaxBps,annualization:costs.annualization});
   const advanced=runAdvancedStrategies(candles,split,costs);
-  return {status:'ok',symbol:options.symbol||null,market,source:options.source||'provided OHLCV',asOf:candles.at(-1).time,barCount:candles.length,split:{trainBars:trainEnd-trainStart,outOfSampleBars:testEnd-testStart,ratio:'60/40',walkForwardFolds:3,method:'single_holdout_plus_three_walk_forward_folds'},costs:{feeBps:costs.feeBps,slippageBps:costs.slippageBps,sellTaxBps:costs.sellTaxBps,annualization:costs.annualization,unit:'bps per side; sell tax charged on exit'},strategies:[...strategies,...advanced,...(consensus.status==='ok'?[consensus]:[])],disclaimer:'研究與回測結果不是未來報酬保證。使用下一根 K 線開盤成交以避免同根收盤訊號前視偏誤，區間結束時將未平倉部位按最後收盤價估值並計入退出成本；仍未完整模擬限價排隊、停牌、漲跌停、融券限制及實際市場微結構。單一 60/40 樣本外與三段 Walk-forward 通過僅代表初步候選；另附半成本及雙倍成本敏感度，仍須多市場、多週期、不同景氣環境與交易樣本驗證；未通過者不得當作推薦訊號。'};
+  const advancedStrategies=runAdvancedStrategies(candles,split,costs);
+  const strategies=[...baseStrategies,...advancedStrategies];
+  return {status:'ok',symbol:options.symbol||null,market,source:options.source||'provided OHLCV',asOf:candles.at(-1).time,barCount:candles.length,strategyCount:strategies.length,split:{trainBars:trainEnd-trainStart,outOfSampleBars:testEnd-testStart,ratio:'60/40',walkForwardFolds:3,method:'single_holdout_plus_three_walk_forward_folds'},costs:{feeBps:costs.feeBps,slippageBps:costs.slippageBps,sellTaxBps:costs.sellTaxBps,annualization:costs.annualization,unit:'bps per side; sell tax charged on exit'},strategies:[...strategies,...advanced,...(consensus.status==='ok'?[consensus]:[])],disclaimer:'研究與回測結果不是未來報酬保證。使用下一根 K 線開盤成交以避免同根收盤訊號前視偏誤，區間結束時將未平倉部位按最後收盤價估值並計入退出成本；仍未完整模擬限價排隊、停牌、漲跌停、融券限制及實際市場微結構。單一 60/40 樣本外與三段 Walk-forward 通過僅代表初步候選；另附半成本及雙倍成本敏感度，仍須多市場、多週期、不同景氣環境與交易樣本驗證；未通過者不得當作推薦訊號。'};
 }
 
 module.exports={runStrategyLab,validateCandles,walkForward,STRATEGIES};
