@@ -44,6 +44,14 @@ test('exchange candidate order prefers selected exchange then safe alternatives'
  assert.deepEqual(candidates('Coinbase','Coinbase'),['Binance','Bybit','OKX']);
 });
 
+test('perpetual risk history never substitutes spot-only Coinbase or Kraken candles',async()=>{
+ const calls=[];
+ const result=await loadRiskHistory({symbol:'BTCUSDT',marketType:'perpetual',exchange:'Coinbase',nativeSymbol:'BTC-USD',getHistory:async(s,t,i,e)=>{calls.push(e);return {...goodHistory,source:e+' perpetual candles'};}});
+ assert.deepEqual(calls,['Binance']);
+ assert.equal(result.exchange,'Binance');
+ assert.equal(result.history.source,'Binance perpetual candles');
+});
+
 test('risk history tries the selected Coinbase spot feed before cross-exchange fallback',async()=>{
  const calls=[];
  const result=await loadRiskHistory({symbol:'BTCUSD',marketType:'spot',exchange:'Coinbase',nativeSymbol:'BTC-USD',getHistory:async(s,t,i,e,n)=>{calls.push({exchange:e,symbol:n});return goodHistory;}});
