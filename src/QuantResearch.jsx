@@ -11,6 +11,7 @@ function emaSeries(values,period){
  return out;
 }
 function runBacktest(candles,cost){
+ if(!Number.isFinite(cost)||cost<0)return {invalidCost:true};
  const rows=(candles||[]).filter(x=>n(x.open)!==null&&n(x.close)!==null&&n(x.high)!==null&&n(x.low)!==null&&n(x.volume)!==null);
  if(rows.length<65)return {insufficient:true,count:rows.length};
  const close=rows.map(x=>Number(x.close)),fast=emaSeries(close,20),slow=emaSeries(close,60);
@@ -31,7 +32,9 @@ export default function QuantResearch({candles=[],symbol='—',source='',asOf=''
  const [commission,setCommission]=useState('0.1425');
  const [tax,setTax]=useState('0.30');
  const [slippage,setSlippage]=useState('0.05');
- const cost=(Number(commission)*2)+Number(tax)+(Number(slippage)*2);
+ const inputs=[commission,tax,slippage];
+ const validCost=inputs.every(v=>String(v).trim()!==''&&Number.isFinite(Number(v))&&Number(v)>=0&&Number(v)<=10);
+ const cost=validCost?(Number(commission)*2)+Number(tax)+(Number(slippage)*2):null;
  const result=useMemo(()=>runBacktest(candles,cost),[candles,cost]);
  const card={background:'#111a2b',border:'1px solid #293951',borderRadius:12,padding:13,minWidth:0};
  const metric={background:'#172338',borderRadius:8,padding:10,minWidth:0};
@@ -43,7 +46,7 @@ export default function QuantResearch({candles=[],symbol='—',source='',asOf=''
   <p style={{fontSize:11,color:'#91a1b8',lineHeight:1.7,margin:'8px 0'}}>規則：EMA20 上穿 EMA60 後，下一根日K開盤進場；下穿後，下一根日K開盤出場。只做多、不加碼。此為初步研究樣本，不是完整全市場回測，也未做樣本外／Walk-forward 驗證。</p>
   <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>{field('單邊手續費 (%)',commission,setCommission)}{field('賣出交易稅 (%)',tax,setTax)}{field('單邊滑價 (%)',slippage,setSlippage)}</div>
   <div style={{fontSize:11,color:'#91a1b8',marginBottom:10}}>本次往返成本假設：{Number.isFinite(cost)?cost.toFixed(4)+'%':'設定無效'}｜資料來源：{source||'未提供'}｜最後日K：{asOf||'日期未提供'}</div>
-  {result.insufficient?<div style={{...metric,color:'#fbbf24'}}>歷史日K不足 65 根，目前取得 {result.count} 根。資料不足，不產生回測績效。</div>:<>
+  {result.invalidCost?<div style={{...metric,color:'#fb7185'}}>成本參數無效。請輸入 0 至 10% 之間的非負數字；未修正前不計算績效。</div>:result.insufficient?<div style={{...metric,color:'#fbbf24'}}>歷史日K不足 65 根，目前取得 {result.count} 根。資料不足，不產生回測績效。</div>:<>
    <div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:8}}>
     {[['完成交易',result.count+' 筆'],['勝率',pct(result.winRate)],['淨期望值',pct(result.expectancy)],['Profit Factor',result.profitFactor===Infinity?'∞':result.profitFactor===null?'—':result.profitFactor.toFixed(2)],['淨資金變化',pct(result.totalNet)],['最大回撤',pct(result.mdd)]].map(([k,v])=><div key={k} style={metric}><small style={label}>{k}</small><div style={{...value,color:k==='淨期望值'?(result.expectancy>0?'#34d399':'#fb7185'):'#e8eef8'}}>{v}</div></div>)}
    </div>
