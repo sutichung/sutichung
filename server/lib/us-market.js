@@ -42,7 +42,7 @@ async function getChart(symbol, range='1y', interval='1d') {
     const changePct=Number.isFinite(price)&&Number.isFinite(previous)&&previous>0?(price/previous-1)*100:null;
     const marketState=String(meta.marketState||'UNKNOWN');
     const ageMs=timestamp?Date.now()-Date.parse(timestamp):Infinity;
-    const delayed=!timestamp||!Number.isFinite(price)||ageMs>15*60*1000||ageMs< -60000;
+    const delayed=!timestamp||!Number.isFinite(price)||ageMs>15*60*1000||ageMs< -60000||marketState!=='REGULAR';
     return {symbol,name:STOCKS.find(x=>x[0]===symbol)?.[1]||meta.longName||meta.shortName||symbol,exchange:meta.exchangeName||meta.fullExchangeName||'US',currency:meta.currency||'USD',price:Number.isFinite(price)?price:null,previousClose:Number.isFinite(previous)?previous:null,changePct,volume:Number(q.volume?.at(-1))||Number(meta.regularMarketVolume)||null,timestamp,marketState,delayed,quoteType:delayed?'delayed-or-closed':'timestamped-snapshot',source:'Yahoo Finance Chart（非官方公開端點；可能延遲／限流）',candles,meta:{fiftyTwoWeekHigh:meta.fiftyTwoWeekHigh,fiftyTwoWeekLow:meta.fiftyTwoWeekLow,exchangeTimezoneName:meta.exchangeTimezoneName}};
   } finally {clearTimeout(timer);}
 }
