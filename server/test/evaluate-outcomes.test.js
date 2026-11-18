@@ -60,11 +60,11 @@ test('enforces horizon-to-session mapping and one-hour elapsed-time window',()=>
  assert.throws(()=>evaluateOutcomes(previous({snapshotTimestamp:'2026-11-18T07:00:00.000Z'}),snapshot(),{horizon:'1d',sessions:1,now}),/future/);
 });
 
-test('rejects unsafe cost assumptions and unknown signal directions',()=>{
+test('rejects unsafe cost assumptions and invalid signal prices',()=>{
  assert.throws(()=>evaluateOutcomes(previous(),snapshot(),{horizon:'1d',sessions:1,costPct:-1,now}),/cost assumption/);
- const report=evaluateOutcomes(previous({topBullish:[{symbol:'2330',price:100,side:'unknown'}],topBearish:[]}),snapshot(),{horizon:'1d',sessions:1,now});
+ const report=evaluateOutcomes(previous({topBullish:[{symbol:'2330',price:0}],topBearish:[]}),snapshot(),{horizon:'1d',sessions:1,now});
  assert.equal(report.evaluatedCount,0);
- assert.equal(report.excluded[0].reason,'invalid_signal_side');
+ assert.equal(report.excluded[0].reason,'invalid_entry_price');
 });
 
 test('uses a conservative Taiwan round-trip cost by default',()=>{
