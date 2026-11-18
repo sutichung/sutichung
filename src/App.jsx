@@ -101,7 +101,8 @@ export default function App(){
   <a href="#crypto-market" style={{flex:'1 0 130px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#382b19',border:'1px solid #745323',color:'#fde68a',fontWeight:800,fontSize:13}}>₿ 加密貨幣專區</a>
   <a href="#global-finance" style={{flex:'1 0 140px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#252342',border:'1px solid #514b82',color:'#ddd6fe',fontWeight:800,fontSize:13}}>🌐 全球金融中心</a>
   <a href="#global-intelligence" style={{flex:'1 0 160px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#332334',border:'1px solid #75465c',color:'#fecdd3',fontWeight:800,fontSize:13}}>🛡️ 全球情報攻防中心</a>
- </nav>
+   <a href="#system-control-center" style={{flex:'1 0 150px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#123a3a',border:'1px solid #26736c',color:'#99f6e4',fontWeight:800,fontSize:13}}>🎛️ 中央控制中心</a>
+</nav>
  <AntColony/>
  <SystemControlCenter/>
  <GlobalFinance/>
