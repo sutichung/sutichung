@@ -43,3 +43,12 @@ test('exchange candidate order prefers selected exchange then safe alternatives'
  assert.deepEqual(candidates('Binance','Bybit'),['Bybit','Binance','OKX']);
  assert.deepEqual(candidates('Coinbase','Coinbase'),['Binance','Bybit','OKX']);
 });
+
+test('risk history tries the selected Coinbase spot feed before cross-exchange fallback',async()=>{
+ const calls=[];
+ const result=await loadRiskHistory({symbol:'BTCUSD',marketType:'spot',exchange:'Coinbase',nativeSymbol:'BTC-USD',getHistory:async(s,t,i,e,n)=>{calls.push({exchange:e,symbol:n});return goodHistory;}});
+ assert.equal(calls[0].exchange,'Coinbase');
+ assert.equal(calls[0].symbol,'BTC-USD');
+ assert.equal(result.exchange,'Coinbase');
+ assert.equal(result.fallbackUsed,false);
+});
