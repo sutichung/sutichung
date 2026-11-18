@@ -8,7 +8,7 @@ const round = (x,d=2) => Number.isFinite(x) ? Number(x.toFixed(d)) : null;
 function parseTime(value){
   if(typeof value==='number'&&Number.isFinite(value))return value<1e12?value*1000:value;
   const text=String(value??'').trim();
-  if(/^\\d{10,13}$/.test(text)){const n=Number(text);return n<1e12?n*1000:n;}
+  if(/^\d{10,13}$/.test(text)){const n=Number(text);return n<1e12?n*1000:n;}
   return Date.parse(text);
 }
 function features(bars, lookback=5) {
