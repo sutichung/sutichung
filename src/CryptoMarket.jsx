@@ -4,8 +4,8 @@ import QuantResearch from './QuantResearch';
 import CryptoSignalRadar from './CryptoSignalRadar';
 import CryptoMicrostructure from './CryptoMicrostructure';
 const C={bg:'#0b1422',panel:'#111a2b',panel2:'#172338',border:'#293951',text:'#e8eef8',muted:'#91a1b8',blue:'#60a5fa',green:'#34d399',red:'#fb7185',yellow:'#fbbf24'};
-const fmt=(v,d=4)=>Number.isFinite(Number(v))?Number(v).toLocaleString('en-US',{maximumFractionDigits:d}):'—';
-const pct=v=>Number.isFinite(Number(v))?(v>0?'+':'')+fmt(v,2)+'%':'—';
+const fmt=(v,d=4)=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))?Number(v).toLocaleString('en-US',{maximumFractionDigits:d}):'—';
+const pct=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))?(Number(v)>0?'+':'')+fmt(v,2)+'%':'—';
 async function api(path){const token=localStorage.getItem('ts_access_token')||'',headers={Accept:'application/json'};if(token)headers.Authorization='Bearer '+token;const r=await fetch('/api/crypto'+path,{headers});const x=await r.json().catch(()=>({}));if(!r.ok)throw new Error(x.error||'API '+r.status);return x;}
 function Panel({title,children,right}){return <section style={{background:C.panel,border:'1px solid '+C.border,borderRadius:12,padding:13,minWidth:0}}><div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center',marginBottom:10,flexWrap:'wrap'}}><b>{title}</b>{right}</div>{children}</section>}
 function Stat({label,value,note,color=C.text}){return <div style={{background:C.panel2,borderRadius:8,padding:10,minWidth:0}}><small style={{color:C.muted}}>{label}</small><div style={{fontSize:18,fontWeight:800,color,marginTop:4,overflowWrap:'anywhere'}}>{value}</div>{note&&<small style={{color:C.muted}}>{note}</small>}</div>}
