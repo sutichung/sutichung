@@ -47,6 +47,6 @@ export default function QuantResearch({symbol='2330',source='',asOf='',market='t
     </div>
    </div>)}
   </div>:<div style={{...metric,color:'#91a1b8'}}>尚未取得可用的策略研究結果。</div>}
-  <small style={{display:'block',marginTop:10,color:'#91a1b8',lineHeight:1.7}}>研究限制：策略結果不是未來報酬保證。使用下一根 K 線開盤成交以避免同根收盤前視偏誤；尚未完整模擬限價排隊、漲跌停、停牌、融券限制、成交量容量與市場微結構。樣本外不足 5 筆交易、淨報酬不正、回撤過大或 Sharpe 不正，均不會列為通過。</small>
+  <small style={{display:'block',marginTop:10,color:'#91a1b8',lineHeight:1.7}}>研究限制：策略結果不是未來報酬保證。使用下一根 K 線開盤成交以避免同根收盤前視偏誤；尚未完整模擬限價排隊、漲跌停、停牌、融券限制、成交量容量與市場微結構。樣本外不足 10 筆交易、淨報酬不正、回撤超過 15% 或 Sharpe 不正，或 Profit Factor 不大於 1.1，均不會列為通過。</small>
  </section>;
 }
