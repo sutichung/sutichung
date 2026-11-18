@@ -500,7 +500,7 @@ async function route(req,res){
   if(u.pathname==='/api/colony/status')return json(res,200,antColony.getStatus());
   if(u.pathname==='/api/diagnostics/providers'){
     const result=await diagnoseProviders();
-    return json(res,200,result);
+    return json(res,200,{...result,security:getTelemetry()});
   }
   if(u.pathname==='/api/research/outcomes'||u.pathname==='/api/market/research/outcomes'){
     const result=await safeLoad('research-outcomes',60000,()=>researchStorage.listReports(30),e=>({status:'unavailable',source:'Supabase private Storage',fetchedAt:now(),count:0,data:[],error:e.message}));
