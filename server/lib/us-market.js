@@ -31,7 +31,7 @@ async function getChart(symbol, range='1y', interval='1d') {
     if(!result)throw new Error('Yahoo Finance 沒有回傳此代號的行情');
     const meta=result.meta||{},q=result.indicators?.quote?.[0]||{},adj=result.indicators?.adjclose?.[0]?.adjclose||[];
     const candles=(result.timestamp||[]).map((stamp,i)=>{
-      const open=Number(q.open?.[i]),high=Number(q.high?.[i]),low=Number(q.low?.[i]),close=Number(q.close?.[i]),volume=Number(q.volume?.[i]||0);
+      const open=Number(q.open?.[i]),high=Number(q.high?.[i]),low=Number(q.low?.[i]),close=Number(q.close?.[i]),rawVolume=q.volume?.[i],volume=rawVolume===null||rawVolume===undefined?NaN:Number(rawVolume);
       if(!Number.isFinite(stamp)||![open,high,low,close].every(Number.isFinite)||![open,high,low,close].every(x=>x>0)||!Number.isFinite(volume)||volume<0||high<Math.max(open,close,low)||low>Math.min(open,close,high))return null;
       return {time:new Date(stamp*1000).toISOString().slice(0,10),timestamp:new Date(stamp*1000).toISOString(),open,high,low,close,adjustedClose:Number.isFinite(Number(adj[i]))&&Number(adj[i])>0?Number(adj[i]):null,volume};
     }).filter(Boolean).sort((a,b)=>Date.parse(a.timestamp)-Date.parse(b.timestamp));
