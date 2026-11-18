@@ -12,6 +12,7 @@ const antColony = require('./lib/ant-colony');
 const { loadMarket: loadUsMarket, getChart: getUsChart, searchSymbols: searchUsSymbols, getUniversePage: getUsUniversePage } = require('./lib/us-market');
 const cryptoMarket = require('./lib/crypto-market');
 const { assessMarketRisk } = require('./lib/market-risk');
+const { runStrategyLab } = require('./lib/strategy-lab');
 const globalFinance = require('./lib/global-finance');
 const globalIntelligence = require('./lib/intelligence');
 const { diagnoseProviders } = require('./lib/provider-diagnostics');
@@ -552,6 +553,24 @@ async function route(req,res){
   if(u.pathname==='/api/crypto/news'){
     const result=await safeLoad('crypto-news',300000,cryptoMarket.loadNews,e=>({data:[],source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
+  }
+  if(u.pathname.startsWith('/api/research/strategies/')){
+    const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase();
+    const market=u.searchParams.get('market')||'tw-stock';
+    if(!['tw-stock','us-stock','crypto'].includes(market))return json(res,400,{status:'invalid_market',error:'market must be tw-stock, us-stock or crypto'});
+    if(market==='tw-stock'&&!validateSymbol(symbol))return json(res,400,{status:'invalid_symbol',error:'invalid Taiwan stock symbol'});
+    if(market==='us-stock'&&!/^[A-Z0-9.^=-]{1,12}$/.test(symbol))return json(res,400,{status:'invalid_symbol',error:'invalid US symbol'});
+    if(market==='crypto'&&!/^[A-Z0-9_-]{2,30}$/.test(symbol))return json(res,400,{status:'invalid_symbol',error:'invalid crypto symbol'});
+    try{
+      let history;
+      if(market==='crypto')history=await cryptoMarket.getHistory(symbol,u.searchParams.get('type')==='perpetual'?'perpetual':'spot',u.searchParams.get('interval')||'1d',u.searchParams.get('exchange')||'Binance',u.searchParams.get('nativeSymbol')||symbol);
+      else if(market==='us-stock'){
+        const chart=await getUsChart(symbol,'2y','1d');
+        history={data:chart.candles,source:chart.source,asOf:chart.candles.at(-1)?.time};
+      }else history=await loadStockHistory(symbol);
+      const result=runStrategyLab(history.data,{market,symbol,source:history.source,feeBps:u.searchParams.has('feeBps')?Number(u.searchParams.get('feeBps')):undefined,slippageBps:u.searchParams.has('slippageBps')?Number(u.searchParams.get('slippageBps')):undefined,sellTaxBps:u.searchParams.has('sellTaxBps')?Number(u.searchParams.get('sellTaxBps')):undefined});
+      return json(res,result.status==='ok'?200:422,{...result,source:history.source||result.source,asOf:history.asOf||result.asOf});
+    }catch(e){return json(res,502,{status:'data_unavailable',symbol,market,error:e.message,strategies:[]});}
   }
   if(u.pathname.startsWith('/api/crypto/history/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase(),type=u.searchParams.get('type')==='perpetual'?'perpetual':'spot',interval=u.searchParams.get('interval')||'1d',exchange=u.searchParams.get('exchange')||'Binance',nativeSymbol=u.searchParams.get('nativeSymbol')||symbol;
