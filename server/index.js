@@ -682,6 +682,7 @@ async function route(req,res){
       const maxAgeMinutes=({'15m':30,'1h':120,'4h':480,'1d':2880})[interval]||30;
       const candleFresh=Number.isFinite(candleAgeMinutes)&&candleAgeMinutes>=0&&candleAgeMinutes<=maxAgeMinutes;
       result.asOf=candleAsOf;
+      result.candleSource=historyResult.history?.source||null;
       result.candleInterval=interval;
       result.candleAgeMinutes=candleAgeMinutes;
       result.candleMaxAgeMinutes=maxAgeMinutes;
