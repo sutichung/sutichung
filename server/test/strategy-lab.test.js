@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {runStrategyLab,validateCandles}=require('../lib/strategy-lab');
+const {runStrategyLab,validateCandles,inferAnnualization}=require('../lib/strategy-lab');
 const {dailyTrendMap,runMtfStrategy}=require('../lib/mtf-structure-strategy');
 
 function candles(n=240,mode='trend'){
