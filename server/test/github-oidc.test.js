@@ -21,6 +21,9 @@ test('accepts signed short-lived tokens only from the allowlisted market and pro
  const smokeToken=makeToken(pair,{workflow_ref:'sutichung/sutichung/.github/workflows/production-smoke.yml@refs/heads/main',event_name:'push'});
  assert.equal(await verifyGitHubActionsToken(smokeToken,{fetchImpl}),false);
  assert.equal(await verifyGitHubActionsToken(smokeToken,{fetchImpl,allowProductionSmoke:true}),true);
+ const smokeWorkflowRunToken=makeToken(pair,{workflow_ref:'sutichung/sutichung/.github/workflows/production-smoke.yml@refs/heads/main',event_name:'workflow_run'});
+ assert.equal(await verifyGitHubActionsToken(smokeWorkflowRunToken,{fetchImpl}),false);
+ assert.equal(await verifyGitHubActionsToken(smokeWorkflowRunToken,{fetchImpl,allowProductionSmoke:true}),true);
  assert.equal(await verifyGitHubActionsToken(makeToken(pair,{workflow_ref:'sutichung/sutichung/.github/workflows/production-smoke.yml@refs/heads/main',event_name:'schedule'}),{fetchImpl}),false);
  assert.equal(await verifyGitHubActionsToken(makeToken(pair,{event_name:'push'}),{fetchImpl}),false);
 });
