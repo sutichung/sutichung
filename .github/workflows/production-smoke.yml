@@ -1,0 +1,57 @@
+name: Production deployment acceptance
+on:
+  push:
+    branches: [main]
+concurrency:
+  group: production-smoke-main
+  cancel-in-progress: true
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  production-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Wait until Render serves this exact Git commit
+        env:
+          MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 40); do
+            http_code=$(curl --silent --show-error --max-time 30 -o /tmp/health.json -w '%{http_code}' "$MARKET_APP_URL/api/health" 2>/dev/null || true)
+            deployed_commit=$(jq -r '.commit // empty' /tmp/health.json 2>/dev/null || true)
+            if [ "$http_code" = "200" ] && [ "$deployed_commit" = "$GITHUB_SHA" ]; then
+              echo "Render is serving expected commit $GITHUB_SHA"
+              exit 0
+            fi
+            echo "Waiting for Render commit: expected=$GITHUB_SHA actual=${deployed_commit:-unavailable} http=${http_code:-unavailable} attempt=$attempt/40"
+            sleep 15
+          done
+          echo "Render did not serve the pushed commit within the acceptance window." >&2
+          cat /tmp/health.json 2>/dev/null || true
+          exit 1
+      - name: Verify provider, Taiwan market, and crypto exchange APIs
+        env:
+          MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
+        run: |
+          set -euo pipefail
+          OIDC_TOKEN=$(curl --fail --silent --show-error --get --data-urlencode "audience=taiwan-stock-hunter-automation" "$ACTIONS_ID_TOKEN_REQUEST_URL" -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r '.value')
+          test -n "$OIDC_TOKEN" && test "$OIDC_TOKEN" != "null" || { echo "Unable to obtain GitHub Actions OIDC token"; exit 1; }
+          echo "::add-mask::$OIDC_TOKEN"
+          AUTH_HEADER="Authorization: Bearer $OIDC_TOKEN"
+          curl --fail --silent --show-error --max-time 90 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/providers" -o /tmp/providers.json
+          curl --fail --silent --show-error --max-time 60 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/market" -o /tmp/market.json
+          curl --fail --silent --show-error --max-time 120 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/crypto/market" -o /tmp/crypto.json
+          HEALTH_REPORT_NAME=production-smoke-health.json node server/jobs/health-review.js /tmp/health.json /tmp/providers.json /tmp/market.json /tmp/crypto.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: production-smoke-${{ github.run_id }}
+          path: reports/production-smoke-health.json
+          retention-days: 30
+          if-no-files-found: ignore
