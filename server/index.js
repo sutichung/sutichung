@@ -608,12 +608,16 @@ async function route(req,res){
         const type=u.searchParams.get('type')==='perpetual'?'perpetual':'spot';
         const exchange=u.searchParams.get('exchange')||'Binance';
         const native=u.searchParams.get('nativeSymbol')||symbol;
-        const [fourHour,daily]=await Promise.all([
-          cryptoMarket.getHistory(symbol,type,'4h',exchange,native),
-          cryptoMarket.getHistory(symbol,type,'1d',exchange,native)
-        ]);
-        history={...fourHour,source:fourHour.source+' + '+daily.source};
-        htfCandles=daily.data;
+        if(exchange==='Coinbase'){
+          history=await cryptoMarket.getHistory(symbol,type,'1d',exchange,native,300);
+        }else{
+          const [fourHour,daily]=await Promise.all([
+            cryptoMarket.getHistory(symbol,type,'4h',exchange,native,1000),
+            cryptoMarket.getHistory(symbol,type,'1d',exchange,native,600)
+          ]);
+          history={...fourHour,source:fourHour.source+' + '+daily.source};
+          htfCandles=daily.data;
+        }
       }else if(market==='us-stock'){
         const chart=await getUsChart(symbol,'2y','1d');
         history={data:chart.candles,source:chart.source,asOf:chart.candles.at(-1)?.time};
