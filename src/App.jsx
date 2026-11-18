@@ -9,7 +9,7 @@ import USMarket from './USMarket';
 import CryptoMarket from './CryptoMarket';
 
 const API = (process.env.REACT_APP_MARKET_API || '/api/market').replace(/\/$/, '');
-const APP_VERSION = '2026.11.18.45';
+const APP_VERSION = '2026.11.18.46';
 
 const C = { bg:'#080d18', panel:'#111a2b', panel2:'#172338', border:'#293951', text:'#e8eef8', muted:'#91a1b8', blue:'#60a5fa', green:'#34d399', red:'#fb7185', yellow:'#fbbf24' };
 const fmt = (v,d=2) => Number.isFinite(Number(v)) ? Number(v).toLocaleString('zh-TW',{minimumFractionDigits:d,maximumFractionDigits:d}) : '—';
@@ -71,8 +71,17 @@ export default function App(){
  const grid={display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:8};
  return <main className="stock-app" style={{minHeight:'100vh',background:C.bg,color:C.text,padding:16,fontFamily:'Inter,system-ui,sans-serif'}}><style>{".stock-app{overflow-x:hidden}.stock-app *{box-sizing:border-box}@media(max-width:760px){.stock-app{padding:9px!important}.stock-app>header{align-items:flex-start!important;flex-direction:column!important;gap:10px!important}.stock-app>header>div:last-child{width:100%;font-size:10px!important;line-height:1.7}.stock-app>header b{font-size:18px!important}.stock-app .stock-panel{padding:11px!important;border-radius:10px!important}.stock-app [style*=\"grid-template-columns: repeat(4\"]{grid-template-columns:repeat(2,minmax(0,1fr))!important}.stock-app [style*=\"grid-template-columns: repeat(3\"]{grid-template-columns:repeat(2,minmax(0,1fr))!important}.stock-app [style*=\"overflow-x: auto\"]{max-width:100%;overscroll-behavior-x:contain}.stock-app button{min-height:48px}.stock-app>div[style*=\"display: grid\"]{grid-template-columns:1fr!important}.stock-app input{min-height:42px;font-size:16px!important}}@media(max-width:420px){.stock-app{padding:7px!important}.stock-app .stock-panel{padding:9px!important}}@media(max-width:360px){.stock-app{padding:5px!important}.stock-app .stock-panel{padding:8px!important}.stock-app>header b{font-size:16px!important}.stock-app button{font-size:10px!important}}@media(prefers-reduced-motion:reduce){.stock-app *{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}}"}</style>
  <header style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap',borderBottom:`1px solid ${C.border}`,paddingBottom:14,marginBottom:14}}><div><b style={{fontSize:20}}>泰丞・台股／美股 AI 智慧操盤中樞</b><div style={{color:C.muted,fontSize:11}}>台股與美股雙市場掃描・技術面・籌碼面・期貨・市場心理　<span style={{color:C.green}}>新版 {APP_VERSION}</span></div></div><div style={{fontSize:12,color:status.includes('未')||status.includes('中斷')?C.red:C.green}} >{status}　API回應：{updatedAt?new Date(updatedAt).toLocaleString('zh-TW'):''}　掃描：{scanUpdatedAt?new Date(scanUpdatedAt).toLocaleTimeString('zh-TW'): '等待'} <button style={btn(C.blue)} onClick={()=>refresh()}>立即同步</button></div></header>
+ <nav aria-label="市場專區導覽" className="market-zone-nav" style={{position:'sticky',top:0,zIndex:50,display:'flex',gap:8,overflowX:'auto',padding:'9px 0',marginBottom:10,background:'rgba(8,13,24,.96)',backdropFilter:'blur(16px)',borderBottom:'1px solid '+C.border,scrollbarWidth:'thin'}}>
+  <a href="#tw-market" style={{flex:'1 0 110px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#18304b',border:'1px solid #315579',color:'#bfdbfe',fontWeight:800,fontSize:13}}>🇹🇼 台股專區</a>
+  <a href="#us-market" style={{flex:'1 0 110px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#18372f',border:'1px solid #28634f',color:'#a7f3d0',fontWeight:800,fontSize:13}}>🇺🇸 美股專區</a>
+  <a href="#crypto-market" style={{flex:'1 0 130px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#382b19',border:'1px solid #745323',color:'#fde68a',fontWeight:800,fontSize:13}}>₿ 加密貨幣專區</a>
+ </nav>
  <USMarket/>
  <CryptoMarket/>
+ <div id="tw-market" style={{scrollMarginTop:78,margin:'12px 0 8px',padding:'13px 14px',borderRadius:12,background:'linear-gradient(100deg,#12263c,#0d1727)',border:'1px solid #315579'}}>
+  <div style={{fontSize:20,fontWeight:900,color:'#bfdbfe'}}>🇹🇼 台股交易監控中心</div>
+  <div style={{fontSize:11,color:C.muted,marginTop:4}}>上市櫃全市場掃描・法人籌碼・台指期日夜盤・市場心理・AI 多空・風險劇本</div>
+ </div>
  <MarketCalendar/>
  <MarketOverview universe={universe} snapshot={snapshot} flows={flows} sentiment={sentiment} futures={futures} updatedAt={updatedAt}/>
  <section aria-label="全市場股票即時跑馬燈" style={{marginBottom:12,background:'#0b1422',border:'1px solid '+C.border,borderRadius:10,overflow:'hidden'}}>
