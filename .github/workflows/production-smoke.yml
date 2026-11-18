@@ -70,7 +70,11 @@ jobs:
           echo "Checking multi-exchange crypto market data"
           curl --fail --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 120 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/crypto/market" -o /tmp/crypto.json
           echo "Checking live crypto risk radar and order-book snapshots"
-          curl --fail --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 90 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/crypto/risk/BTCUSDT?type=perpetual&exchange=Binance" -o /tmp/crypto-risk.json
+          if ! curl --fail-with-body --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 90 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/crypto/risk/BTCUSDT?type=perpetual&exchange=Binance" -o /tmp/crypto-risk.json; then
+            echo "Crypto risk API response body:"
+            cat /tmp/crypto-risk.json || true
+            exit 1
+          fi
           echo "Checking provider and firewall diagnostics"
           curl --fail --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 45 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/providers" -o /tmp/providers.json
           echo "Checking dependency vulnerability risk data"
