@@ -2,6 +2,8 @@ name: Backend checks
 on:
   push:
   pull_request:
+  schedule:
+    - cron: '17 21 * * *' # Daily 05:17 Asia/Taipei
 concurrency:
   group: backend-checks-${{ github.ref }}
   cancel-in-progress: true
