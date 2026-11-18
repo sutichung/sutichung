@@ -489,18 +489,18 @@ async function route(req,res){
       }
       if(u.pathname==='/api/admin/members/invite'&&req.method==='POST'){
         const body=await readRequestJson(req),email=String(body.email||'').trim().toLowerCase();
-        if(!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email))return json(res,400,{error:'請輸入有效的會員 Email'});
+        if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))return json(res,400,{error:'請輸入有效的會員 Email'});
         const origin=(req.headers['x-forwarded-proto']||'https')+'://'+(req.headers['x-forwarded-host']||req.headers.host);
         const invited=await supabaseRequest('/auth/v1/invite',{method:'POST',admin:true,body:{email,redirect_to:origin+'/' }});
         return json(res,201,{user:{id:invited.id,email:invited.email,created_at:invited.created_at},invitationSent:!!invited.id,message:'已建立邀請，請會員至信箱完成驗證及設定密碼。'});
       }
       if(u.pathname==='/api/admin/members'&&req.method==='POST'){
         const body=await readRequestJson(req),email=String(body.email||'').trim().toLowerCase(),password=String(body.password||'');
-        if(!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email)||password.length<10)return json(res,400,{error:'Email 格式錯誤或密碼少於 10 個字元'});
+        if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)||password.length<10)return json(res,400,{error:'Email 格式錯誤或密碼少於 10 個字元'});
         const created=await supabaseRequest('/auth/v1/admin/users',{method:'POST',admin:true,body:{email,password,email_confirm:true}});
         return json(res,201,{user:{id:created.id,email:created.email,created_at:created.created_at}});
       }
-      const resetMatch=u.pathname.match(/^\\/api\\/admin\\/members\\/([0-9a-f-]{36})\\/reset-password$/i);
+      const resetMatch=u.pathname.match(/^\/api\/admin\/members\/([0-9a-f-]{36})\/reset-password$/i);
       if(resetMatch&&req.method==='POST'){
         const member=await supabaseRequest('/auth/v1/admin/users/'+resetMatch[1],{admin:true});
         if(!member.email)return json(res,404,{error:'找不到會員 Email，無法寄送重設連結'});
