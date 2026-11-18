@@ -10,6 +10,7 @@ const { buildAiCommittee } = require('./lib/agents');
 const { applyFirewall } = require('./lib/firewall');
 const { loadMarket: loadUsMarket, getChart: getUsChart, searchSymbols: searchUsSymbols, getUniversePage: getUsUniversePage } = require('./lib/us-market');
 const cryptoMarket = require('./lib/crypto-market');
+const globalFinance = require('./lib/global-finance');
 
 const PORT = Number(process.env.PORT || 8787);
 const FINMIND_BASE = process.env.FINMIND_BASE || 'https://api.finmindtrade.com/api/v4/data';
@@ -965,6 +966,13 @@ async function route(req,res){
       return {data,source:'TWSE OpenAPI newsList（交易所公告，不等同即時財經新聞）',timestamp:now()};
     },e=>({data:[],source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
+  }
+  if(u.pathname==='/api/finance/registry'){
+    return json(res,200,globalFinance.getRegistry());
+  }
+  if(u.pathname==='/api/finance/fx'){
+    const result=await safeLoad('global-finance-fx',60*60*1000,globalFinance.loadFx,e=>({rates:[],errors:[],base:'EUR',source:'unavailable',fetchedAt:now(),error:e.message}));
+    return json(res,result.error?503:200,result);
   }
   // In production, serve the compiled React app from the same origin as the API.
   if (process.env.NODE_ENV === 'production') {
