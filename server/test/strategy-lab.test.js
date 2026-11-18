@@ -23,9 +23,13 @@ test('strategy lab produces separate in-sample and out-of-sample results with ex
  const result=runStrategyLab(candles(),{market:'tw-stock',symbol:'2330',source:'unit-test'});
  assert.equal(result.status,'ok');
  assert.equal(result.barCount,240);
- assert.equal(result.split.ratio,'60/40');\n assert.equal(result.split.walkForwardFolds,3);
+ assert.equal(result.split.ratio,'60/40');
+ assert.equal(result.split.walkForwardFolds,3);
  assert.equal(result.strategies.length,3);
- assert.ok(result.strategies.every(s=>s.periods.length===2&&s.validation.status));\n assert.ok(result.strategies.every(s=>s.walkForward.folds.length===3));\n assert.ok(result.strategies.every(s=>s.costSensitivity.halfCost&&s.costSensitivity.doubleCost));\n assert.ok(result.strategies.every(s=>s.validation.status!=='preliminary_pass'||s.walkForward.passed));
+ assert.ok(result.strategies.every(s=>s.periods.length===2&&s.validation.status));
+ assert.ok(result.strategies.every(s=>s.walkForward.folds.length===3));
+ assert.ok(result.strategies.every(s=>s.costSensitivity.halfCost&&s.costSensitivity.doubleCost));
+ assert.ok(result.strategies.every(s=>s.validation.status!=='preliminary_pass'||s.walkForward.passed));
  assert.equal(result.costs.feeBps,14.25);
  assert.equal(result.costs.sellTaxBps,30);
  assert.ok(result.disclaimer.includes('下一根 K 線開盤'));
