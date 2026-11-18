@@ -47,8 +47,11 @@ test('builds vulnerability details and separates production from build-tool risk
  assert.equal(report.productionVulnerabilityCount,0);
  assert.equal(report.developmentVulnerabilityCount,2);
  assert.equal(report.severityCounts.high,2);
- assert.equal(report.findings.find(x=>x.package==='vite').fixedVersions[0],'6.4.7');
+ assert.deepEqual(report.findings.find(x=>x.package==='vite').fixedVersions,[]);
+ assert.deepEqual(report.findings.find(x=>x.package==='vite').suggestedTopLevelChange,{package:'vite',version:'6.4.7',isSemVerMajor:false});
+ assert.equal(report.findings.find(x=>x.package==='vite').fixAvailable,false);
  assert.equal(report.findings.find(x=>x.package==='picomatch').fixAvailable,false);
+ assert.equal(report.findings.find(x=>x.package==='picomatch').suggestedTopLevelChange,null);
  assert.equal(report.findings.find(x=>x.package==='vite').references[0],'https://example.com/vite');
 });
 
