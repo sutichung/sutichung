@@ -5,6 +5,7 @@ const moneyShares=v=>num(v)===null?'—':(v/1e8).toFixed(2)+' 億股';
 const localDate=v=>v?String(v).slice(0,10):'日期未提供';
 export default function MarketOverview({universe=[],snapshot={},flows={},sentiment,futures,updatedAt}){
  const indexFor=market=>Object.values(snapshot||{}).find(x=>x?.type==='INDEX'&&x?.market===market)||null;
+ const snapshotRows=Object.values(snapshot||{}),marketCoverage={TSE:snapshotRows.filter(x=>x.market==='TSE').length,OTC:snapshotRows.filter(x=>x.market==='OTC').length,ESB:snapshotRows.filter(x=>x.market==='ESB').length,TIB:snapshotRows.filter(x=>x.market==='TIB').length},indexCount=snapshotRows.filter(x=>x.type==='INDEX').length;
  const taiex=indexFor('TSE'),otcIndex=indexFor('OTC');
  const breadth=useMemo(()=>{
   const rows=Object.values(snapshot||{}).filter(x=>num(x.changePct)!==null);
@@ -26,6 +27,7 @@ export default function MarketOverview({universe=[],snapshot={},flows={},sentime
  const gauge=fear===null?null:Math.max(0,Math.min(100,fear));
  return <section style={{display:'grid',gap:12,marginBottom:14,color:'#e8eef8'}}>
   <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center',flexWrap:'wrap'}}><b style={{fontSize:17}}>📊 台股市場總覽</b><small style={{color:'#91a1b8'}}>行情更新 {updatedAt?new Date(updatedAt).toLocaleTimeString('zh-TW'):'—'}｜各資料依各自日期標示</small></div>
+  <small style={{color:'#91a1b8'}}>行情快照覆蓋：上市 {marketCoverage.TSE}｜上櫃 {marketCoverage.OTC}｜興櫃 {marketCoverage.ESB}｜創新板 {marketCoverage.TIB}｜指數 {indexCount}（未回傳不補值）</small>
   <div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:8}}>
    <div style={{...card,background:'linear-gradient(145deg,#18352f,#111a2b)'}}><small style={{color:'#a9b8c9'}}>台指期日盤</small><b style={{display:'block',fontSize:21,marginTop:7}}>{fmt(futuresData.daySession?.last??futuresData.last,0)}</b><small style={{color:tone(num(futuresData.daySession?.changePct??futuresData.changePct))}}>{num(futuresData.daySession?.changePct??futuresData.changePct)===null?'未取得有效報價':(num(futuresData.daySession?.changePct??futuresData.changePct)>0?'+':'')+fmt(futuresData.daySession?.changePct??futuresData.changePct,2)+'%'}</small></div>
    <div style={{...card,background:'linear-gradient(145deg,#18352f,#111a2b)'}}><small style={{color:'#a9b8c9'}}>台指期夜盤</small><b style={{display:'block',fontSize:21,marginTop:7}}>{fmt(futuresData.nightSession?.last,0)}</b><small style={{color:tone(num(futuresData.nightSession?.changePct))}}>{num(futuresData.nightSession?.changePct)===null?'未取得有效夜盤報價':(num(futuresData.nightSession?.changePct)>0?'+':'')+fmt(futuresData.nightSession?.changePct,2)+'%'}</small><small style={{display:'block',color:'#91a1b8',marginTop:3}}>{futuresData.nightSession?.timestamp?new Date(futuresData.nightSession.timestamp).toLocaleTimeString('zh-TW'):'時間戳未提供'}</small></div>
