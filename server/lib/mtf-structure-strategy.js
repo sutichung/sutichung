@@ -124,7 +124,8 @@ function simulate(bars,fs,htf,start,end,costs){
 function runMtfStrategy(intraday,daily,costs={}){
   try{validate(intraday,'4h');validate(daily,'1d');}catch(e){return {status:'invalid_data',error:e.message};}
   const market=costs.market||'crypto';
-  const config={feeBps:market==='crypto'?10:14.25,slippageBps:market==='crypto'?5:10,sellTaxBps:market==='crypto'?0:30,annualization:market==='crypto'?365:252,...costs};
+  const barsPerYear=market==='crypto'?2190:market==='us-stock'?410:284;
+  const config={feeBps:market==='crypto'?10:14.25,slippageBps:market==='crypto'?5:10,sellTaxBps:market==='crypto'?0:30,annualization:barsPerYear,...costs};
   for(const key of ['feeBps','slippageBps','sellTaxBps','annualization'])if(!Number.isFinite(Number(config[key]))||Number(config[key])<0||(key==='annualization'&&Number(config[key])===0))return {status:'invalid_costs',error:'MTF 交易成本與年化參數無效'};
   if(intraday.length<220||daily.length<200)return {status:'insufficient_data',error:'MTF 至少需要 220 根 4h K 線與 200 根已完成日線 K 線'};
   const bars=intraday.map(x=>({time:x.time??x.openTime,open:+x.open,high:+x.high,low:+x.low,close:+x.close,volume:+x.volume}));
