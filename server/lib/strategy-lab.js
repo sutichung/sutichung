@@ -106,7 +106,7 @@ function runStrategyLab(input, options={}) {
   const candles=checked.rows;
   const market=options.market||'tw-stock';
   const defaults=market==='crypto'?{feeBps:10,slippageBps:5,sellTaxBps:0}:market==='us-stock'?{feeBps:1,slippageBps:5,sellTaxBps:0}:{feeBps:14.25,slippageBps:10,sellTaxBps:30};
-  const costs={...defaults,...options};
+  const costs={...defaults,...Object.fromEntries(Object.entries(options).filter(([,value])=>value!==undefined))};
   for(const key of ['feeBps','slippageBps','sellTaxBps'])if(!finite(costs[key])||Number(costs[key])<0||Number(costs[key])>1000)return {status:'invalid_costs',error:'交易成本參數必須介於 0 到 1000 bps',strategies:[]};
   const split=Math.floor(candles.length*0.6);
   const trainStart=60,trainEnd=split, testStart=split,testEnd=candles.length;
