@@ -2,7 +2,7 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const {runStrategyLab,validateCandles}=require('../lib/strategy-lab');
-const {dailyTrendMap}=require('../lib/mtf-structure-strategy');
+const {dailyTrendMap,runMtfStrategy}=require('../lib/mtf-structure-strategy');
 
 function candles(n=240,mode='trend'){
  let price=100;
@@ -98,4 +98,13 @@ test('strategy lab adds MTF structure strategy only when higher-timeframe candle
  assert.equal(withMtf.strategyCount,9);
  const withoutMtf=runStrategyLab(ltf,{market:'crypto'});
  assert.equal(withoutMtf.strategyCount,8);
+});
+
+test('MTF strategy rejects missing volume and timestamps in either timeframe',()=>{
+ const intraday=Array.from({length:220},(_,i)=>{const close=100+i*.01;return {time:new Date(Date.UTC(2025,0,1)+i*4*60*60*1000).toISOString(),open:close,high:close+1,low:close-1,close,volume:100};});
+ const daily=Array.from({length:200},(_,i)=>{const close=100+i*.01;return {time:new Date(Date.UTC(2025,0,1)+i*86400000).toISOString(),open:close,high:close+1,low:close-1,close,volume:1000};});
+ const missingVolume=intraday.map(x=>({...x}));missingVolume[10].volume=null;
+ assert.equal(runMtfStrategy(missingVolume,daily,{feeBps:10,slippageBps:5,sellTaxBps:0,annualization:365}).status,'invalid_data');
+ const missingDailyTime=daily.map(x=>({...x}));missingDailyTime[10].time=null;
+ assert.equal(runMtfStrategy(intraday,missingDailyTime,{feeBps:10,slippageBps:5,sellTaxBps:0,annualization:365}).status,'invalid_data');
 });
