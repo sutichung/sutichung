@@ -48,3 +48,9 @@ test('missing trade timestamps and explicit null cost stay missing or derive fro
   assert.equal(trade.timestamp, null);
   assert.equal(trade.quoteValue, 200);
 });
+
+test('unsupported exchanges and malformed symbols fail closed', async () => {
+  const { fetchMicrostructure } = require('../lib/crypto-microstructure');
+  await assert.rejects(() => fetchMicrostructure({ exchange: 'Unknown', symbol: 'BTCUSDT' }), /unsupported_exchange/);
+  await assert.rejects(() => fetchMicrostructure({ exchange: 'Binance', symbol: '../../secret' }), /invalid_symbol/);
+});
