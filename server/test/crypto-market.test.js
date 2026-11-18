@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {buildQuoteRow,mapLimit}=require('../lib/crypto-market');
+const {buildQuoteRow,mapLimit,normalizeKlines}=require('../lib/crypto-market');
 
 test('crypto quote rows reject missing, zero and invalid prices',()=>{
   assert.equal(buildQuoteRow('Binance','spot','BTCUSDT','BTC','USDT',null,0,0),null);
@@ -49,4 +49,26 @@ test('a genuine zero remains distinguishable from a missing value',()=>{
   assert.equal(row.changePct,0);
   assert.equal(row.quoteVolume,0);
   assert.equal(row.volume,0);
+});
+
+test('crypto candles reject missing timestamp and missing volume rather than creating epoch or zero values',()=>{
+  const rows=[
+    ['1700000000000','100','110','90','105',null],
+    [null,'100','110','90','105','10'],
+    ['1700000002000','100','110','90','105','10']
+  ];
+  const candles=normalizeKlines(rows,'Binance');
+  assert.equal(candles.length,1);
+  assert.equal(candles[0].time,new Date(1700000002000).toISOString());
+  assert.equal(candles[0].volume,10);
+});
+
+test('crypto candle normalization preserves genuine zero volume while rejecting invalid OHLC',()=>{
+  const rows=[
+    ['1700000000000','100','110','90','105','0'],
+    ['1700000001000','100','99','90','105','10']
+  ];
+  const candles=normalizeKlines(rows,'Binance');
+  assert.equal(candles.length,1);
+  assert.equal(candles[0].volume,0);
 });
