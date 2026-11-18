@@ -20,10 +20,22 @@ function parseCandleTime(value){
   return Date.parse(text);
 }
 
+function normalizeCandleTime(value) {
+  if(value===null||value===undefined||value==='')return null;
+  let timestamp;
+  if(typeof value==='number'||/^-?\d+(?:\.\d+)?$/.test(String(value).trim())){
+    const numeric=Number(value);
+    timestamp=Math.abs(numeric)<1e12?numeric*1000:numeric;
+  }else timestamp=Date.parse(String(value));
+  if(!Number.isFinite(timestamp)||timestamp<=0)return null;
+  const date=new Date(timestamp);
+  return Number.isFinite(date.getTime())?date.toISOString():null;
+}
+
 function validateCandles(input) {
   if (!Array.isArray(input) || input.length < 130) return {ok:false,error:'至少需要 130 根有效 OHLCV K 線（含暖機與樣本外區間）'};
   const rows=input.map(x=>({
-    time:x.time??x.openTime??null,
+    time:normalizeCandleTime(x.time??x.openTime??null),
     open:finite(x.open)?Number(x.open):NaN,high:finite(x.high)?Number(x.high):NaN,low:finite(x.low)?Number(x.low):NaN,close:finite(x.close)?Number(x.close):NaN,volume:finite(x.volume)?Number(x.volume):NaN
   }));
   for(let i=0;i<rows.length;i++){
