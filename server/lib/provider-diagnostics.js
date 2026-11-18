@@ -121,19 +121,23 @@ async function diagnoseProviders(env = process.env) {
     }));
   } else checks.push(notConfigured('supabase', 'Supabase Auth API', '缺少 SUPABASE_URL 或 SUPABASE_ANON_KEY'));
   const ai = [
-    ['openrouter', 'OpenRouter 模型目錄 API', env.OPENROUTER_API_KEY, 'https://openrouter.ai/api/v1/models'],
-    ['gemini', 'Gemini 模型目錄 API', env.GEMINI_API_KEY, 'https://generativelanguage.googleapis.com/v1beta/models'],
-    ['groq', 'Groq 模型目錄 API', env.GROQ_API_KEY, 'https://api.groq.com/openai/v1/models']
+    ['openrouter', 'OpenRouter 模型目錄 API', env.OPENROUTER_API_KEY, 'https://openrouter.ai/api/v1/models', 'bearer'],
+    ['gemini', 'Gemini 模型目錄 API', env.GEMINI_API_KEY, 'https://generativelanguage.googleapis.com/v1beta/models', 'google'],
+    ['groq', 'Groq 模型目錄 API', env.GROQ_API_KEY, 'https://api.groq.com/openai/v1/models', 'bearer'],
+    ['openai', 'OpenAI 模型目錄 API', env.OPENAI_API_KEY, 'https://api.openai.com/v1/models', 'bearer'],
+    ['cloudflare', 'Cloudflare Workers AI 模型目錄 API', env.CLOUDFLARE_API_TOKEN, 'https://api.cloudflare.com/client/v4/accounts/' + encodeURIComponent(env.CLOUDFLARE_ACCOUNT_ID || '') + '/ai/models/search', 'cloudflare']
   ];
-  for (const [id, label, key, endpoint] of ai) {
-    if (!key) { checks.push(notConfigured(id, label, 'Render 尚未設定對應 API Key')); continue; }
+  for (const [id, label, key, endpoint, authType] of ai) {
+    if (!key || (id === 'cloudflare' && !env.CLOUDFLARE_ACCOUNT_ID)) { checks.push(notConfigured(id, label, 'Render 缺少此服務所需的 API Key 或 Account ID')); continue; }
     checks.push(probe(id, label, async () => {
       const headers = { accept: 'application/json' };
-      if (id === 'gemini') headers['x-goog-api-key'] = key; else headers.Authorization = 'Bearer ' + key;
+      if (authType === 'google') headers['x-goog-api-key'] = key;
+      else headers.Authorization = 'Bearer ' + key;
       const { response, body } = await request(endpoint, { headers });
       if (!response.ok) throw new Error('upstream_http_' + response.status);
       const payload = JSON.parse(body);
       const count = Array.isArray(payload.data) ? payload.data.length : Array.isArray(payload.models) ? payload.models.length : null;
+      if (id === 'cloudflare' && payload.success === false) throw new Error(String(payload.errors?.[0]?.message || 'Cloudflare API 回報失敗'));
       return { httpStatus: response.status, dataCount: count, message: '模型目錄端點及 API Key 驗證成功；未呼叫生成服務、不產生推論費用' };
     }));
   }
