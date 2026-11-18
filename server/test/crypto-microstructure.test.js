@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { normalizeBook, normalizeTrades } = require('../lib/crypto-microstructure');
+const { normalizeBook, normalizeTrades, getJsonFallback } = require('../lib/crypto-microstructure');
 
 test('order book computes spread and depth imbalance from valid levels', () => {
   const book = normalizeBook('test', [[101, 8], [100, 2]], [[103, 4], [104, 1]], null, 10);
@@ -102,4 +102,19 @@ test('exchange timestamp is sourced from the order book snapshot timestamp', () 
   const timestamp = 1700000000123;
   const book = normalizeBook('Bybit', [[100, 2]], [[101, 2]], timestamp, 10);
   assert.equal(book.timestamp, new Date(timestamp).toISOString());
+});
+
+test('Bybit official alternate host fallback records the successful endpoint',async()=>{
+ const original=global.fetch;const calls=[];
+ global.fetch=async url=>{
+  calls.push(String(url));
+  if(String(url).includes('api.bybit.com'))return {ok:false,status:403,json:async()=>({})};
+  return {ok:true,status:200,json:async()=>({retCode:0})};
+ };
+ try{
+  const result=await getJsonFallback(['https://api.bybit.com/v5/market/time','https://api.bytick.com/v5/market/time']);
+  assert.equal(result.base,'https://api.bytick.com');
+  assert.equal(result.data.retCode,0);
+  assert.equal(calls.length,2);
+ }finally{global.fetch=original;}
 });
