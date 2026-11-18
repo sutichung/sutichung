@@ -37,6 +37,7 @@ async function get(endpoint){
  const research=buildResearchLists(rows,30);
  const date=new Date().toISOString().slice(0,10);
  const report={
+  marketOpen:true,
   generatedAt:new Date().toISOString(),
   scanTimestamp:scan.timestamp||null,
   source:scan.source||null,
