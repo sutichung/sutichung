@@ -671,12 +671,13 @@ async function route(req,res){
         const isIndex=String(row.type||'').toUpperCase()==='INDEX',lastPrice=Number(row.lastPrice),closePrice=Number(row.closePrice);
         const price=isIndex?(Number.isFinite(closePrice)&&closePrice>0?closePrice:null):(!row.isTrial&&Number.isFinite(lastPrice)&&lastPrice>0?lastPrice:null);
         const hasPrice=price!==null,delayed=!hasPrice||!quoteTime||!Number.isFinite(Date.parse(quoteTime))||Date.now()-Date.parse(quoteTime)>5*60*1000||Date.parse(quoteTime)-Date.now()>60000;
-        const change=Number(row.changePercent),volume=Number(row.tradeVolume);
+        const rawChange=row.changePercent,rawVolume=row.tradeVolume,change=rawChange!==null&&rawChange!==undefined&&rawChange!==''?Number(rawChange):NaN,volume=rawVolume!==null&&rawVolume!==undefined&&rawVolume!==''?Number(rawVolume):NaN;
         data[String(row.symbol)]={symbol:String(row.symbol),name:row.name||String(row.symbol),type:row.type||'EQUITY',price,changePct:Number.isFinite(change)?change:null,volume:Number.isFinite(volume)&&volume>=0?volume:null,timestamp:quoteTime,sourceTimestamp:quoteTime,market:payload.market,source:'Fugle snapshot quotes',delayed,quoteType:isIndex?'index-snapshot':row.isTrial?'trial':!hasPrice?'no-trade':delayed?'stale-snapshot':'realtime'};}}
         const quoteRows=Object.values(data),delayedCount=quoteRows.filter(x=>x.delayed).length,freshCount=quoteRows.length-delayedCount;
         const returnedMarkets=payloads.map(x=>x.market),unavailableMarkets=markets.filter(m=>!returnedMarkets.includes(m));
         const indexCount=quoteRows.filter(x=>x.type==='INDEX').length;
-        return {data,source:'Fugle TSE／OTC／ESB／TIB 官方行情快照（股票與指數分型；逐檔依來源時間戳分級）',timestamp:now(),delayed:quoteRows.length>0&&freshCount===0,mixedFreshness:delayedCount>0&&freshCount>0,delayedCount,freshCount,quoteCount:quoteRows.length,indexCount,markets:returnedMarkets,unavailableMarkets,coverage:{requestedMarkets:markets.length,returnedMarkets:returnedMarkets.length,partial:unavailableMarkets.length>0}};
+        const marketErrors=markets.flatMap((market,i)=>settled[i].status==='rejected'?[{market,error:settled[i].reason?.message||'API error'}]:[]);
+        return {data,source:'Fugle TSE／OTC／ESB／TIB 官方行情快照（股票與指數分型；逐檔依來源時間戳分級）',timestamp:now(),delayed:quoteRows.length>0&&freshCount===0,mixedFreshness:delayedCount>0&&freshCount>0,delayedCount,freshCount,quoteCount:quoteRows.length,indexCount,markets:returnedMarkets,unavailableMarkets,marketErrors,coverage:{requestedMarkets:markets.length,returnedMarkets:returnedMarkets.length,partial:unavailableMarkets.length>0}};
       }
       if(process.env.MARKET_REALTIME_URL){
         const x=await external('MARKET_REALTIME_URL','');
