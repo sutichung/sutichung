@@ -62,6 +62,7 @@ jobs:
       - name: Select one-hour-old scan snapshot
         env:
           GH_TOKEN: ${{ github.token }}
+          MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
         run: |
           mkdir -p reports previous-report
           curl --fail --silent --show-error -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" -o /tmp/artifacts.json
@@ -74,7 +75,15 @@ jobs:
             unzip -oq /tmp/intraday.zip -d previous-report
             PREVIOUS_REPORT=$(find previous-report -name 'intraday-snapshot.json' | head -n 1)
             if [ -z "$PREVIOUS_REPORT" ]; then echo "Intraday snapshot artifact is missing its JSON payload" >&2; exit 1; fi
-            MARKET_APP_URL=https://taiwan-stock-hunter-o3tt.onrender.com node server/jobs/evaluate-outcomes.js "$PREVIOUS_REPORT" 1h 0
+            node server/jobs/evaluate-outcomes.js "$PREVIOUS_REPORT" 1h 0
+          fi
+          if compgen -G 'reports/outcome-review-1h-*.json' > /dev/null; then
+            OIDC_TOKEN=$(curl --fail --silent --show-error --get --data-urlencode "audience=taiwan-stock-hunter-automation" "$ACTIONS_ID_TOKEN_REQUEST_URL" -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r '.value')
+            test -n "$OIDC_TOKEN" && test "$OIDC_TOKEN" != "null" || { echo "Unable to obtain GitHub Actions OIDC token"; exit 1; }
+            echo "::add-mask::$OIDC_TOKEN"
+            for report in reports/outcome-review-1h-*.json; do
+              curl --fail --silent --show-error --max-time 30 -H "Authorization: Bearer $OIDC_TOKEN" -H "Content-Type: application/json" --data-binary @"$report" "$MARKET_APP_URL/api/automation/research/outcomes"
+            done
           fi
       - uses: actions/upload-artifact@v4
         with:
@@ -162,6 +171,14 @@ jobs:
             if [ -z "$PREVIOUS_REPORT" ]; then echo "Missing close report inside $horizon artifact" >&2; exit 1; fi
             node server/jobs/evaluate-outcomes.js "$PREVIOUS_REPORT" "$horizon" "$sessions"
           done
+          if compgen -G 'reports/outcome-review-*.json' > /dev/null; then
+            OIDC_TOKEN=$(curl --fail --silent --show-error --get --data-urlencode "audience=taiwan-stock-hunter-automation" "$ACTIONS_ID_TOKEN_REQUEST_URL" -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r '.value')
+            test -n "$OIDC_TOKEN" && test "$OIDC_TOKEN" != "null" || { echo "Unable to obtain GitHub Actions OIDC token"; exit 1; }
+            echo "::add-mask::$OIDC_TOKEN"
+            for report in reports/outcome-review-*.json; do
+              curl --fail --silent --show-error --max-time 30 -H "Authorization: Bearer $OIDC_TOKEN" -H "Content-Type: application/json" --data-binary @"$report" "$MARKET_APP_URL/api/automation/research/outcomes"
+            done
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: taiwan-market-outcome-review-${{ github.run_id }}
