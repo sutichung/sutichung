@@ -5,6 +5,7 @@
 // for distributed enforcement and volumetric DDoS protection.
 const buckets = new Map();
 let calls = 0;
+const telemetry = { requests:0, blocked:0, probes:0, rateLimited:0, byRule:{}, lastEventAt:null };
 
 const RULES = [
   { match: p => /^\/api\/auth\/phone\/start$/.test(p), limit: 3, windowMs: 10 * 60 * 1000, name: 'phone_otp_start' },
@@ -35,6 +36,9 @@ function setSecurityHeaders(res) {
 }
 
 function reject(res, status, error, retryAfterSeconds) {
+  telemetry.blocked += 1;
+  if (error === 'rate_limited') telemetry.rateLimited += 1;
+  telemetry.lastEventAt = new Date().toISOString();
   const headers = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' };
   if (retryAfterSeconds) headers['retry-after'] = String(retryAfterSeconds);
   res.writeHead(status, headers);
@@ -50,6 +54,7 @@ function consume(key, limit, windowMs, now) {
 }
 
 function applyFirewall(req, res) {
+  telemetry.requests += 1;
   setSecurityHeaders(res);
 
   const rawUrl = String(req.url || '');
@@ -64,6 +69,7 @@ function applyFirewall(req, res) {
 
   // Common automated probes have no valid route in this application.
   if (/\/(?:\.env|\.git|wp-admin|wp-login\.php|phpmyadmin|vendor\/phpunit)(?:\/|$)/i.test(pathname)) {
+    telemetry.probes += 1;
     reject(res, 404, 'not_found');
     return false;
   }
@@ -83,6 +89,7 @@ function applyFirewall(req, res) {
   const now = Date.now();
   const key = clientIp(req) + ':' + rule.name;
   const result = consume(key, rule.limit, rule.windowMs, now);
+  telemetry.byRule[rule.name] = (telemetry.byRule[rule.name] || 0) + 1;
 
   // Keep the in-memory limiter bounded on long-lived instances.
   if ((++calls % 1024) === 0 || buckets.size > 20000) {
@@ -109,4 +116,6 @@ function applyFirewall(req, res) {
   return true;
 }
 
-module.exports = { applyFirewall };
+function getTelemetry() { return { ...telemetry, byRule:{...telemetry.byRule}, scope:'per-instance in-memory counters; resets on restart; not a distributed WAF' }; }
+
+module.exports = { applyFirewall, getTelemetry };
