@@ -2,6 +2,14 @@ name: Production smoke
 on:
   push:
     branches: [main]
+    paths:
+      - 'server/**'
+      - 'src/**'
+      - 'public/**'
+      - 'package.json'
+      - 'vite.config.mjs'
+      - 'index.html'
+      - 'Dockerfile'
 permissions:
   contents: read
   id-token: write
@@ -62,6 +70,10 @@ jobs:
           const crypto = JSON.parse(fs.readFileSync('/tmp/crypto.json', 'utf8'));
           const providers = JSON.parse(fs.readFileSync('/tmp/providers.json', 'utf8'));
           const exchangeChecks = (providers.checks || []).filter(x => ['binance','bybit','okx','coinbase','kraken'].includes(x.id));
+          const providerFailures = (providers.checks || []).filter(x => ['auth_error','permission_error','rate_limited','timeout','error','upstream_error','http_error','endpoint_error'].includes(x.status));
+          const listedCount = Number(market.listedCount || 0);
+          const quoteCount = Number(market.quoteCount || 0);
+          const taiwanConnected = market.ok === true && listedCount > 0;
           const officialUs = (providers.checks || []).find(x => x.id === 'us-equities-official') || null;
           const connectedExchanges = Number(crypto.summary?.connectedExchangeCount || 0);
           const report = {
@@ -69,10 +81,10 @@ jobs:
             commit: health.commit,
             application: { ok: health.ok === true, branch: health.branch, mode: health.mode },
             taiwan: {
-              ok: market.ok === true,
+              ok: taiwanConnected,
               source: market.source || null,
-              listedCount: Number(market.listedCount || 0),
-              quoteCount: Number(market.quoteCount || 0),
+              listedCount,
+              quoteCount,
               serverTime: market.serverTime || null,
               error: market.error || null
             },
@@ -84,14 +96,20 @@ jobs:
               exchanges: crypto.exchanges || []
             },
             cryptoProviderChecks: exchangeChecks,
+            providerFailures,
             usOfficialEntitlement: officialUs,
-            warnings: officialUs?.status === 'not_configured' ? ['us_official_equities_feed_not_configured'] : []
+            warnings: [
+              ...(officialUs?.status === 'not_configured' ? ['us_official_equities_feed_not_configured'] : []),
+              ...(quoteCount === 0 ? ['taiwan_market_has_no_live_quotes_at_check_time'] : []),
+              ...((crypto.exchanges || []).some(x => x.status !== 'connected') ? ['some_crypto_exchanges_unavailable'] : [])
+            ]
           };
           fs.writeFileSync('reports/production-smoke.json', JSON.stringify(report, null, 2) + '\n');
           console.log(JSON.stringify(report, null, 2));
           if (!report.application.ok) throw new Error('production_health_not_ok');
-          if (!report.taiwan.ok || report.taiwan.listedCount < 1 || report.taiwan.quoteCount < 1) throw new Error('official_taiwan_market_data_unavailable');
+          if (!report.taiwan.ok || report.taiwan.listedCount < 1) throw new Error('official_taiwan_market_source_unavailable');
           if (!report.crypto.ok) throw new Error('all_crypto_exchange_market_data_unavailable');
+          if (report.providerFailures.length) throw new Error('one_or_more_configured_providers_failed');
           NODE
       - uses: actions/upload-artifact@v4
         if: always()
