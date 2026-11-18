@@ -7,12 +7,13 @@ const { indicators } = require('./lib/indicators');
 const { scoreStock } = require('./lib/scoring');
 const { getTradingReadiness } = require('./lib/trading-readiness');
 const { buildAiCommittee } = require('./lib/agents');
-const { applyFirewall } = require('./lib/firewall');
+const { applyFirewall, getTelemetry } = require('./lib/firewall');
 const antColony = require('./lib/ant-colony');
 const { loadMarket: loadUsMarket, getChart: getUsChart, searchSymbols: searchUsSymbols, getUniversePage: getUsUniversePage } = require('./lib/us-market');
 const cryptoMarket = require('./lib/crypto-market');
 const { assessMarketRisk } = require('./lib/market-risk');
 const globalFinance = require('./lib/global-finance');
+const globalIntelligence = require('./lib/intelligence');
 
 const PORT = Number(process.env.PORT || 8787);
 const FINMIND_BASE = process.env.FINMIND_BASE || 'https://api.finmindtrade.com/api/v4/data';
@@ -983,6 +984,24 @@ async function route(req,res){
   if(u.pathname==='/api/finance/fx'){
     const result=await safeLoad('global-finance-fx',60*60*1000,globalFinance.loadFx,e=>({rates:[],errors:[],base:'EUR',source:'unavailable',fetchedAt:now(),error:e.message}));
     return json(res,result.error?503:200,result);
+  }
+  if(u.pathname==='/api/intelligence/overview'){
+    const results=await Promise.allSettled([
+      safeLoad('news',TTL.news,async()=>{
+        if(process.env.MARKET_NEWS_URL){const x=await external('MARKET_NEWS_URL','');return {data:Array.isArray(x.data)?x.data:[],source:x.source||'Configured news provider',timestamp:x.timestamp||now()};}
+        if(FINMIND_TOKEN){const d=new Date();d.setDate(d.getDate()-3);const rows=await finmind('TaiwanStockNews',{start_date:d.toISOString().slice(0,10)},20000);const data=rows.map(r=>({title:r.title||'',summary:r.description||'',url:r.link||'',source:r.source||'FinMind',publishedAt:r.date||''})).filter(x=>x.title);if(data.length)return {data,source:'FinMind',timestamp:now()};}
+        const rows=await fetchJson('https://openapi.twse.com.tw/v1/news/newsList',12000);
+        return {data:(rows||[]).map(r=>{const pick=re=>{const k=Object.keys(r).find(key=>re.test(key));return k?r[k]:'';};return {title:String(pick(/title|標題|主旨/i)||''),summary:String(pick(/content|摘要|內容/i)||''),url:String(pick(/url|link|網址|連結/i)||''),source:'臺灣證券交易所公告',publishedAt:String(pick(/date|時間|日期/i)||'')};}).filter(x=>x.title).slice(0,50),source:'TWSE OpenAPI',timestamp:now()};
+      },e=>({data:[],source:'unavailable',error:e.message,timestamp:now()})),
+      safeLoad('crypto-news',300000,cryptoMarket.loadNews,e=>({data:[],source:'unavailable',error:e.message,timestamp:now()})),
+      safeLoad('global-finance-fx',60*60*1000,globalFinance.loadFx,e=>({rates:[],errors:[],base:'EUR',source:'unavailable',fetchedAt:now(),error:e.message}))
+    ]);
+    const market=results[0].status==='fulfilled'?results[0].value:{data:[]};
+    const crypto=results[1].status==='fulfilled'?results[1].value:{data:[]};
+    const fx=results[2].status==='fulfilled'?results[2].value:null;
+    const overview=globalIntelligence.buildOverview({marketNews:market.data||[],cryptoNews:crypto.data||[],fx,firewall:getTelemetry()});
+    overview.fetchStatus={marketNews:market.source||'unavailable',cryptoNews:crypto.source||'unavailable',fx:fx?.source||'unavailable'};
+    return json(res,200,overview);
   }
   // In production, serve the compiled React app from the same origin as the API.
   if (process.env.NODE_ENV === 'production') {
