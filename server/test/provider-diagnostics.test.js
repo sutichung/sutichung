@@ -24,8 +24,9 @@ test('provider diagnostics verify actual public crypto ticker responses and expo
     ['openapi.twse.com.tw', [{ Code: '2330' }]],
     ['data-api.ecb.europa.eu', 'KEY,OBS_VALUE' + String.fromCharCode(10) + 'X,1.1'],
     ['www.bankofcanada.ca/valet/observations/FXCADUSD', { observations: [{ d: '2026-11-17', FXCADUSD: { v: '0.6997' } }] }],
-    ['api.binance.com', { symbol: 'BTCUSDT', price: '65000' }],
-    ['api.bybit.com', { retCode: 0, result: { list: [{ symbol: 'BTCUSDT', lastPrice: '65000' }] } }],
+    ['data-api.binance.vision', { symbol: 'BTCUSDT', price: '65000' }],
+    ['fapi.binance.com', { symbol: 'BTCUSDT', markPrice: '65000' }],
+    ['api.bytick.com', { retCode: 0, result: { list: [{ symbol: 'BTCUSDT', lastPrice: '65000' }] } }],
     ['www.okx.com', { code: '0', data: [{ instId: 'BTC-USDT', last: '65000' }] }],
     ['api.exchange.coinbase.com', { price: '65000', time: '2026-11-18T15:00:00Z' }],
     ['api.kraken.com', { error: [], result: { XXBTZUSD: { c: ['65000', '1'] } } }]
@@ -38,7 +39,7 @@ test('provider diagnostics verify actual public crypto ticker responses and expo
   };
   try {
     const result = await diagnoseProviders({});
-    for (const id of ['binance', 'bybit', 'okx', 'coinbase', 'kraken']) {
+    for (const id of ['binance', 'binance-futures', 'bybit', 'okx', 'coinbase', 'kraken']) {
       const check = result.checks.find(x => x.id === id);
       assert.equal(check.status, 'connected', id + ' should validate a real quote-shaped response');
       assert.equal(check.dataCount, 1);
