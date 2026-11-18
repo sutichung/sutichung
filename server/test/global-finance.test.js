@@ -55,7 +55,7 @@ test('official Bank of Canada Valet FX is included as a separate daily-average c
     return {ok:true,status:200,text:async()=>[
       'FREQ,CURRENCY,CURRENCY_DENOM,EXR_TYPE,EXR_SUFFIX,TIME_PERIOD,OBS_VALUE',
       'D,USD,EUR,SP00,A,2026-11-17,1.15'
-    ].join('\\n')};
+    ].join('\n')};
   };
   try{
     const result=await loadFx();
