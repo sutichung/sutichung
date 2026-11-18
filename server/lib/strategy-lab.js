@@ -41,23 +41,22 @@ function signalFor(id, current, previous, candle) {
   };
 }
 
-function summarize(trades, dailyReturns, startEquity=1) {
+function summarize(trades, dailyReturns) {
   if(!trades.length)return {status:'no_trades',trades:0,winRatePct:null,netReturnPct:null,maxDrawdownPct:null,sharpe:null,sortino:null,profitFactor:null,expectancyPct:null};
   const wins=trades.filter(x=>x.returnPct>0),losses=trades.filter(x=>x.returnPct<0);
-  let equity=startEquity,peak=equity,maxDd=0;
-  for(const trade of trades){equity*=1+trade.returnPct/100;peak=Math.max(peak,equity);maxDd=Math.max(maxDd,(peak-equity)/peak*100);}
+  let equity=1,peak=1,maxDd=0;
+  for(const value of dailyReturns){equity*=1+value;peak=Math.max(peak,equity);maxDd=Math.max(maxDd,(peak-equity)/peak*100);}
   const avg=trades.reduce((s,x)=>s+x.returnPct,0)/trades.length;
   const grossWin=wins.reduce((s,x)=>s+x.returnPct,0),grossLoss=Math.abs(losses.reduce((s,x)=>s+x.returnPct,0));
   const mean=dailyReturns.length?dailyReturns.reduce((s,x)=>s+x,0)/dailyReturns.length:0;
   const variance=dailyReturns.length>1?dailyReturns.reduce((s,x)=>s+(x-mean)**2,0)/(dailyReturns.length-1):0;
   const sd=Math.sqrt(variance),down=dailyReturns.filter(x=>x<0),downDev=down.length?Math.sqrt(down.reduce((s,x)=>s+x*x,0)/down.length):0;
-  const net=(equity/startEquity-1)*100;
-  return {status:'ok',trades:trades.length,wins:wins.length,losses:losses.length,winRatePct:round(wins.length/trades.length*100),netReturnPct:round(net),maxDrawdownPct:round(maxDd),sharpe:sd?round(mean/sd*Math.sqrt(252),3):null,sortino:downDev?round(mean/downDev*Math.sqrt(252),3):null,profitFactor:grossLoss?round(grossWin/grossLoss,3):grossWin?null:0,expectancyPct:round(avg),averageHoldBars:round(trades.reduce((s,x)=>s+x.holdBars,0)/trades.length,1)};
+  return {status:'ok',trades:trades.length,wins:wins.length,losses:losses.length,winRatePct:round(wins.length/trades.length*100),netReturnPct:round((equity-1)*100),maxDrawdownPct:round(maxDd),sharpe:sd?round(mean/sd*Math.sqrt(252),3):null,sortino:downDev?round(mean/downDev*Math.sqrt(252),3):null,profitFactor:grossLoss?round(grossWin/grossLoss,3):grossWin?null:0,expectancyPct:round(avg),averageHoldBars:round(trades.reduce((s,x)=>s+x.holdBars,0)/trades.length,1)};
 }
 
 function runStrategy(id, candles, start, end, costs) {
   const trades=[],dailyReturns=[];
-  let position=null,entryIndex=-1,entryPrice=0,equity=1,previousClose=null;
+  let position=false,entryIndex=-1,entryPrice=0;
   const entryCost=(costs.feeBps+costs.slippageBps)/10000;
   const exitCost=(costs.feeBps+costs.slippageBps+costs.sellTaxBps)/10000;
   for(let i=start;i<end-1;i++){
@@ -66,29 +65,31 @@ function runStrategy(id, candles, start, end, costs) {
     if(!current||!previous)continue;
     const signal=signalFor(id,current,previous,candles[i]);
     const execution=candles[i+1];
-    let barReturn=previousClose&&candles[i].close>0?candles[i].close/previousClose-1:0;
+    let barReturn=0;
     if(position){
       if(signal.exit){
+        barReturn=execution.open/candles[i].close-1;
+        barReturn=(1+barReturn)*(1-exitCost)-1;
         const gross=execution.open/entryPrice-1;
         const net=(1+gross)*(1-entryCost)*(1-exitCost)-1;
-        const trade={returnPct:net*100,holdBars:i+1-entryIndex};
-        trades.push(trade);
-        equity*=1+net;
-        position=null;
+        trades.push({returnPct:net*100,holdBars:i+1-entryIndex});
+        position=false;
+      }else{
+        barReturn=execution.close/candles[i].close-1;
       }
     }else if(signal.enter){
       position=true;entryIndex=i+1;entryPrice=execution.open;
-      equity*=1-entryCost;
+      barReturn=execution.close/execution.open-1;
+      barReturn=(1+barReturn)*(1-entryCost)-1;
     }
     dailyReturns.push(barReturn);
-    previousClose=candles[i].close;
   }
   if(position){
     const last=candles[end-1],gross=last.close/entryPrice-1;
     const net=(1+gross)*(1-entryCost)*(1-exitCost)-1;
     trades.push({returnPct:net*100,holdBars:end-entryIndex});
   }
-  return summarize(trades,dailyReturns,equity);
+  return summarize(trades,dailyReturns);
 }
 
 function classifyRegime(candles) {
