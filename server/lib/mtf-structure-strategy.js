@@ -110,7 +110,7 @@ function simulate(bars,fs,htf,start,end,costs){
     returns.push(prevEquity>0?eq/prevEquity-1:0);
     peak=Math.max(peak,eq);maxDD=Math.min(maxDD,eq/peak-1);
   }
-  if(qty>0){const last=bars[end-1],fill=last.close*(1-slip),proceeds=qty*fill*(1-fee-tax);trades.push({pnl:proceeds-entryCost,returnPct:(proceeds/entryCost-1)*100,holdBars:end-1-entryIndex,periodEndClose:true});cash+=proceeds;const prior=returns.length?cash/(1+returns.at(-1)):cash;const finalEquity=cash;peak=Math.max(peak,finalEquity);maxDD=Math.min(maxDD,finalEquity/peak-1);}
+  if(qty>0){const last=bars[end-1],preLiquidationEquity=cash+qty*last.close,fill=last.close*(1-slip),proceeds=qty*fill*(1-fee-tax);trades.push({pnl:proceeds-entryCost,returnPct:(proceeds/entryCost-1)*100,holdBars:end-1-entryIndex,periodEndClose:true});cash+=proceeds;returns.push(preLiquidationEquity>0?cash/preLiquidationEquity-1:0);peak=Math.max(peak,cash);maxDD=Math.min(maxDD,cash/peak-1);}
   const wins=trades.filter(t=>t.pnl>0),losses=trades.filter(t=>t.pnl<0),avg=mean(returns)||0,sd=returns.length?Math.sqrt(mean(returns.map(x=>(x-avg)**2))):0,down=returns.length?Math.sqrt(mean(returns.map(x=>Math.min(0,x)**2))):0;
   const gw=wins.reduce((s,t)=>s+t.pnl,0),gl=-losses.reduce((s,t)=>s+t.pnl,0);
   return {status:trades.length?'ok':'no_trades',trades:trades.length,winRatePct:trades.length?round(wins.length/trades.length*100):null,netReturnPct:round((cash/100000-1)*100),maxDrawdownPct:round(Math.abs(maxDD)*100),sharpe:sd?round(avg/sd*Math.sqrt(costs.annualization),3):null,profitFactor:gl?round(gw/gl,3):gw?null:0,expectancyPct:trades.length?round(mean(trades.map(t=>t.returnPct))):null,finalEquity:round(cash),tradeDetails:trades};
