@@ -23,8 +23,8 @@ function parseAgentJson(raw) {
 async function runAgent(provider, prompt, env) {
   const configs = {
     gemini: { key: env.GEMINI_API_KEY, model: env.GEMINI_MODEL || 'gemini-3.8-flash' },
-    grok: { key: env.XAI_API_KEY, model: env.XAI_MODEL || 'grok-4.7' },
-    deepseek: { key: env.DEEPSEEK_API_KEY, model: env.DEEPSEEK_MODEL || 'deepseek-flash' },
+    groq: { key: env.GROQ_API_KEY, model: env.GROQ_MODEL || 'openai/gpt-oss-20b' },
+    cloudflare: { key: env.CLOUDFLARE_API_TOKEN && env.CLOUDFLARE_ACCOUNT_ID ? env.CLOUDFLARE_API_TOKEN : '', accountId: env.CLOUDFLARE_ACCOUNT_ID, model: env.CLOUDFLARE_AI_MODEL || '@cf/meta/llama-3.3-70b-instruct-fp8-fast' },
     openai: { key: env.OPENAI_API_KEY, model: env.OPENAI_MODEL || 'gpt-6-luna' }
   };
   const config = configs[provider];
@@ -67,8 +67,9 @@ async function runAgent(provider, prompt, env) {
         }
       } else {
         const body = { model: config.model, messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }], temperature: 0.2, max_tokens: 1100, response_format: { type: 'json_object' } };
-        if (provider === 'deepseek') body.thinking = { type: 'disabled' };
-        const url = provider === 'grok' ? 'https://api.x.ai/v1/chat/completions' : 'https://api.deepseek.com/chat/completions';
+        const url = provider === 'groq'
+          ? 'https://api.groq.com/openai/v1/chat/completions'
+          : 'https://api.cloudflare.com/client/v4/accounts/' + encodeURIComponent(config.accountId) + '/ai/v1/chat/completions';
         const result = await postJson(url, body, { Authorization: 'Bearer ' + config.key });
         raw = result.choices && result.choices[0] && result.choices[0].message && result.choices[0].message.content || '';
         if (!raw) throw new Error(provider + ' 未回傳分析內容');
@@ -85,7 +86,8 @@ async function runAgent(provider, prompt, env) {
   }
   if (!raw) {
     if (primaryError) return { provider, status: 'error', message: String(primaryError.message || primaryError).slice(0, 220) };
-    return { provider, model: config.model, status: 'not_configured', message: provider === 'openai' ? '尚未設定 OPENAI_API_KEY；ChatGPT 使用獨立 OpenAI API，不會改由其他模型代答' : '尚未設定 ' + provider.toUpperCase() + ' API Key；也未設定 OPENROUTER_API_KEY 免費模型備援' };
+    const missing = provider === 'cloudflare' ? '尚未設定 CLOUDFLARE_ACCOUNT_ID 與 CLOUDFLARE_API_TOKEN' : '尚未設定 ' + provider.toUpperCase() + '_API_KEY';
+    return { provider, model: config.model, status: 'not_configured', message: missing + '；也未設定 OPENROUTER_API_KEY 免費模型備援' };
   }
   let parsed;
   try { parsed = parseAgentJson(raw); }
@@ -187,11 +189,11 @@ async function buildAiCommittee(symbol, options) {
   };
   const roles = {
     gemini: '技術分析專家，重點研判K線型態、SMA/EMA、MACD、RSI、KD、布林通道、ADX、CCI、MFI、ATR、VWAP、支撐壓力與量價結構。',
-    grok: '市場事件與多空情境分析師，重點評估市場環境、波動風險、可能催化因素；未提供新聞時明確說明沒有新聞資料。',
-    deepseek: '籌碼與風險報酬分析師，重點研判外資投信自營商、融資融券、集保大戶散戶比例、估值 PER/PBR、波動度與風險界線。',
+    groq: '市場情境與事件風險分析師，重點評估市場環境、波動風險、可能催化因素；未提供新聞時明確說明沒有新聞資料。',
+    cloudflare: '籌碼與風險報酬分析師，重點研判外資投信自營商、融資融券、集保大戶散戶比例、估值 PER/PBR、波動度與風險界線。',
     openai: '獨立總體與交叉驗證分析師，檢查資料時效、指標是否互相矛盾、估值與風險報酬；提出反方論點，不可沿用其他 Agent 結論。'
   };
-  const providers = ['gemini', 'grok', 'deepseek'];
+  const providers = ['gemini', 'groq', 'cloudflare'];
   const agents = await Promise.all(providers.map(async provider => {
     const prompt = '股票 ' + facts.symbol + ' ' + facts.name + '。你的專長：' + roles[provider] + '\n請只使用以下資料，資料時間不一致時要指出，禁止推測缺漏值。請給出獨立多空評分與可驗證邏輯。\n資料：' + JSON.stringify(facts);
     try { return await runAgent(provider, prompt, options.env || process.env); }
