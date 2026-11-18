@@ -742,7 +742,7 @@ async function route(req,res){
       quotes:stale('snapshot')?.data||{},scan:stale('scan')?.data||{},flows:stale('flows')?.data||{},fundamentals,
       quoteSource:stale('snapshot')?.source||'未取得報價來源',env:process.env
     });
-    const result=u.searchParams.get('refresh')==='1'?await load():await safeLoad(agentCacheKey,10*60*1000,load,e=>({symbol,agents:['gemini','grok','deepseek'].map(provider=>({provider,status:'error',message:e.message})),consensus:null,analysisTime:now()}));
+    const result=u.searchParams.get('refresh')==='1'?await load():await safeLoad(agentCacheKey,10*60*1000,load,e=>({symbol,agents:['gemini','groq','cloudflare'].map(provider=>({provider,status:'error',message:e.message})),consensus:null,analysisTime:now()}));
     return json(res,200,result);
   }
   if(u.pathname.startsWith('/api/market/history/')){
