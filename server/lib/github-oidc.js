@@ -9,6 +9,7 @@ const EXPECTED={
   ref:'refs/heads/main',
   workflow_ref:'sutichung/sutichung/.github/workflows/market-automation.yml@refs/heads/main'
 };
+const ALLOWED_EVENTS=new Set(['schedule','workflow_dispatch']);
 let cachedKeys=null,keysExpiresAt=0;
 
 function decodePart(value){
@@ -34,6 +35,7 @@ async function verifyGitHubActionsToken(token,{fetchImpl=fetch,now=Date.now()}={
     const seconds=Math.floor(now/1000);
     if(claims.iss!==ISSUER||claims.aud!==EXPECTED.aud)return false;
     if(claims.repository!==EXPECTED.repository||claims.ref!==EXPECTED.ref||claims.workflow_ref!==EXPECTED.workflow_ref)return false;
+    if(!ALLOWED_EVENTS.has(claims.event_name))return false;
     if(!Number.isFinite(claims.exp)||claims.exp<seconds-30||!Number.isFinite(claims.iat)||claims.iat>seconds+30)return false;
     if(claims.nbf!=null&&(!Number.isFinite(claims.nbf)||claims.nbf>seconds+30))return false;
     const keys=await signingKeys(fetchImpl,now);
