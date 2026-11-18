@@ -3,13 +3,9 @@ const crypto=require('node:crypto');
 
 const ISSUER='https://token.actions.githubusercontent.com';
 const JWKS_URL=ISSUER+'/.well-known/jwks';
-const EXPECTED={
-  aud:'taiwan-stock-hunter-automation',
-  repository:'sutichung/sutichung',
-  ref:'refs/heads/main',
-  workflow_ref:'sutichung/sutichung/.github/workflows/market-automation.yml@refs/heads/main'
-};
-const ALLOWED_EVENTS=new Set(['schedule','workflow_dispatch']);
+const EXPECTED={aud:'taiwan-stock-hunter-automation',repository:'sutichung/sutichung',ref:'refs/heads/main'};
+const MARKET_WORKFLOW='sutichung/sutichung/.github/workflows/market-automation.yml@refs/heads/main';
+const SMOKE_WORKFLOW='sutichung/sutichung/.github/workflows/production-smoke.yml@refs/heads/main';
 let cachedKeys=null,keysExpiresAt=0;
 
 function decodePart(value){
@@ -34,8 +30,10 @@ async function verifyGitHubActionsToken(token,{fetchImpl=fetch,now=Date.now()}={
     if(header.alg!=='RS256'||typeof header.kid!=='string')return false;
     const seconds=Math.floor(now/1000);
     if(claims.iss!==ISSUER||claims.aud!==EXPECTED.aud)return false;
-    if(claims.repository!==EXPECTED.repository||claims.ref!==EXPECTED.ref||claims.workflow_ref!==EXPECTED.workflow_ref)return false;
-    if(!ALLOWED_EVENTS.has(claims.event_name))return false;
+    if(claims.repository!==EXPECTED.repository||claims.ref!==EXPECTED.ref)return false;
+    const allowedWorkflowEvent=(claims.workflow_ref===MARKET_WORKFLOW&&['schedule','workflow_dispatch'].includes(claims.event_name))||
+      (claims.workflow_ref===SMOKE_WORKFLOW&&claims.event_name==='push');
+    if(!allowedWorkflowEvent)return false;
     if(!Number.isFinite(claims.exp)||claims.exp<seconds-30||!Number.isFinite(claims.iat)||claims.iat>seconds+30)return false;
     if(claims.nbf!=null&&(!Number.isFinite(claims.nbf)||claims.nbf>seconds+30))return false;
     const keys=await signingKeys(fetchImpl,now);
