@@ -28,30 +28,41 @@ function summarize(role, row) {
   if (role === 'scout') {
     const asOf = row.asOf || row.timestamp || row.technicalAsOf || score.asOf || null;
     const ageMs = asOf && Number.isFinite(Date.parse(asOf)) ? Math.max(0, Date.now()-Date.parse(asOf)) : null;
-    return {status: ageMs === null ? 'unknown' : ageMs > 24*60*60*1000 ? 'stale' : 'fresh', asOf, ageMs};
+    return {status: ageMs === null ? 'unknown' : ageMs > 24*60*60*1000 ? 'stale' : 'fresh', asOf, ageMs, score:0};
   }
   if (role === 'technical') {
     if (rsi !== null) reasons.push(rsi >= 50 && rsi <= 70 ? 'RSI 位於偏多區間' : rsi > 70 ? 'RSI 偏熱' : 'RSI 未達偏多區間');
     if (macd !== null) reasons.push(macd > 0 ? 'MACD 動能為正' : 'MACD 動能為負');
     if (volumeRatio !== null) reasons.push(volumeRatio >= 1 ? '量能不低於均量' : '量能低於均量');
+    const scoreValue=(rsi!==null?(rsi>=50&&rsi<=70?1:rsi>70||rsi<40?-1:0):0)+(macd!==null?(macd>0?1:-1):0)+(volumeRatio!==null&&volumeRatio>=1?1:0);
+    return {status:reasons.length?'reviewed':'insufficient',reasons,score:scoreValue};
   } else if (role === 'bull') {
     if (direction.includes('買') || direction.includes('多')) reasons.push('現有評分偏多');
     if (rsi !== null && rsi >= 50 && rsi <= 70) reasons.push('RSI 支持偏多觀察');
     if (macd !== null && macd > 0) reasons.push('動能支持偏多觀察');
+    const scoreValue=(direction.includes('買')||direction.includes('多')?1:0)+(rsi!==null&&rsi>=50&&rsi<=70?1:0)+(macd!==null&&macd>0?1:0);
+    return {status:reasons.length?'reviewed':'insufficient',reasons,score:scoreValue};
   } else if (role === 'bear') {
     if (direction.includes('賣') || direction.includes('空')) reasons.push('現有評分偏空');
     if (rsi !== null && rsi >= 70) reasons.push('RSI 過熱風險');
     if (macd !== null && macd < 0) reasons.push('動能偏弱');
+    const scoreValue=-(direction.includes('賣')||direction.includes('空')?1:0)-(rsi!==null&&rsi>=70?1:0)-(macd!==null&&macd<0?1:0);
+    return {status:reasons.length?'reviewed':'insufficient',reasons,score:scoreValue};
   } else if (role === 'risk') {
     if (atrPct !== null && atrPct > 5) reasons.push('波動幅度偏高');
     if (rsi !== null && (rsi > 80 || rsi < 20)) reasons.push('RSI 極端區間');
     if (row.quoteDelayed || row.delayed) reasons.push('行情可能延遲或過期');
+    const highRisk=(atrPct!==null&&atrPct>5)||(rsi!==null&&(rsi>80||rsi<20))||!!(row.quoteDelayed||row.delayed);
     if (!reasons.length) reasons.push('目前未觸發已知風險規則；不代表無風險');
+    return {status:'reviewed',reasons,highRisk,score:highRisk?-2:0};
   } else if (role === 'auditor') {
     if (score.status !== 'research-ready' || score.fresh === false) reasons.push('評分未達可研究狀態');
     if (!row.source && !score.source) reasons.push('資料來源欄位缺失');
     if (!row.asOf && !row.timestamp && !row.technicalAsOf && !score.asOf) reasons.push('資料時間戳缺失');
-    if (!reasons.length) reasons.push('基本欄位檢查通過，仍需人工／策略驗證');
+    const qualityPass=reasons.length===0;
+    if (!qualityPass) return {status:'insufficient',reasons,qualityPass:false,score:0};
+    reasons.push('基本欄位檢查通過，仍需人工／策略驗證');
+    return {status:'reviewed',reasons,qualityPass:true,score:0};
   }
   return {status: reasons.length ? 'reviewed' : 'insufficient', reasons};
 }
@@ -66,7 +77,7 @@ function pump() {
         state.completed++;
         marketState(task.market).completed++;
         state.lastCompletedAt = now();
-        state.recent.unshift({id:task.id,market:task.market,symbol:task.symbol,role:task.role,status:result.status,finishedAt:now(),result});
+        state.recent.unshift({id:task.id,batchKey:task.batchKey,market:task.market,symbol:task.symbol,role:task.role,status:result.status,finishedAt:now(),result});
         state.recent = state.recent.slice(0,MAX_RECENT);
       } catch (error) {
         if (task.attempt < 1 && state.queue.length < MAX_QUEUE) {
@@ -74,7 +85,7 @@ function pump() {
         } else {
           state.failed++; marketState(task.market).failed++;
           state.lastError = String(error.message || error).slice(0,180);
-          state.recent.unshift({id:task.id,market:task.market,symbol:task.symbol,role:task.role,status:'failed',finishedAt:now(),error:state.lastError});
+          state.recent.unshift({id:task.id,batchKey:task.batchKey,market:task.market,symbol:task.symbol,role:task.role,status:'failed',finishedAt:now(),error:state.lastError});
           state.recent = state.recent.slice(0,MAX_RECENT);
         }
       } finally {
@@ -105,7 +116,7 @@ function enqueue(market, rows, sourceTimestamp = null) {
     for (const role of ROLES) {
       if (state.queue.length + state.running >= MAX_QUEUE) break;
       const id = 'ant-' + (++state.sequence);
-      state.queue.push({id,market:marketName,symbol,role,row,attempt:0,createdAt:now()});
+      state.queue.push({id,batchKey:key,market:marketName,symbol,role,row,attempt:0,createdAt:now()});
       state.enqueued++; m.enqueued++; accepted++;
     }
   }
@@ -118,6 +129,21 @@ function getStatus() {
   for (const [market, counts] of Object.entries(state.byMarket)) {
     byMarket[market] = {...counts, queued:state.queue.filter(x=>x.market===market).length, running:[...state.active.values()].filter(x=>x.market===market).length};
   }
+  const grouped = new Map();
+  for (const task of state.recent) {
+    if (!task.batchKey || !task.result) continue;
+    const key = task.batchKey + ':' + task.symbol;
+    if (!grouped.has(key)) grouped.set(key, {market:task.market,symbol:task.symbol,roles:{}});
+    const group = grouped.get(key);
+    if (!group.roles[task.role]) group.roles[task.role] = task.result;
+  }
+  const consensus = [...grouped.values()].filter(group=>ROLES.every(role=>group.roles[role])).slice(0,12).map(group=>{
+    const roles=group.roles;
+    const evidenceScore=(roles.technical.score||0)+(roles.bull.score||0)+(roles.bear.score||0)+(roles.risk.score||0);
+    const dataReady=roles.scout.status==='fresh'&&roles.auditor.qualityPass===true;
+    const verdict=!dataReady?'資料不足・不判讀':roles.risk.highRisk?'高風險觀察':evidenceScore>=2?'偏多觀察':evidenceScore<=-2?'偏空觀察':'中立觀察';
+    return {market:group.market,symbol:group.symbol,verdict,evidenceScore,dataReady,riskHigh:!!roles.risk.highRisk,asOf:roles.scout.asOf,reason:!dataReady?'資料新鮮度或來源稽核未通過':roles.risk.highRisk?'風險蟻觸發高風險條件':'六角色證據交叉整理；不是勝率或買賣指令'};
+  });
   return {
     mode:'in-process-micro-batch', researchOnly:true, workers:state.workers,
     activeWorkers:state.running, queued:state.queue.length,
@@ -125,7 +151,7 @@ function getStatus() {
     retried:state.retried, completionPct:state.enqueued ? Math.round(state.completed/state.enqueued*1000)/10 : 0,
     cycle:state.cycle, lastDispatchAt:state.lastDispatchAt, lastCompletedAt:state.lastCompletedAt,
     lastError:state.lastError, byMarket,
-    active:[...state.active.values()], recent:state.recent.slice(0,30),
+    active:[...state.active.values()], recent:state.recent.slice(0,30), consensus,
     persistence:'memory-only; queue and counters reset when service restarts'
   };
 }
