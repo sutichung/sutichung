@@ -42,6 +42,16 @@ export default function AntColony(){
         {!markets.length&&<span style={{fontSize:11,color:'#91a1b8'}}>尚未收到市場掃描任務；載入市場資料後會自動分批派工。</span>}
       </div>
       <div style={{marginTop:12,borderTop:'1px solid #293951',paddingTop:10}}>
+        <b style={{fontSize:12}}>六角色交叉判讀（規則式研究，不是 AI 勝率）</b>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:6,marginTop:7}}>
+          {(data?.consensus||[]).slice(0,6).map(item=><div key={item.market+'-'+item.symbol} style={{fontSize:11,background:'#172338',padding:8,borderRadius:7}}>
+            <b>{item.market} · {item.symbol}</b><div style={{marginTop:4,color:item.verdict.includes('偏多')?'#34d399':item.verdict.includes('偏空')?'#fb7185':item.verdict.includes('風險')?'#fbbf24':'#91a1b8'}}>{item.verdict}</div>
+            <small style={{color:'#91a1b8'}}>證據分數 {item.evidenceScore} · {item.reason}</small>
+          </div>)}
+          {!data?.consensus?.length&&<span style={{fontSize:10,color:'#91a1b8'}}>等待同一批六角色完成交叉判讀。</span>}
+        </div>
+      </div>
+      <div style={{marginTop:12,borderTop:'1px solid #293951',paddingTop:10}}>
         <b style={{fontSize:12}}>最近完成任務</b>
         <div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:6,marginTop:7}}>
           {(data?.recent||[]).slice(0,6).map(task=><div key={task.id} style={{fontSize:10,background:'#172338',padding:7,borderRadius:6,overflowWrap:'anywhere'}}>{task.market} · {task.symbol} · {task.role}<span style={{color:task.status==='failed'?'#fb7185':'#34d399'}}>　{task.status}</span></div>)}
