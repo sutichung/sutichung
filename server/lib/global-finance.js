@@ -53,8 +53,37 @@ async function loadFx() {
   return {rates:rows,errors,base:'EUR',source:'European Central Bank Data Portal · EXR daily reference rates',fetchedAt:new Date().toISOString(),asOf:rows.map(x=>x.asOf).sort().at(-1)||null};
 }
 
+
+async function loadMacro() {
+  const countries = [
+    {code:'USA',name:'美國'},{code:'CHN',name:'中國'},{code:'JPN',name:'日本'},
+    {code:'GBR',name:'英國'},{code:'DEU',name:'德國'},{code:'IND',name:'印度'},
+    {code:'BRA',name:'巴西'},{code:'CAN',name:'加拿大'},{code:'AUS',name:'澳洲'},
+    {code:'KOR',name:'韓國'},{code:'TWN',name:'台灣'}
+  ];
+  const indicators = [
+    {id:'NY.GDP.MKTP.KD.ZG',label:'GDP 年增率',unit:'%'},
+    {id:'FP.CPI.TOTL.ZG',label:'消費者物價通膨',unit:'%'},
+    {id:'SL.UEM.TOTL.ZS',label:'失業率',unit:'%'}
+  ];
+  const tasks = countries.flatMap(country=>indicators.map(async indicator=>{
+    const url='https://api.worldbank.org/v2/country/'+country.code+'/indicator/'+indicator.id+'?format=json&per_page=5&date=2021:2026';
+    const response=await fetch(url,{headers:{accept:'application/json'},signal:AbortSignal.timeout(10000)});
+    if(!response.ok)throw new Error('HTTP '+response.status);
+    const payload=await response.json();
+    const rows=Array.isArray(payload?.[1])?payload[1]:[];
+    const latest=rows.find(x=>x&&x.value!==null&&Number.isFinite(Number(x.value)));
+    if(!latest)throw new Error('no_observation');
+    return {country:country.code,countryName:country.name,indicator:indicator.id,label:indicator.label,unit:indicator.unit,value:Number(latest.value),year:latest.date,source:'World Bank Open Data',sourceUrl:'https://data.worldbank.org/indicator/'+indicator.id};
+  }));
+  const settled=await Promise.allSettled(tasks);
+  const data=settled.filter(x=>x.status==='fulfilled').map(x=>x.value);
+  const failures=settled.filter(x=>x.status==='rejected').length;
+  return {data,source:'World Bank Open Data API',fetchedAt:new Date().toISOString(),summary:{requested:tasks.length,received:data.length,failed:failures},status:data.length?'connected':'unavailable',note:'總體經濟年度／季度資料，發布存在時間差，非即時市場報價。'};
+}
+
 function getRegistry() {
   return {institutions:INSTITUTIONS,jurisdictions:new Set(INSTITUTIONS.map(x=>x.country)).size,publicDataConnectorsImplemented:1,privateAccountConnectors:0,source:'Curated official institution directory',timestamp:new Date().toISOString()};
 }
 
-module.exports = {getRegistry,loadFx};
+module.exports = {getRegistry,loadFx,loadMacro};
