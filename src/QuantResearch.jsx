@@ -8,6 +8,7 @@ export default function QuantResearch({symbol='2330',source='',asOf='',market='t
  const [marketType,setMarketType]=useState(market),[targetSymbol,setTargetSymbol]=useState(symbol),[draftSymbol,setDraftSymbol]=useState(symbol);
  const [fee,setFee]=useState(String(defaults.fee)),[tax,setTax]=useState(String(defaults.tax)),[slippage,setSlippage]=useState(String(defaults.slippage));
  const [result,setResult]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState('');
+ const [outcomes,setOutcomes]=useState(null),[outcomeError,setOutcomeError]=useState('');
  const [reload,setReload]=useState(0);
  useEffect(()=>{setTargetSymbol(symbol);setDraftSymbol(symbol);},[symbol]);
  useEffect(()=>{const d=marketType==='crypto'?{fee:0.10,tax:0,slippage:0.05}:marketType==='us-stock'?{fee:0.01,tax:0,slippage:0.05}:{fee:0.1425,tax:0.30,slippage:0.10};setFee(String(d.fee));setTax(String(d.tax));setSlippage(String(d.slippage));},[marketType]);
@@ -26,6 +27,29 @@ export default function QuantResearch({symbol='2330',source='',asOf='',market='t
    .finally(()=>{if(alive)setLoading(false);});
   return()=>{alive=false;controller.abort();};
  },[targetSymbol,marketType,params,valid,reload]);
+ useEffect(()=>{
+  let alive=true;
+  const load=async()=>{
+   try{
+    const token=localStorage.getItem('ts_access_token')||'';
+    const headers={Accept:'application/json'};if(token)headers.Authorization='Bearer '+token;
+    const response=await fetch(API+'/research/outcomes',{headers});
+    const body=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(body.error||('HTTP '+response.status));
+    if(alive){setOutcomes(body);setOutcomeError('');}
+   }catch(e){if(alive)setOutcomeError(e.message||'績效歷史暫時無法讀取');}
+  };
+  load();const timer=setInterval(load,300000);
+  return()=>{alive=false;clearInterval(timer);};
+ },[]);
+ const latestOutcomes=useMemo(()=>{
+  const latest={};
+  for(const item of outcomes?.data||[]){
+   if(!['1h','1d','5d','20d'].includes(item.horizon))continue;
+   if(!latest[item.horizon]||Date.parse(item.generatedAt||'')>Date.parse(latest[item.horizon].generatedAt||''))latest[item.horizon]=item;
+  }
+  return latest;
+ },[outcomes]);
  const card={background:'#111a2b',border:'1px solid #293951',borderRadius:12,padding:13,minWidth:0,color:'#e8eef8'};
  const metric={background:'#172338',borderRadius:8,padding:10,minWidth:0};
  const label={display:'block',fontSize:11,color:'#91a1b8'};
@@ -35,6 +59,13 @@ export default function QuantResearch({symbol='2330',source='',asOf='',market='t
  return <section style={{...card,marginBottom:12}}>
   <div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',alignItems:'center'}}><b>🧪 策略實驗室｜多策略樣本外驗證</b><small style={{color:'#91a1b8'}}>標的 {targetSymbol}｜{marketType==='tw-stock'?'台股':marketType==='us-stock'?'美股':'加密貨幣'}</small></div>
   <p style={{fontSize:11,color:'#91a1b8',lineHeight:1.7,margin:'8px 0'}}>借鏡 Pine Script 專案的自動化策略驗證流程，使用 EMA 趨勢、MACD 動能、布林均值回歸三種透明規則。60% 訓練區間與 40% 樣本外區間分開測試，並將樣本外區間切成三段 Walk-forward；另測半成本與雙倍成本情境。訊號在收盤確認、下一根 K 線開盤成交，任何通過都只是研究候選。</p>
+  <div style={{...metric,margin:'10px 0',padding:11}}>
+   <div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',alignItems:'center'}}><b>📈 真實訊號績效追蹤</b><small style={{color:'#91a1b8'}}>Supabase 私有歷史紀錄｜每 5 分鐘更新</small></div>
+   <div style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:7,marginTop:9}}>
+    {['1h','1d','5d','20d'].map(h=>{const item=latestOutcomes[h];return <div key={h} style={{background:'#111a2b',borderRadius:8,padding:8,minWidth:0}}><small style={label}>{h} 追蹤</small><div style={{fontSize:16,fontWeight:800,marginTop:4,color:item?.averageNetReturnPct>0?'#34d399':item?.averageNetReturnPct<0?'#fb7185':'#e8eef8'}}>{fmt(item?.directionalHitRatePct,'%')}</div><small style={label}>方向命中率</small><div style={{fontSize:12,marginTop:4}}>淨報酬 {fmt(item?.averageNetReturnPct,'%')}</div><small style={label}>{item?String(item.evaluatedCount??0)+' 筆有效樣本':'尚無有效樣本'}</small></div>;})}
+   </div>
+   <small style={{display:'block',color:'#91a1b8',marginTop:8,lineHeight:1.6}}>{outcomeError?(/401|authentication_required/i.test(outcomeError)?'登入後即可查看歷史績效。':'績效紀錄暫時無法讀取：'+outcomeError):outcomes?.count?('最新紀錄 '+new Date(outcomes.data[0]?.generatedAt||Date.now()).toLocaleString('zh-TW')+'；樣本不足或行情缺漏不會補造命中率。'):'尚未累積可用的歷史追蹤樣本；系統將在有效交易時段逐步建立 1 小時、1 日、5 日及 20 日紀錄。'}</small>
+  </div>
   <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}><label style={{display:'grid',gap:5,flex:'1 1 130px',fontSize:11,color:'#91a1b8'}}>市場<select value={marketType} onChange={e=>setMarketType(e.target.value)} style={{padding:8,borderRadius:7,border:'1px solid #293951',background:'#172338',color:'#e8eef8'}}><option value='tw-stock'>台股</option><option value='us-stock'>美股</option><option value='crypto'>加密貨幣</option></select></label><label style={{display:'grid',gap:5,flex:'1 1 130px',fontSize:11,color:'#91a1b8'}}>研究代號<input value={draftSymbol} onChange={e=>setDraftSymbol(e.target.value.toUpperCase().trim())} style={{padding:8,borderRadius:7,border:'1px solid #293951',background:'#172338',color:'#e8eef8'}}/></label>{field('單邊手續費／費率 (%)',fee,setFee)}{field('賣出交易稅 (%)',tax,setTax)}{field('單邊滑價 (%)',slippage,setSlippage)}<button onClick={()=>{setTargetSymbol(draftSymbol.toUpperCase().trim());setReload(x=>x+1);}} disabled={loading||!valid||!draftSymbol.trim()} style={{alignSelf:'end',padding:'9px 12px',borderRadius:7,border:'1px solid #315579',background:'#18304b',color:'#bfdbfe',fontWeight:700,cursor:'pointer'}}>重新回測</button></div>
   <small style={{display:'block',color:'#91a1b8',lineHeight:1.7,marginBottom:10}}>成本為可調假設，依券商折扣、交易所 Maker／Taker、商品稅制調整。預設值不代表你的實際費率。來源：{result?.source||source||'等待歷史行情'}｜最後 K 線：{result?.asOf||asOf||'—'}｜資料筆數：{result?.barCount??'—'}</small>
   {!valid?<div style={{...metric,color:'#fb7185'}}>成本欄位無效，請輸入 0 至 10% 的數字。</div>:loading?<div style={{...metric,color:'#93c5fd'}}>正在取得歷史行情並執行多策略回測…</div>:error?<div style={{...metric,color:'#fbbf24',lineHeight:1.7}}>{error}<br/>資料不足或上游失效時不會填入模擬績效。</div>:result?.strategies?<div style={{display:'grid',gap:10}}>
