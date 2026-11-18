@@ -27,7 +27,7 @@ export default function GlobalIntelligence(){
   <div className="intel-grid" style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:8,margin:'12px 0'}}>
    {[['已收集情報',data?.summary?.items??'—'],['多來源標題相符',data?.summary?.corroboratedHeadlines??0],['已完成事實驗證',data?.summary?.verifiedItems??0],['防火牆攔截',data?.security?.blocked??'—']].map(([k,v])=><div key={k} style={{background:palette.panel2,borderRadius:9,padding:10}}><small style={{color:palette.muted}}>{k}</small><div style={{fontSize:21,fontWeight:850,marginTop:4}}>{v}</div></div>)}
   </div>
-  <Card title="🧬 軟體相依套件漏洞風險（OSV.dev）">
+  <Card title="🧬 軟體相依套件漏洞風險（npm audit）">
    {vulnerabilityError?<div role="alert" style={{color:palette.yellow,fontSize:12,lineHeight:1.6}}>漏洞資料未取得：{vulnerabilityError}。目前不能判定安全，請稍後重新掃描。</div>:!vulnerabilities?<div style={{color:palette.muted,fontSize:12}}>正在掃描正式環境鎖定的相依套件…</div>:<>
     <div style={{display:'flex',gap:8,flexWrap:'wrap',fontSize:11,marginBottom:9}}>
      <b style={{color:vulnerabilities.status==='clean'?palette.green:vulnerabilities.status==='vulnerable'?palette.red:palette.yellow}}>{vulnerabilities.label}</b>
@@ -38,13 +38,13 @@ export default function GlobalIntelligence(){
     <div className="intel-grid" style={{display:'grid',gridTemplateColumns:'repeat(5,minmax(0,1fr))',gap:7}}>
      {[[ 'Critical',vulnerabilities.severityCounts?.critical,palette.red],['High',vulnerabilities.severityCounts?.high,palette.red],['Moderate',vulnerabilities.severityCounts?.moderate,palette.yellow],['Low',vulnerabilities.severityCounts?.low,palette.blue],['未分級',vulnerabilities.severityCounts?.unknown,palette.muted]].map(([label,value,color])=><div key={label} style={{padding:8,background:palette.panel2,borderRadius:8}}><small style={{color:palette.muted}}>{label}</small><div style={{fontSize:19,fontWeight:850,color,marginTop:3}}>{value??'—'}</div></div>)}
     </div>
-    <div style={{fontSize:11,color:palette.muted,marginTop:8}}>正式執行依賴漏洞：{vulnerabilities.productionVulnerabilityCount??'—'}｜開發／建置依賴漏洞：{vulnerabilities.developmentVulnerabilityCount??'—'}｜掃描時間：{vulnerabilities.generatedAt?new Date(vulnerabilities.generatedAt).toLocaleString('zh-TW'):'—'}｜來源：{vulnerabilities.source||'OSV.dev'}</div>
+    <div style={{fontSize:11,color:palette.muted,marginTop:8}}>正式執行依賴漏洞：{vulnerabilities.productionVulnerabilityCount??'—'}｜開發／建置依賴漏洞：{vulnerabilities.developmentVulnerabilityCount??'—'}｜掃描時間：{vulnerabilities.generatedAt?new Date(vulnerabilities.generatedAt).toLocaleString('zh-TW'):'—'}｜來源：{vulnerabilities.source||'npm audit'}</div>
     {vulnerabilities.status==='partial'&&<div style={{color:palette.yellow,fontSize:11,marginTop:6}}>部分批次未完成（{vulnerabilities.failedBatchCount??0} 批）；此結果不能當作完整安全證明。{vulnerabilities.error||''}</div>}
     <div style={{display:'grid',gap:7,marginTop:10}}>
      {(vulnerabilities.findings||[]).slice(0,25).map((item,index)=><div key={item.id+'-'+item.package+'-'+item.version+'-'+index} style={{padding:9,background:palette.panel2,border:'1px solid '+palette.border,borderRadius:8}}>
       <div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap'}}><b style={{fontSize:12}}>{item.package} <span style={{color:palette.muted,fontWeight:400}}>{item.version}</span></b><b style={{fontSize:11,color:item.severity==='critical'||item.severity==='high'?palette.red:item.severity==='moderate'?palette.yellow:palette.muted}}>{item.severity.toUpperCase()}｜{item.id}</b></div>
       <div style={{fontSize:11,color:palette.muted,marginTop:4,lineHeight:1.5}}>{item.summary}</div>
-      <small style={{display:'block',color:palette.muted,marginTop:4}}>{item.scope==='production'?'正式執行依賴':'開發／建置依賴'}｜{item.direct?'直接依賴':'間接依賴'}{item.fixedVersions?.length?'｜修補版本：'+item.fixedVersions.join(', '):'｜修補版本未提供'}</small>
+      <small style={{display:'block',color:palette.muted,marginTop:4}}>{item.scope==='production'?'正式執行依賴':item.scope==='development'?'開發／建置依賴':'範圍未知'}｜{item.direct?'直接依賴':'間接依賴'}{item.fixedVersions?.length?'｜修補版本：'+item.fixedVersions.join(', '):'｜修補版本未提供'}</small>
       {item.references?.length>0&&<div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:4}}>{item.references.map(url=><a key={url} href={url} target="_blank" rel="noreferrer" style={{fontSize:10,color:palette.blue}}>公告來源 ↗</a>)}</div>}
      </div>)}
      {vulnerabilities.status==='clean'&&<div style={{fontSize:12,color:palette.green}}>本次完整掃描未查得 OSV 已知漏洞；這不代表零風險，也不涵蓋執行環境、設定、原始碼或尚未公開的漏洞。</div>}
