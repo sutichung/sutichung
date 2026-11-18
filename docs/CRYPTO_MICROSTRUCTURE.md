@@ -30,3 +30,8 @@ The supplied Python sample uses CCXT Pro and private account streams. Those are 
 ## Verification
 
 Unit tests cover order-book spread/OBI, invalid books, missing timestamps, trade filtering, and whale threshold classification. Production provider connectivity and live symbol coverage still require deployment smoke tests against each upstream exchange.
+
+
+## Additional order-flow diagnostics
+
+The normalized order book now also exposes weighted OBI (near-touch levels receive higher weight), best-level sizes, microprice and microprice deviation in basis points, plus 5/10/20-level depth bands. The trade tape exposes known-side trade count, aggressive buy notional share, and normalized trade imbalance where quote notional is comparable. These are descriptive microstructure features, not standalone entry signals. A large displayed bid can be cancelled; trade-side inference and notional remain venue-specific. OKX perpetual contract notional remains unclassified when contract-value conversion is not verified. The endpoint remains public REST polling; no private keys, account streams, or order execution are enabled.
