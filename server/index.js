@@ -665,7 +665,7 @@ async function route(req,res){
     try{return json(res,200,await cryptoMarket.getHistory(symbol,type,interval,exchange,nativeSymbol));}catch(e){return json(res,502,{error:e.message});}
   }
   if(u.pathname.startsWith('/api/crypto/risk/')){
-    const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase(),type=u.searchParams.get('type')==='perpetual'?'perpetual':'spot',exchange=u.searchParams.get('exchange')||'Binance',nativeSymbol=u.searchParams.get('nativeSymbol')||symbol,interval=u.searchParams.get('interval')||'1d';
+    const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase(),type=u.searchParams.get('type')==='perpetual'?'perpetual':'spot',exchange=u.searchParams.get('exchange')||'Binance',nativeSymbol=u.searchParams.get('nativeSymbol')||symbol,interval=u.searchParams.get('interval')||'15m';
     try{
       const historyResult=await loadRiskHistory({getHistory:cryptoMarket.getHistory,symbol,marketType:type,interval,exchange,nativeSymbol,limit:240});
       const [derivativesResult,microResultSettled]=await Promise.allSettled([
@@ -676,6 +676,22 @@ async function route(req,res){
       const microResult=microResultSettled.status==='fulfilled'?microResultSettled.value:{data:null,errors:[{exchange:historyResult.exchange,error:String(microResultSettled.reason?.message||'microstructure_unavailable').slice(0,160)}]};
       const micro=microResult.data;
       const result=assessMarketRisk(historyResult.history,derivatives,micro);
+      const candleAsOf=historyResult.history?.asOf||historyResult.history?.data?.[historyResult.history.data.length-1]?.time||null;
+      const candleTimestamp=candleAsOf?Date.parse(candleAsOf):NaN;
+      const candleAgeMinutes=Number.isFinite(candleTimestamp)?Math.round((Date.now()-candleTimestamp)/60000):null;
+      const maxAgeMinutes=({'15m':30,'1h':120,'4h':480,'1d':2880})[interval]||30;
+      const candleFresh=Number.isFinite(candleAgeMinutes)&&candleAgeMinutes>=0&&candleAgeMinutes<=maxAgeMinutes;
+      result.asOf=candleAsOf;
+      result.candleInterval=interval;
+      result.candleAgeMinutes=candleAgeMinutes;
+      result.candleMaxAgeMinutes=maxAgeMinutes;
+      result.dataFreshness=candleFresh?'fresh':'stale_or_unknown';
+      result.receivedAt=now();
+      if(!candleFresh){
+        result.status='stale_data';
+        result.label='K 線資料超過新鮮度門檻，暫停即時風險判讀';
+        result.freshnessWarning='來源 K 線時間缺漏、位於未來或超過 '+maxAgeMinutes+' 分鐘';
+      }
       result.derivativesStatus=result.coverage?.derivatives?'connected':'unavailable';
       if(derivativesResult.status==='rejected')result.derivativesWarning='衍生品資料暫不可用，風險計算仍使用有效 K 線與可取得的委託簿資料：'+String(derivativesResult.reason?.message||'upstream_unavailable').slice(0,160);
       if(!micro){
