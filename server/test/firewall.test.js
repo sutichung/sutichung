@@ -16,6 +16,10 @@ test('firewall adds baseline security headers and permits normal request',()=>{
  assert.equal(applyFirewall(request('/api/health'),res),true);
  assert.equal(res.headers['X-Content-Type-Options'],'nosniff');
  assert.equal(res.headers['X-Frame-Options'],'SAMEORIGIN');
+ assert.equal(res.headers['X-DNS-Prefetch-Control'],'off');
+ assert.equal(res.headers['X-Download-Options'],'noopen');
+ assert.match(res.headers['Content-Security-Policy'],/object-src 'none'/);
+ assert.match(res.headers['Content-Security-Policy'],/base-uri 'self'/);
  assert.equal(res.headers['X-RateLimit-Limit'],'240');
 });
 
