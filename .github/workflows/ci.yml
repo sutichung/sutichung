@@ -20,6 +20,11 @@ jobs:
       - run: node --check server/lib/scoring.js
       - run: node --check server/lib/agents.js
       - run: node --check server/lib/crypto-microstructure.js
+      - name: Syntax-check automation jobs and research modules
+        run: |
+          for file in server/jobs/*.js server/lib/*.js; do
+            node --check "$file"
+          done
       - run: npm run test:server
       - run: npm install
       - run: npm run build
