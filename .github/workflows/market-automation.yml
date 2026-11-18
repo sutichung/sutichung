@@ -16,7 +16,8 @@ permissions:
   actions: read
   id-token: write
 concurrency:
-  group: taiwan-market-automation
+  # Keep hourly outcome jobs from being replaced by the next five-minute scan run.
+  group: ${{ github.event.schedule == '0 2-5 * * 1-5' && 'taiwan-market-hourly-outcomes' || 'taiwan-market-automation' }}
   cancel-in-progress: false
 jobs:
   intraday-scan:
