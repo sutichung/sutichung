@@ -9,14 +9,14 @@ async function getJson(url,timeout=14000){
  return r.json();
 }
 async function cached(key,ttl,loader){return marketCache.get(key,ttl,loader);}
-const n=v=>Number.isFinite(Number(v))?Number(v):null;
-function row(exchange,marketType,symbol,baseAsset,quoteAsset,price,changePct,quoteVolume,extra={}){const p=n(price);if(!(p>0))return null;const sourceTimestamp=extra.sourceTimestamp&&Number.isFinite(Date.parse(extra.sourceTimestamp))?new Date(extra.sourceTimestamp).toISOString():null;return {id:exchange+':'+marketType+':'+symbol,exchange,marketType,symbol,baseAsset,quoteAsset,price:p,changePct:n(changePct),quoteVolume:n(quoteVolume)||0,high24h:n(extra.high24h),low24h:n(extra.low24h),volume:n(extra.volume),timestamp:sourceTimestamp,sourceTimestamp,receivedAt:now(),nativeSymbol:extra.nativeSymbol||symbol,nativeType:extra.nativeType||marketType};}
+const n=v=>v===null||v===undefined||v===''?null:Number.isFinite(Number(v))?Number(v):null;
+function row(exchange,marketType,symbol,baseAsset,quoteAsset,price,changePct,quoteVolume,extra={}){const p=n(price);if(!(p>0))return null;const sourceTimestamp=extra.sourceTimestamp&&Number.isFinite(Date.parse(extra.sourceTimestamp))?new Date(extra.sourceTimestamp).toISOString():null;return {id:exchange+':'+marketType+':'+symbol,exchange,marketType,symbol,baseAsset,quoteAsset,price:p,changePct:n(changePct),quoteVolume:n(quoteVolume),high24h:n(extra.high24h),low24h:n(extra.low24h),volume:n(extra.volume),timestamp:sourceTimestamp,sourceTimestamp,receivedAt:now(),nativeSymbol:extra.nativeSymbol||symbol,nativeType:extra.nativeType||marketType};}
 async function mapLimit(items,limit,worker){const out=new Array(items.length);let next=0;await Promise.all(Array.from({length:Math.min(limit,items.length)},async()=>{while(true){const i=next++;if(i>=items.length)return;try{out[i]=await worker(items[i],i);}catch(_){out[i]=null;}}}));return out;}
 async function binanceMarkets(){
  const jobs=await Promise.allSettled([getJson('https://api.binance.com/api/v3/exchangeInfo'),getJson('https://api.binance.com/api/v3/ticker/24hr'),getJson('https://fapi.binance.com/fapi/v1/exchangeInfo'),getJson('https://fapi.binance.com/fapi/v1/ticker/24hr')]);
  const [si,st,fi,ft]=jobs.map(x=>x.status==='fulfilled'?x.value:null);
  const out=[];
- if(si&&st){const sm=new Map(st.map(x=>[x.symbol,x]));out.push(...si.symbols.filter(x=>x.status==='TRADING'&&x.isSpotTradingAllowed!==false).map(x=>{const q=sm.get(x.symbol)||{};return row('Binance','spot',x.symbol,x.baseAsset,x.quoteAsset,q.lastPrice,q.priceChangePercent,q.quoteVolume,{high24h:q.highPrice,low24h:q.lowPrice,volume:q.volume,sourceTimestamp:q.closeTime?new Date(Number(q.closeTime)).toISOString():null});}));}
+ if(si&&st){const sm=new Map(st.map(x=>[x.symbol,x]));out.push(...si.symbols.filter(x=>x.status==='TRADING'&&x.isSpotTradingAllowed!==false).map(x=>{const q=sm.get(x.symbol)||{};return row('Binance','spot',x.symbol,x.baseAsset,x.quoteAsset,q.lastPrice,q.priceChangePercent,q.quoteVolume,{high24h:q.highPrice,low24h:q.lowPrice,volume:q.volume});}));}
  if(fi&&ft){const fm=new Map(ft.map(x=>[x.symbol,x]));out.push(...fi.symbols.filter(x=>x.status==='TRADING'&&x.contractType==='PERPETUAL'&&x.quoteAsset==='USDT').map(x=>{const q=fm.get(x.symbol)||{};return row('Binance','perpetual',x.symbol,x.baseAsset,x.quoteAsset,q.lastPrice,q.priceChangePercent,q.quoteVolume,{high24h:q.highPrice,low24h:q.lowPrice,volume:q.volume});}));}
  const valid=out.filter(Boolean);if(!valid.length)throw new Error(jobs.filter(x=>x.status==='rejected').map(x=>x.reason?.message||'Binance API error').join('; ')||'Binance 未回傳有效報價');return valid;
 }
@@ -46,7 +46,7 @@ async function coinbaseMarkets(){
  const active=products.filter(x=>x.status==='online'&&!x.trading_disabled);
  const top=active.slice(0,100);
  const quotes=await mapLimit(top,6,async product=>getJson('https://api.exchange.coinbase.com/products/'+encodeURIComponent(product.id)+'/ticker',9000));
- return top.map((x,i)=>{const q=quotes[i]||{};const price=n(q.price),baseVolume=n(q.volume),sourceTimestamp=q.time&&Number.isFinite(Date.parse(q.time))?new Date(q.time).toISOString():null;return row('Coinbase','spot',x.id.replace('-',''),x.base_currency,x.quote_currency,price,null,price!==null&&baseVolume!==null?price*baseVolume:0,{volume:baseVolume,sourceTimestamp,nativeSymbol:x.id,nativeType:'spot'});}).filter(Boolean);
+ return top.map((x,i)=>{const q=quotes[i]||{};const price=n(q.price),baseVolume=n(q.volume),sourceTimestamp=q.time&&Number.isFinite(Date.parse(q.time))?new Date(q.time).toISOString():null;return row('Coinbase','spot',x.id.replace('-',''),x.base_currency,x.quote_currency,price,null,price!==null&&baseVolume!==null?price*baseVolume:null,{volume:baseVolume,sourceTimestamp,nativeSymbol:x.id,nativeType:'spot'});}).filter(Boolean);
 }
 async function krakenMarkets(){
  const pairs=await getJson('https://api.kraken.com/0/public/AssetPairs');
@@ -56,7 +56,7 @@ async function krakenMarkets(){
  const tick=await getJson('https://api.kraken.com/0/public/Ticker?pair='+encodeURIComponent(names.join(',')));
  if(tick.error?.length)throw new Error(tick.error.join(','));
  const tmap=tick.result||{};
- return shortlist.map(([key,x])=>{const base=(x.wsname.split('/')[0]||'').replace(/^XBT$/,'BTC'),quote=(x.wsname.split('/')[1]||'').replace(/^XBT$/,'BTC'),native=x.altname||key,q=tmap[native]||tmap[key]||{};return row('Kraken','spot',(base+quote).replace(/[^A-Z0-9]/g,''),base,quote,q.c?.[0],q.o&&Number(q.o)>0?(Number(q.c?.[0])/Number(q.o)-1)*100:null,Number(q.v?.[1])&&Number(q.c?.[0])?Number(q.v[1])*Number(q.c[0]):0,{high24h:q.h?.[1],low24h:q.l?.[1],volume:q.v?.[1],nativeSymbol:native,nativeType:'spot'});}).filter(Boolean);
+ return shortlist.map(([key,x])=>{const base=(x.wsname.split('/')[0]||'').replace(/^XBT$/,'BTC'),quote=(x.wsname.split('/')[1]||'').replace(/^XBT$/,'BTC'),native=x.altname||key,q=tmap[native]||tmap[key]||{},last=n(q.c?.[0]),baseVolume=n(q.v?.[1]),quoteVolume=last!==null&&baseVolume!==null?last*baseVolume:null;return row('Kraken','spot',(base+quote).replace(/[^A-Z0-9]/g,''),base,quote,last,q.o&&Number(q.o)>0?(last/Number(q.o)-1)*100:null,quoteVolume,{high24h:q.h?.[1],low24h:q.l?.[1],volume:baseVolume,nativeSymbol:native,nativeType:'spot'});}).filter(Boolean);
 }
 async function loadMarket(){
  return cached('market-multi',15000,async()=>{
