@@ -8,7 +8,7 @@ const { scoreStock } = require('./lib/scoring');
 const { getTradingReadiness } = require('./lib/trading-readiness');
 const { buildAiCommittee } = require('./lib/agents');
 const { applyFirewall } = require('./lib/firewall');
-const { loadMarket: loadUsMarket, getChart: getUsChart } = require('./lib/us-market');
+const { loadMarket: loadUsMarket, getChart: getUsChart, searchSymbols: searchUsSymbols } = require('./lib/us-market');
 
 const PORT = Number(process.env.PORT || 8787);
 const FINMIND_BASE = process.env.FINMIND_BASE || 'https://api.finmindtrade.com/api/v4/data';
@@ -503,6 +503,12 @@ async function route(req,res){
     },e=>({events:[],source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
   }
+  if(u.pathname==='/api/us/search'){
+    const query=String(u.searchParams.get('q')||'').trim();
+    if(!query)return json(res,200,{results:[],source:'Yahoo Finance Search'});
+    try{return json(res,200,{results:await searchUsSymbols(query),source:'Yahoo Finance Search（非官方公開端點）',timestamp:now()});}
+    catch(e){return json(res,502,{results:[],error:e.message,source:'unavailable',timestamp:now()});}
+  }
   if(u.pathname==='/api/us/market'){
     const result=await safeLoad('us-market',5*60*1000,loadUsMarket,e=>({market:'US',data:{},indices:[],scan:[],source:'unavailable',timestamp:now(),error:e.message,coverage:{stocks:0,universe:30,indices:0}}));
     return json(res,result.error?503:200,result);
@@ -523,7 +529,7 @@ async function route(req,res){
     const load=async()=>{
       const history=await safeLoad('us-history:'+symbol,60*60*1000,async()=>{
         const chart=await getUsChart(symbol,'2y','1d');
-        return {symbol:chart.symbol,data:chart.candles,asOf:chart.candles.at(-1)?.time,source:chart.source,indicators:indicators(chart.candles)};
+        return {symbol:chart.symbol,data:chart.candles,asOf:chart.candles.at(-1)?.time,source:chart.source,quote:((({candles,...quote})=>quote)(chart)),indicators:indicators(chart.candles)};
       },e=>({data:[],error:e.message}));
       const market=stale('us-market')||{};
       const quote=market.data?.[symbol]||history.quote||{};
