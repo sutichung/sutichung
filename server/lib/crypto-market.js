@@ -8,16 +8,27 @@ async function getJson(url,timeout=14000){
  if(!r.ok)throw new Error('HTTP '+r.status+' '+url);
  return r.json();
 }
+async function getJsonFallback(urls,timeout=14000){
+ const errors=[];
+ for(const url of urls){
+  try{return {data:await getJson(url,timeout),base:new URL(url).origin};}
+  catch(error){errors.push(String(error.message||error));}
+ }
+ throw new Error(errors.join('; ')||'all_official_endpoints_unavailable');
+}
 async function cached(key,ttl,loader){return marketCache.get(key,ttl,loader);}
 const n=v=>v===null||v===undefined||v===''?null:Number.isFinite(Number(v))?Number(v):null;
 function row(exchange,marketType,symbol,baseAsset,quoteAsset,price,changePct,quoteVolume,extra={}){const p=n(price);if(!(p>0))return null;const sourceTimestamp=extra.sourceTimestamp&&Number.isFinite(Date.parse(extra.sourceTimestamp))?new Date(extra.sourceTimestamp).toISOString():null;return {id:exchange+':'+marketType+':'+symbol,exchange,marketType,symbol,baseAsset,quoteAsset,price:p,changePct:n(changePct),quoteVolume:n(quoteVolume),high24h:n(extra.high24h),low24h:n(extra.low24h),volume:n(extra.volume),timestamp:sourceTimestamp,sourceTimestamp,receivedAt:now(),nativeSymbol:extra.nativeSymbol||symbol,nativeType:extra.nativeType||marketType};}
 async function mapLimit(items,limit,worker){const out=new Array(items.length);let next=0;await Promise.all(Array.from({length:Math.min(limit,items.length)},async()=>{while(true){const i=next++;if(i>=items.length)return;try{out[i]=await worker(items[i],i);}catch(_){out[i]=null;}}}));return out;}
 async function binanceMarkets(){
- const jobs=await Promise.allSettled([getJson('https://api.binance.com/api/v3/exchangeInfo'),getJson('https://api.binance.com/api/v3/ticker/24hr'),getJson('https://fapi.binance.com/fapi/v1/exchangeInfo'),getJson('https://fapi.binance.com/fapi/v1/ticker/24hr')]);
- const [si,st,fi,ft]=jobs.map(x=>x.status==='fulfilled'?x.value:null);
- const out=[];
- if(si&&st){const sm=new Map(st.map(x=>[x.symbol,x]));out.push(...si.symbols.filter(x=>x.status==='TRADING'&&x.isSpotTradingAllowed!==false).map(x=>{const q=sm.get(x.symbol)||{};return row('Binance','spot',x.symbol,x.baseAsset,x.quoteAsset,q.lastPrice,q.priceChangePercent,q.quoteVolume,{high24h:q.highPrice,low24h:q.lowPrice,volume:q.volume});}));}
- if(fi&&ft){const fm=new Map(ft.map(x=>[x.symbol,x]));out.push(...fi.symbols.filter(x=>x.status==='TRADING'&&x.contractType==='PERPETUAL'&&x.quoteAsset==='USDT').map(x=>{const q=fm.get(x.symbol)||{};return row('Binance','perpetual',x.symbol,x.baseAsset,x.quoteAsset,q.lastPrice,q.priceChangePercent,q.quoteVolume,{high24h:q.highPrice,low24h:q.lowPrice,volume:q.volume});}));}
+ const spotBases=['https://data-api.binance.vision','https://api.binance.com','https://api1.binance.com','https://api2.binance.com','https://api3.binance.com','https://api4.binance.com'];
+ const spotInfoUrls=spotBases.map(base=>base+'/api/v3/exchangeInfo');
+ const spotTickerUrls=spotBases.map(base=>base+'/api/v3/ticker/24hr');
+ const jobs=await Promise.allSettled([getJsonFallback(spotInfoUrls),getJsonFallback(spotTickerUrls),getJson('https://fapi.binance.com/fapi/v1/exchangeInfo'),getJson('https://fapi.binance.com/fapi/v1/ticker/24hr')]);
+ const [spotInfo,spotTicker,fi,ft]=jobs.map(x=>x.status==='fulfilled'?x.value:null);
+ const si=spotInfo?.data,st=spotTicker?.data,out=[];
+ if(si&&st){const sm=new Map(st.map(x=>[x.symbol,x]));out.push(...si.symbols.filter(x=>x.status==='TRADING'&&x.isSpotTradingAllowed!==false).map(x=>{const q=sm.get(x.symbol)||{};return row('Binance','spot',x.symbol,x.baseAsset,x.quoteAsset,q.lastPrice,q.priceChangePercent,q.quoteVolume,{high24h:q.highPrice,low24h:q.lowPrice,volume:q.volume,endpointBase:spotInfo.base});}));}
+ if(fi&&ft){const fm=new Map(ft.map(x=>[x.symbol,x]));out.push(...fi.symbols.filter(x=>x.status==='TRADING'&&x.contractType==='PERPETUAL'&&x.quoteAsset==='USDT').map(x=>{const q=fm.get(x.symbol)||{};return row('Binance','perpetual',x.symbol,x.baseAsset,x.quoteAsset,q.lastPrice,q.priceChangePercent,q.quoteVolume,{high24h:q.highPrice,low24h:q.lowPrice,volume:q.volume,endpointBase:'https://fapi.binance.com'});}));}
  const valid=out.filter(Boolean);if(!valid.length)throw new Error(jobs.filter(x=>x.status==='rejected').map(x=>x.reason?.message||'Binance API error').join('; ')||'Binance 未回傳有效報價');return valid;
 }
 async function bybitCategory(category){
@@ -96,8 +107,8 @@ async function getHistory(symbol,marketType='spot',interval='1d',exchange='Binan
  return cached('history:'+exchange+':'+marketType+':'+clean+':'+interval+':'+limit,300000,async()=>{
   let rows=[],source=exchange+' public candles';
   const iv=interval==='1d'?'1d':interval;
-  if(exchange==='Binance'){const base=marketType==='perpetual'?'https://fapi.binance.com':'https://api.binance.com',path=marketType==='perpetual'?'/fapi/v1/klines':'/api/v3/klines';rows=await getJson(base+path+'?'+new URLSearchParams({symbol:clean,interval:iv,limit:String(limit)}));}
-  else if(exchange==='Bybit'){const category=marketType==='perpetual'?'linear':'spot',intervalMap={'1d':'D','1h':'60','4h':'240','15m':'15'};const x=await getJson('https://api.bybit.com/v5/market/kline?'+new URLSearchParams({category,symbol:clean,interval:intervalMap[iv]||'D',limit:String(limit)}));if(x.retCode!==0)throw new Error(x.retMsg);rows=x.result.list;}
+  if(exchange==='Binance'){const path=marketType==='perpetual'?'/fapi/v1/klines':'/api/v3/klines',query=new URLSearchParams({symbol:clean,interval:iv,limit:String(limit)});if(marketType==='perpetual'){rows=await getJson('https://fapi.binance.com'+path+'?'+query);}else{const bases=['https://data-api.binance.vision','https://api.binance.com','https://api1.binance.com','https://api2.binance.com','https://api3.binance.com','https://api4.binance.com'];const result=await getJsonFallback(bases.map(base=>base+path+'?'+query));rows=result.data;source='Binance official spot market-data API ('+result.base+')';}}
+  else if(exchange==='Bybit'){const category=marketType==='perpetual'?'linear':'spot',intervalMap={'1d':'D','1h':'60','4h':'240','15m':'15'},query=new URLSearchParams({category,symbol:clean,interval:intervalMap[iv]||'D',limit:String(limit)});const result=await getJsonFallback(['https://api.bybit.com','https://api.bytick.com'].map(base=>base+'/v5/market/kline?'+query));const x=result.data;if(x.retCode!==0)throw new Error(x.retMsg);rows=x.result.list;source='Bybit official V5 market data ('+result.base+')';}
   else if(exchange==='OKX'){const inst=clean.includes('-')?clean:clean.replace(/(USDT|USDC|USD)$/,'-$1')+(marketType==='perpetual'?'-SWAP':'');const x=await getJson('https://www.okx.com/api/v5/market/candles?'+new URLSearchParams({instId:inst,bar:iv==='1d'?'1D':iv,limit:String(Math.min(limit,300))}));if(x.code!=='0')throw new Error(x.msg);rows=x.data;}
   else if(exchange==='Coinbase'){const product=clean.includes('-')?clean:clean.replace(/(USDT|USDC|USD)$/,'-$1');const granularity=({'1d':86400,'1h':3600,'15m':900}[iv]||86400);rows=await getJson('https://api.exchange.coinbase.com/products/'+encodeURIComponent(product)+'/candles?granularity='+granularity);}
   else if(exchange==='Kraken'){const x=await getJson('https://api.kraken.com/0/public/OHLC?'+new URLSearchParams({pair:clean,interval:iv==='4h'?'240':iv==='1h'?'60':iv==='15m'?'15':'1440'}));if(x.error?.length)throw new Error(x.error.join(','));const key=Object.keys(x.result||{}).find(k=>k!=='last');rows=x.result?.[key]||[];}
