@@ -19,7 +19,9 @@ function normalizeBook(exchange, bids, asks, timestamp, depth = 10) {
     .filter(x => x[0] !== null && x[1] !== null && x[0] > 0 && x[1] > 0);
   const bidRows = clean(bids), askRows = clean(asks);
   if (!bidRows.length || !askRows.length) throw new Error('orderbook_empty');
-  const bid = bidRows[0][0], ask = askRows[0][0], mid = (bid + ask) / 2;
+  const bid = bidRows[0][0], ask = askRows[0][0];
+  if (!(ask > bid)) throw new Error('orderbook_crossed_or_invalid');
+  const mid = (bid + ask) / 2;
   if (ask < bid) throw new Error('orderbook_crossed');
   const bidVolume = bidRows.reduce((sum, x) => sum + x[1], 0);
   const askVolume = askRows.reduce((sum, x) => sum + x[1], 0);
