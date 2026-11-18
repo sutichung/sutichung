@@ -18,12 +18,12 @@ async function loadRiskHistory({getHistory,symbol,marketType,interval='1d',excha
   error.attempts=errors;
   throw error;
 }
-async function loadFreshMicrostructure({safeLoad,fetchMicrostructure,symbol,marketType,requestedExchange='Binance',preferredExchange=requestedExchange,depth=10,whaleThresholdUsd=50000,now=Date.now}){
+async function loadFreshMicrostructure({safeLoad,fetchMicrostructure,symbol,marketType,requestedExchange='Binance',preferredExchange=requestedExchange,nativeSymbol=symbol,depth=10,whaleThresholdUsd=50000,now=Date.now}){
   const errors=[];
   for(const exchange of candidates(requestedExchange,preferredExchange)){
-    const nativeSymbol=exchange===requestedExchange?symbol:symbol;
-    const key='crypto-microstructure:'+exchange+':'+marketType+':'+nativeSymbol+':'+depth+':'+whaleThresholdUsd;
-    const result=await safeLoad(key,3000,()=>fetchMicrostructure({exchange,symbol:nativeSymbol,marketType,depth,whaleThresholdUsd}),error=>({status:'unavailable',error:String(error?.message||error).slice(0,180)}));
+    const exchangeSymbol=exchange===requestedExchange?nativeSymbol:symbol;
+    const key='crypto-microstructure:'+exchange+':'+marketType+':'+exchangeSymbol+':'+depth+':'+whaleThresholdUsd;
+    const result=await safeLoad(key,3000,()=>fetchMicrostructure({exchange,symbol:exchangeSymbol,marketType,depth,whaleThresholdUsd}),error=>({status:'unavailable',error:String(error?.message||error).slice(0,180)}));
     const received=Date.parse(result?.receivedAt||'');
     const fresh=!!(result&&!result.stale&&Number.isFinite(received)&&now()-received>=0&&now()-received<=30000);
     const bookOk=Array.isArray(result?.book?.bids)&&result.book.bids.length>0&&Array.isArray(result?.book?.asks)&&result.book.asks.length>0;
