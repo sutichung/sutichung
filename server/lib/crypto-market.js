@@ -146,9 +146,13 @@ async function getDerivatives(symbol,exchange='Binance',nativeSymbol=''){
  ];
  const ratios=battle.filter(x=>x&&Number.isFinite(x.longPct)&&Number.isFinite(x.shortPct));
  const longPct=ratios.length?ratios.reduce((sum,x)=>sum+x.longPct,0)/ratios.length:null;
- const selected=rows.find(x=>x.exchange===exchange)||rows[0];
+ const requested=rows.find(x=>x.exchange===exchange)||null;
+ const usable=x=>x&&Number.isFinite(x.markPrice)&&x.markPrice>0&&Number.isFinite(x.openInterest)&&x.openInterest>0;
+ const selected=usable(requested)?requested:(rows.find(usable)||requested||rows[0]);
+ const fallbackUsed=!!(selected&&selected.exchange!==exchange);
+ const sourceByExchange={Binance:'Binance official USD-M Futures premiumIndex/openInterest',Bybit:'Bybit official V5 linear tickers',OKX:'OKX official public funding-rate/mark-price/open-interest'};
  const receivedAt=now();
- return {exchange,openInterest:selected?.openInterest??null,openInterestAsset:base,fundingRate:selected?.fundingRate??null,markPrice:selected?.markPrice??null,indexPrice:selected?.indexPrice??null,source:'Binance/Bybit/OKX official public funding, mark-price and open-interest endpoints',timestamp:receivedAt,receivedAt,sourceTime:selected?.sourceTime??null,battle:{exchanges:battle,validExchanges:ratios.length,longPct,shortPct:longPct===null?null:100-longPct,stance:longPct===null?'資料不足':longPct>55?'多方佔優':longPct<45?'空方佔優':'多空拉鋸'},liquidationMap:liquidationMap(selected?.markPrice,selected?.openInterest,base)};
+ return {exchange:selected?.exchange||exchange,requestedExchange:exchange,fallbackUsed,openInterest:selected?.openInterest??null,openInterestAsset:base,fundingRate:selected?.fundingRate??null,markPrice:selected?.markPrice??null,indexPrice:selected?.indexPrice??null,source:sourceByExchange[selected?.exchange]||'官方衍生品 API',timestamp:receivedAt,receivedAt,sourceTime:selected?.sourceTime??null,battle:{exchanges:battle,validExchanges:ratios.length,longPct,shortPct:longPct===null?null:100-longPct,stance:longPct===null?'資料不足':longPct>55?'多方佔優':longPct<45?'空方佔優':'多空拉鋸'},liquidationMap:liquidationMap(selected?.markPrice,selected?.openInterest,base)};
 }
 function liquidationMap(price,openInterest,baseAsset){
  if(!(price>0)||!(openInterest>0))return {levels:[],method:'資料不足',note:'缺少未平倉量或標記價格'};
