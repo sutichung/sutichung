@@ -631,7 +631,7 @@ async function route(req,res){
     }catch(e){return json(res,400,{error:e.message});}
   }
   if(u.pathname==='/api/crypto/market'){
-    const result=await safeLoad('crypto-market',60000,cryptoMarket.loadMarket,e=>({markets:[],summary:{total:0,spot:0,perpetual:0},source:'unavailable',timestamp:now(),error:e.message}));
+    const result=await safeLoad('crypto-market',15000,cryptoMarket.loadMarket,e=>({markets:[],summary:{total:0,spot:0,perpetual:0},source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,result.error?503:200,result);
   }
   if(u.pathname==='/api/crypto/scan'){

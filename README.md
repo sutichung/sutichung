@@ -117,6 +117,7 @@ API Key 僅放後端環境變數；不要提交 .env、Token、券商帳密或�
 
 - 加密貨幣研究中心新增唯讀盤口微結構 API：`GET /api/crypto/microstructure/:symbol`，支援 Binance、Bybit、OKX 公開 REST 盤口、OBI、價差與大額成交 tape。
 - 手機版加密貨幣專區新增盤口與鯨魚成交面板；資料每 15 秒輪詢，不標示為 WebSocket 即時串流。
+- 加密貨幣行情前端每 15 秒輪詢，伺服器快取亦為 15 秒；這是公開 REST 快照更新，不是 WebSocket 逐筆串流。各交易所更新頻率與回傳時間仍以來源時間戳為準。
 - 欄位來源、資料時間戳、單位限制與風險解讀見 [微結構模組說明](./docs/CRYPTO_MICROSTRUCTURE.md)。
 - 這是唯讀公開市場資料；CCXT Pro 私人帳戶串流及自動下單仍未啟用，實盤交易鎖定維持。
 
