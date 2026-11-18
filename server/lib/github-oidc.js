@@ -21,7 +21,7 @@ async function signingKeys(fetchImpl,now){
   keysExpiresAt=now+60*60*1000;
   return cachedKeys;
 }
-async function verifyGitHubActionsToken(token,{fetchImpl=fetch,now=Date.now()}={}){
+async function verifyGitHubActionsToken(token,{fetchImpl=fetch,now=Date.now(),allowProductionSmoke=false}={}){
   if(typeof token!=='string'||token.length>12000) return false;
   const parts=token.split('.');
   if(parts.length!==3)return false;
@@ -32,7 +32,7 @@ async function verifyGitHubActionsToken(token,{fetchImpl=fetch,now=Date.now()}={
     if(claims.iss!==ISSUER||claims.aud!==EXPECTED.aud)return false;
     if(claims.repository!==EXPECTED.repository||claims.ref!==EXPECTED.ref)return false;
     const allowedWorkflowEvent=(claims.workflow_ref===MARKET_WORKFLOW&&['schedule','workflow_dispatch'].includes(claims.event_name))||
-      (claims.workflow_ref===SMOKE_WORKFLOW&&claims.event_name==='push');
+      (allowProductionSmoke&&claims.workflow_ref===SMOKE_WORKFLOW&&claims.event_name==='push');
     if(!allowedWorkflowEvent)return false;
     if(!Number.isFinite(claims.exp)||claims.exp<seconds-30||!Number.isFinite(claims.iat)||claims.iat>seconds+30)return false;
     if(claims.nbf!=null&&(!Number.isFinite(claims.nbf)||claims.nbf>seconds+30))return false;
