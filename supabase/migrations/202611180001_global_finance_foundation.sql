@@ -168,3 +168,19 @@ create policy finance_audit_owner_read
 -- Deliberately no client INSERT/UPDATE/DELETE policies for consent, accounts,
 -- balances, transactions, or audit events. The server must verify consent,
 -- connector ownership and provider responses before writing via service role.
+-- Explicit grants pair with the RLS policies above. No anonymous access to
+-- user-owned financial records; only the trusted server role can write them.
+revoke all on public.finance_consents, public.finance_accounts,
+  public.finance_balances, public.finance_transactions,
+  public.finance_audit_events from anon;
+revoke insert, update, delete on public.finance_institutions,
+  public.finance_connectors from anon, authenticated;
+grant select on public.finance_institutions,
+  public.finance_connectors to anon, authenticated;
+grant select on public.finance_consents, public.finance_accounts,
+  public.finance_balances, public.finance_transactions,
+  public.finance_audit_events to authenticated;
+grant all on public.finance_institutions, public.finance_connectors,
+  public.finance_consents, public.finance_accounts,
+  public.finance_balances, public.finance_transactions,
+  public.finance_audit_events to service_role;
