@@ -473,7 +473,8 @@ async function route(req,res){
       return json(res,404,{error:'not_found'});
     }catch(e){return json(res,e.status||502,{error:e.message});}
   }
-  if(['/api/health','/api/colony/status','/api/diagnostics/providers'].includes(u.pathname)) {
+  if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),mode:process.env.NODE_ENV==='production'?'production':'development'});
+  if(['/api/colony/status','/api/diagnostics/providers'].includes(u.pathname)) {
     if(!SUPABASE_CONFIGURED)return json(res,503,{error:'developer_console_auth_unavailable'});
     const consoleUser=await authenticatedUser(req);
     if(!consoleUser)return json(res,401,{error:'authentication_required'});
