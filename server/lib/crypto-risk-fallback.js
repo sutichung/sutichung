@@ -7,7 +7,8 @@ function candidates(primary,preferred){
 }
 async function loadRiskHistory({getHistory,symbol,marketType,interval='1d',exchange='Binance',nativeSymbol=symbol,limit=240}){
   const errors=[];
-  const order=[...new Set([exchange,...SUPPORTED_EXCHANGES])].filter(x=>HISTORY_EXCHANGES.includes(x));
+  const eligible=marketType==='perpetual'?SUPPORTED_EXCHANGES:HISTORY_EXCHANGES;
+  const order=[...new Set([exchange,...eligible])].filter(x=>eligible.includes(x));
   for(const candidate of order){
     try{
       const history=await getHistory(symbol,marketType,interval,candidate,candidate===exchange?nativeSymbol:symbol,limit);
