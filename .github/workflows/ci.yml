@@ -35,6 +35,11 @@ jobs:
         run: |
           timeout 120s npm audit --json > /tmp/npm-audit.json || true
           node -e "const fs=require('fs');let a={};try{a=JSON.parse(fs.readFileSync('/tmp/npm-audit.json','utf8'))}catch(e){console.log('npm audit report unavailable:',e.message);process.exit(0)};for(const [name,v] of Object.entries(a.vulnerabilities||{})){const via=(v.via||[]).map(x=>typeof x==='string'?x:{title:x.title,url:x.url,range:x.range,severity:x.severity});console.log(JSON.stringify({name,severity:v.severity,direct:v.isDirect,range:v.range,via,fix:v.fixAvailable}))};console.log('AUDIT_SUMMARY',JSON.stringify(a.metadata?.vulnerabilities||{}))"
+      - name: Audit production runtime dependencies
+        if: always()
+        run: |
+          npm audit --omit=dev --json > /tmp/npm-audit-production.json || true
+          node -e "const fs=require('fs');let a={};try{a=JSON.parse(fs.readFileSync('/tmp/npm-audit-production.json','utf8'))}catch(e){console.log('production audit unavailable:',e.message);process.exit(0)};console.log('PRODUCTION_AUDIT_SUMMARY',JSON.stringify(a.metadata?.vulnerabilities||{}))"
       - run: npm run build
         env:
           NODE_OPTIONS: --openssl-legacy-provider
