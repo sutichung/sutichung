@@ -23,9 +23,8 @@ test('outcome artifact selector chooses distinct prior trading dates and correct
 
 test('outcome artifact selector does not fabricate unavailable session horizons',()=>{
  const result=selectOutcomeArtifacts([closeArtifact('2026-11-17','1'),closeArtifact('2026-11-16','2')],'999','2026-11-18');
- assert.equal(result.selected.length,2);
- assert.equal(result.missing.length,1);
- assert.equal(result.missing[0].horizon,'20d');
+ assert.equal(result.selected.length,1);
+ assert.deepEqual(result.missing.map(x=>x.horizon),['5d','20d']);
 });
 
 test('one-hour selector excludes current run and artifacts outside its time window',()=>{
