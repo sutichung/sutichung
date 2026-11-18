@@ -67,20 +67,35 @@ async function loadMacro() {
     {id:'FP.CPI.TOTL.ZG',label:'消費者物價通膨',unit:'%'},
     {id:'SL.UEM.TOTL.ZS',label:'失業率',unit:'%'}
   ];
-  const tasks = countries.flatMap(country=>indicators.map(async indicator=>{
-    const url='https://api.worldbank.org/v2/country/'+country.code+'/indicator/'+indicator.id+'?format=json&per_page=5&date=2021:2026';
-    const response=await fetch(url,{headers:{accept:'application/json'},signal:AbortSignal.timeout(10000)});
+  const countryPath = countries.map(x=>x.code).join(';');
+  const tasks = indicators.map(async indicator=>{
+    const url='https://api.worldbank.org/v2/country/'+countryPath+'/indicator/'+indicator.id+'?format=json&per_page=1000&date=2021:2026';
+    const response=await fetch(url,{headers:{accept:'application/json'},signal:AbortSignal.timeout(12000)});
     if(!response.ok)throw new Error('HTTP '+response.status);
     const payload=await response.json();
     const rows=Array.isArray(payload?.[1])?payload[1]:[];
-    const latest=rows.find(x=>x&&x.value!==null&&Number.isFinite(Number(x.value)));
-    if(!latest)throw new Error('no_observation');
-    return {country:country.code,countryName:country.name,indicator:indicator.id,label:indicator.label,unit:indicator.unit,value:Number(latest.value),year:latest.date,source:'World Bank Open Data',sourceUrl:'https://data.worldbank.org/indicator/'+indicator.id};
-  }));
+    if(!rows.length)throw new Error('no_observations');
+    return {indicator,rows};
+  });
   const settled=await Promise.allSettled(tasks);
-  const data=settled.filter(x=>x.status==='fulfilled').map(x=>x.value);
-  const failures=settled.filter(x=>x.status==='rejected').length;
-  return {data,source:'World Bank Open Data API',fetchedAt:new Date().toISOString(),summary:{requested:tasks.length,received:data.length,failed:failures},status:data.length?'connected':'unavailable',note:'總體經濟年度／季度資料，發布存在時間差，非即時市場報價。'};
+  const data=[];
+  let failedIndicators=0;
+  for(let i=0;i<settled.length;i++){
+    const item=settled[i];
+    if(item.status!=='fulfilled'){failedIndicators++;continue;}
+    const {indicator,rows}=item.value;
+    for(const country of countries){
+      const observations=rows.filter(x=>x&&String(x.countryiso3code||x.country?.id||'').toUpperCase()===country.code&&x.value!==null&&Number.isFinite(Number(x.value)));
+      observations.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+      const latest=observations[0];
+      if(!latest)continue;
+      data.push({country:country.code,countryName:country.name,indicator:indicator.id,label:indicator.label,unit:indicator.unit,value:Number(latest.value),year:latest.date,source:'World Bank Open Data',sourceUrl:'https://data.worldbank.org/indicator/'+indicator.id});
+    }
+  }
+  const requested=countries.length*indicators.length;
+  const missing=requested-data.length;
+  const failed=Math.min(requested,missing+failedIndicators);
+  return {data,source:'World Bank Open Data API',fetchedAt:new Date().toISOString(),summary:{requested,received:data.length,failed},status:data.length?'connected':'unavailable',note:'總體經濟年度／季度資料，發布存在時間差，非即時市場報價。'};
 }
 
 function getRegistry() {
