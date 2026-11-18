@@ -14,6 +14,14 @@ async function getJson(url, timeoutMs = 10000) {
   if (!response.ok) throw new Error('upstream_http_' + response.status);
   return response.json();
 }
+async function getJsonFallback(urls, timeoutMs = 10000) {
+  const errors = [];
+  for (const url of urls) {
+    try { return { data: await getJson(url, timeoutMs), base: new URL(url).origin }; }
+    catch (error) { errors.push(String(error.message || error)); }
+  }
+  throw new Error(errors.join('; ') || 'all_official_endpoints_unavailable');
+}
 function normalizeBook(exchange, bids, asks, timestamp, depth = 10, { notionalAvailable = true } = {}) {
   const clean = rows => (rows || []).map(x => [number(x[0]), number(x[1])])
     .filter(x => x[0] !== null && x[1] !== null && x[0] > 0 && x[1] > 0);
@@ -77,7 +85,7 @@ async function fetchMicrostructure({ exchange = 'Binance', symbol, marketType = 
   const whaleClassificationAvailable = ['USD','USDT','USDC','BUSD','FDUSD','TUSD'].includes(quoteCurrency) && !(exchange === 'OKX' && marketType === 'perpetual');
   let book, trades, source;
   if (exchange === 'Binance') {
-    const host = marketType === 'perpetual' ? 'https://fapi.binance.com' : 'https://api.binance.com';
+    const host = marketType === 'perpetual' ? 'https://fapi.binance.com' : 'https://data-api.binance.vision';
     const path = marketType === 'perpetual' ? '/fapi/v1' : '/api/v3';
     const [b, t] = await Promise.all([
       getJson(host + path + '/depth?' + new URLSearchParams({ symbol: safeSymbol, limit: String(levels) })),
@@ -85,17 +93,18 @@ async function fetchMicrostructure({ exchange = 'Binance', symbol, marketType = 
     ]);
     book = normalizeBook(exchange, b.bids, b.asks, null, levels);
     trades = normalizeTrades(exchange, t.map(x => ({ id: x.id, timestamp: x.time, side: x.isBuyerMaker ? 'sell' : 'buy', price: x.price, amount: x.qty, quoteCurrency, whaleClassificationAvailable })), whaleThresholdUsd);
-    source = 'Binance public REST order book + recent trades';
+    source = 'Binance public REST order book + recent trades (' + host + ')';
   } else if (exchange === 'Bybit') {
     const category = marketType === 'perpetual' ? 'linear' : 'spot';
-    const [b, t] = await Promise.all([
-      getJson('https://api.bybit.com/v5/market/orderbook?' + new URLSearchParams({ category, symbol: safeSymbol, limit: String(levels) })),
-      getJson('https://api.bybit.com/v5/market/recent-trade?' + new URLSearchParams({ category, symbol: safeSymbol, limit: '100' }))
+    const [bookResult, tapeResult] = await Promise.all([
+      getJsonFallback(['https://api.bybit.com','https://api.bytick.com'].map(host => host + '/v5/market/orderbook?' + new URLSearchParams({ category, symbol: safeSymbol, limit: String(levels) }))),
+      getJsonFallback(['https://api.bybit.com','https://api.bytick.com'].map(host => host + '/v5/market/recent-trade?' + new URLSearchParams({ category, symbol: safeSymbol, limit: '100' })))
     ]);
+    const b = bookResult.data, t = tapeResult.data;
     if (b.retCode !== 0 || t.retCode !== 0) throw new Error(b.retMsg || t.retMsg || 'bybit_api_error');
     book = normalizeBook(exchange, b.result?.b || [], b.result?.a || [], b.result?.ts, levels);
     trades = normalizeTrades(exchange, (t.result?.list || []).map(x => ({ id: x.execId, timestamp: Number(x.time), side: String(x.side).toLowerCase(), price: x.price, amount: x.size, quoteCurrency, whaleClassificationAvailable })), whaleThresholdUsd);
-    source = 'Bybit V5 public order book + recent trades';
+    source = 'Bybit V5 public order book + recent trades (' + bookResult.base + ')';
   } else if (exchange === 'OKX') {
     const instId = safeSymbol.includes('-') ? safeSymbol : safeSymbol.replace(/(USDT|USDC|USD)$/, '-$1') + (marketType === 'perpetual' ? '-SWAP' : '');
     const [b, t] = await Promise.all([
@@ -117,9 +126,9 @@ async function fetchMicrostructure({ exchange = 'Binance', symbol, marketType = 
   const knownSideValue = buyValue + sellValue;
   const notionalAvailable = !(exchange === 'OKX' && marketType === 'perpetual');
   return {
-    exchange, symbol: safeSymbol, marketType, source, timestamp: book.timestamp,
+    exchange, symbol: safeSymbol, marketType, source, endpointBase: exchange === 'Binance' ? (marketType === 'perpetual' ? 'https://fapi.binance.com' : 'https://data-api.binance.vision') : exchange === 'Bybit' ? (bookResult?.base || null) : 'https://www.okx.com', timestamp: book.timestamp,
     receivedAt: now(), book,
     tape: { count: trades.length, knownSideCount: knownSideTrades.length, largeTradeCount: whaleClassificationAvailable ? largeTrades.length : null, largeTrades: whaleClassificationAvailable ? largeTrades.slice(0, 20) : [], whaleClassificationAvailable, quoteCurrency, buyQuoteValue: notionalAvailable ? buyValue : null, sellQuoteValue: notionalAvailable ? sellValue : null, netAggressiveQuoteValue: notionalAvailable ? buyValue - sellValue : null, aggressiveBuyPct: notionalAvailable && knownSideValue > 0 ? buyValue / knownSideValue * 100 : null, tradeImbalance: notionalAvailable && knownSideValue > 0 ? (buyValue - sellValue) / knownSideValue : null, whaleThresholdUsd: whaleClassificationAvailable ? whaleThresholdUsd : null }
   };
 }
-module.exports = { fetchMicrostructure, normalizeBook, normalizeTrades };
+module.exports = { fetchMicrostructure, normalizeBook, normalizeTrades, getJsonFallback };
