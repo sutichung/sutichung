@@ -8,6 +8,7 @@ const { scoreStock } = require('./lib/scoring');
 const { getTradingReadiness } = require('./lib/trading-readiness');
 const { buildAiCommittee } = require('./lib/agents');
 const { applyFirewall } = require('./lib/firewall');
+const antColony = require('./lib/ant-colony');
 const { loadMarket: loadUsMarket, getChart: getUsChart, searchSymbols: searchUsSymbols, getUniversePage: getUsUniversePage } = require('./lib/us-market');
 const cryptoMarket = require('./lib/crypto-market');
 const globalFinance = require('./lib/global-finance');
@@ -469,6 +470,7 @@ async function route(req,res){
     }catch(e){return json(res,e.status||502,{error:e.message});}
   }
   if(req.method!=='GET'){return json(res,405,{error:'method_not_allowed'});}
+  if(u.pathname==='/api/colony/status')return json(res,200,antColony.getStatus());
   if(u.pathname==='/api/health')return json(res,200,{ok:true,time:now(),node:process.version,auth:{configured:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY},provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),providers:{finmind:!!FINMIND_TOKEN,fugle:!!FUGLE_API_KEY,youtubeApiKeyConfigured:!!process.env.YOUTUBE_API_KEY,youtubeLiveResolver:!!process.env.YOUTUBE_API_KEY,youtubeChannelEmbedFallback:true,openrouter:!!process.env.OPENROUTER_API_KEY,gemini:!!process.env.GEMINI_API_KEY,groq:!!process.env.GROQ_API_KEY,cloudflare:!!(process.env.CLOUDFLARE_API_TOKEN&&process.env.CLOUDFLARE_ACCOUNT_ID),realtime:null,realtimeProviderConfigured:!!(FUGLE_API_KEY||process.env.MARKET_REALTIME_URL),twseMisFallback:true,tpexRealtimeConfigured:!!FUGLE_API_KEY,tpexHistoricalFallback:true,scan:true,flows:true,futures:true,sentiment:true,news:true,openDataArchive:true},mode:process.env.NODE_ENV==='production'?'production':'development'});
   if(SUPABASE_CONFIGURED&&u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/api/auth/')){
     const user=await authenticatedUser(req);if(!user)return json(res,401,{error:'authentication_required'});
@@ -531,7 +533,8 @@ async function route(req,res){
         return {...item,technical:{status:'research-ready',direction,score,confidence:Math.round(available.length/checks.length*100),checks:checks.map(x=>({name:x[0],bullish:x[1],bearish:x[2]})),indicators:v,asOf:h.asOf}};
       }catch(e){return {...item,technical:{status:'error',direction:'資料暫缺',score:null,error:e.message}};}
     }));
-    return json(res,200,{results,offset,nextOffset:offset+batch.length,total:(market.markets||[]).length,done:offset+batch.length>=(market.markets||[]).length,source:'Binance 逐市場日K技術掃描',timestamp:now()});
+    antColony.enqueue('CRYPTO',results,market.timestamp||now());
+    return json(res,200,{results,offset,nextOffset:offset+batch.length,total:(market.markets||[]).length,done:offset+batch.length>=(market.markets||[]).length,source:'多交易所逐市場日K技術掃描',timestamp:now()});
   }
   if(u.pathname==='/api/crypto/news'){
     const result=await safeLoad('crypto-news',300000,cryptoMarket.loadNews,e=>({data:[],source:'unavailable',timestamp:now(),error:e.message}));
@@ -570,6 +573,7 @@ async function route(req,res){
   }
   if(u.pathname==='/api/us/market'){
     const result=await safeLoad('us-market',5*60*1000,loadUsMarket,e=>({market:'US',data:{},indices:[],scan:[],source:'unavailable',timestamp:now(),error:e.message,coverage:{stocks:0,universe:30,indices:0}}));
+    if(!result.error&&!result.stale)antColony.enqueue('US',Array.isArray(result.scan)?result.scan:[],result.timestamp||result.asOf||null);
     return json(res,result.error?503:200,result);
   }
   if(u.pathname.startsWith('/api/us/history/')){
@@ -735,6 +739,7 @@ async function route(req,res){
       return {data,source:(base.source||'FinMind')+' + 上市櫃行情／公開估值／籌碼',timestamp:now(),scannedCount:Object.keys(data).length,historyAsOf:base.historyAsOf,historyCount:base.historyCount||Object.keys(base.data||{}).length,markets:base.markets||null,advanceDecline};
     },e=>({data:{},source:'unavailable',timestamp:now(),scannedCount:0,error:e.message}));
     if(result.stale&&result.data){const safeData={};for(const [symbol,row] of Object.entries(result.data)){const card=row?.scorecard||{};safeData[symbol]={...row,scorecard:{...card,direction:'觀望',status:'insufficient-data',fresh:false,reasons:[...(card.reasons||[]),'全市場掃描快取已過期，暫停方向判斷']}};}return json(res,200,{...result,data:safeData});}
+    if(!result.error&&!result.stale)antColony.enqueue('TW',Object.entries(result.data||{}).map(([symbol,row])=>({...row,symbol,source:result.source})),result.historyAsOf||result.timestamp||null);
     return json(res,200,result);
   }
   if(u.pathname.startsWith('/api/market/fundamentals/')){
