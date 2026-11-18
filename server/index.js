@@ -408,7 +408,19 @@ async function route(req,res){
       return json(res,status,{error:e.code||'research_storage_error',message:e.message});
     }
   }
-  if(u.pathname==='/api/auth/config'&&req.method==='GET')return json(res,200,{configured:SUPABASE_CONFIGURED,registrationEnabled:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY,oauthProviders:['apple','facebook'],phoneOtp:true});
+  if(u.pathname==='/api/auth/config'&&req.method==='GET'){
+    let settings=null,settingsError=null;
+    if(SUPABASE_CONFIGURED){
+      try{
+        const response=await fetch(SUPABASE_URL+'/auth/v1/settings',{headers:{apikey:SUPABASE_ANON_KEY,Accept:'application/json'},signal:AbortSignal.timeout(8000)});
+        const payload=await response.json().catch(()=>({}));
+        if(!response.ok)throw new Error(payload.msg||payload.message||'無法讀取 Supabase Auth 設定');
+        settings=payload;
+      }catch(e){settingsError=e.message;}
+    }
+    const signupDisabled=!!settings?.disable_signup;
+    return json(res,200,{configured:SUPABASE_CONFIGURED,registrationEnabled:SUPABASE_CONFIGURED&&!signupDisabled&&settings?.external?.email!==false,signupDisabled,emailProviderEnabled:settings?.external?.email!==false,phoneProviderEnabled:settings?.external?.phone!==false,emailAutoconfirm:!!settings?.mailer_autoconfirm,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY&&!!SUPABASE_ADMIN_EMAIL,adminEmailConfigured:!!SUPABASE_ADMIN_EMAIL,serviceRoleConfigured:!!SUPABASE_SERVICE_ROLE_KEY,settingsAvailable:!!settings,settingsError,oauthProviders:['apple','facebook'],phoneOtp:true});
+  }
   const oauthMatch=u.pathname.match(/^\/api\/auth\/oauth\/(apple|facebook)$/);
   if(oauthMatch&&req.method==='GET'){
     if(!SUPABASE_CONFIGURED)return json(res,503,{error:'Supabase 尚未設定'});
@@ -475,11 +487,26 @@ async function route(req,res){
         const data=await supabaseRequest('/auth/v1/admin/users?page='+page+'&per_page='+perPage,{admin:true});
         return json(res,200,{users:(data.users||[]).map(x=>({id:x.id,email:x.email,created_at:x.created_at,last_sign_in_at:x.last_sign_in_at,banned_until:x.banned_until})),nextPage:(data.users||[]).length===perPage?page+1:null});
       }
+      if(u.pathname==='/api/admin/members/invite'&&req.method==='POST'){
+        const body=await readRequestJson(req),email=String(body.email||'').trim().toLowerCase();
+        if(!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email))return json(res,400,{error:'請輸入有效的會員 Email'});
+        const origin=(req.headers['x-forwarded-proto']||'https')+'://'+(req.headers['x-forwarded-host']||req.headers.host);
+        const invited=await supabaseRequest('/auth/v1/invite',{method:'POST',admin:true,body:{email,redirect_to:origin+'/' }});
+        return json(res,201,{user:{id:invited.id,email:invited.email,created_at:invited.created_at},invitationSent:!!invited.id,message:'已建立邀請，請會員至信箱完成驗證及設定密碼。'});
+      }
       if(u.pathname==='/api/admin/members'&&req.method==='POST'){
-        const body=await readRequestJson(req);const email=String(body.email||'').trim(),password=String(body.password||'');
-        if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)||password.length<10)return json(res,400,{error:'Email 格式錯誤或密碼少於 10 個字元'});
+        const body=await readRequestJson(req),email=String(body.email||'').trim().toLowerCase(),password=String(body.password||'');
+        if(!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email)||password.length<10)return json(res,400,{error:'Email 格式錯誤或密碼少於 10 個字元'});
         const created=await supabaseRequest('/auth/v1/admin/users',{method:'POST',admin:true,body:{email,password,email_confirm:true}});
         return json(res,201,{user:{id:created.id,email:created.email,created_at:created.created_at}});
+      }
+      const resetMatch=u.pathname.match(/^\\/api\\/admin\\/members\\/([0-9a-f-]{36})\\/reset-password$/i);
+      if(resetMatch&&req.method==='POST'){
+        const member=await supabaseRequest('/auth/v1/admin/users/'+resetMatch[1],{admin:true});
+        if(!member.email)return json(res,404,{error:'找不到會員 Email，無法寄送重設連結'});
+        const origin=(req.headers['x-forwarded-proto']||'https')+'://'+(req.headers['x-forwarded-host']||req.headers.host);
+        await supabaseRequest('/auth/v1/recover',{method:'POST',body:{email:member.email,redirect_to:origin+'/' }});
+        return json(res,200,{ok:true,message:'已寄送密碼重設信至會員信箱。'});
       }
       const match=u.pathname.match(/^\/api\/admin\/members\/([0-9a-f-]{36})\/(disable|enable)$/i);
       if(match&&req.method==='POST'){
