@@ -47,6 +47,19 @@ async function getChart(symbol, range='1y', interval='1d') {
   } finally {clearTimeout(timer);}
 }
 
+async function searchSymbols(query){
+  const q=String(query||'').trim().slice(0,60);
+  if(!q) return [];
+  const url='https://query1.finance.yahoo.com/v1/finance/search?'+new URLSearchParams({q,quotesCount:'12',newsCount:'0',enableFuzzyQuery:'true'});
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);
+  try{
+    const response=await fetch(url,{signal:controller.signal,headers:{'User-Agent':UA,accept:'application/json'}});
+    if(!response.ok)throw new Error('Yahoo Finance search HTTP '+response.status);
+    const payload=await response.json();
+    return (payload.quotes||[]).filter(x=>x.symbol&&/EQUITY|ETF/.test(String(x.quoteType||'EQUITY'))).slice(0,12).map(x=>({symbol:String(x.symbol),name:String(x.shortname||x.longname||x.symbol),exchange:String(x.exchange||''),type:String(x.quoteType||'EQUITY')}));
+  } finally {clearTimeout(timer);}
+}
+
 async function mapLimit(items,limit,fn){
   const out=new Array(items.length);let next=0;
   await Promise.all(Array.from({length:Math.min(limit,items.length)},async()=>{while(true){const i=next++;if(i>=items.length)return;try{out[i]=await fn(items[i],i);}catch(error){out[i]={error:error.message,symbol:items[i][0]};}}}));
@@ -73,4 +86,4 @@ async function loadMarket(){
   return {data,indices,scan:scanned,source:'Yahoo Finance Chart 非官方端點；美股涵蓋清單 30 檔大型股／ETF，不代表全市場',timestamp:new Date().toISOString(),market:'US',coverage:{stocks:scanned.length,universe:STOCKS.length,indices:indices.length},disclaimer:'非官方免費端點，可能延遲、限流或中斷；不得作為券商即時報價或下單依據。'};
 }
 
-module.exports={STOCKS,INDICES,getChart,loadMarket};
+module.exports={STOCKS,INDICES,getChart,loadMarket,searchSymbols};
