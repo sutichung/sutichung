@@ -494,7 +494,7 @@ async function route(req,res){
         const body=await readRequestJson(req);
         const email=String(body.email||'').trim().toLowerCase();
         const confirmation=String(body.confirmEmail||'').trim().toLowerCase();
-        if(!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email))return json(res,400,{error:'請輸入有效的會員 Email'});
+        if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))return json(res,400,{error:'請輸入有效的會員 Email'});
         if(confirmation!==email)return json(res,400,{error:'安全確認失敗：請再次輸入完全相同的會員 Email'});
         let member=null,page=1;
         for(;page<=20;page++){
