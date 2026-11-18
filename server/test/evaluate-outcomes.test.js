@@ -66,3 +66,10 @@ test('rejects unsafe cost assumptions and unknown signal directions',()=>{
  assert.equal(report.evaluatedCount,0);
  assert.equal(report.excluded[0].reason,'invalid_signal_side');
 });
+
+test('uses a conservative Taiwan round-trip cost by default',()=>{
+ const report=evaluateOutcomes(previous(),snapshot(),{horizon:'1d',sessions:1,now});
+ assert.equal(report.assumedRoundTripCostPct,0.785);
+ assert.match(report.costAssumption,/0\.1425%/);
+ assert.match(report.costAssumption,/0\.30%/);
+});
