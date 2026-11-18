@@ -58,7 +58,7 @@ export default function QuantResearch({symbol='2330',source='',asOf='',market='t
  const metrics=(x)=>[['交易筆數',x.trades+' 筆'],['勝率',fmt(x.winRatePct,'%')],['淨報酬',fmt(x.netReturnPct,'%')],['最大回撤',fmt(x.maxDrawdownPct,'%')],['Sharpe',fmt(x.sharpe)],['Sortino',fmt(x.sortino)],['Profit Factor',fmt(x.profitFactor)],['單筆期望值',fmt(x.expectancyPct,'%')]];
  return <section style={{...card,marginBottom:12}}>
   <div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',alignItems:'center'}}><b>🧪 策略實驗室｜多策略樣本外驗證</b><small style={{color:'#91a1b8'}}>標的 {targetSymbol}｜{marketType==='tw-stock'?'台股':marketType==='us-stock'?'美股':'加密貨幣'}</small></div>
-  <p style={{fontSize:11,color:'#91a1b8',lineHeight:1.7,margin:'8px 0'}}>借鏡 Pine Script 專案的自動化策略驗證流程，使用 EMA 趨勢、MACD 動能、布林均值回歸、SMA 交叉、唐奇安突破、布林 RSI、SuperTrend 七種透明規則。60% 訓練區間與 40% 樣本外區間分開測試，並將樣本外區間切成三段 Walk-forward；另測半成本與雙倍成本情境。訊號在收盤確認、下一根 K 線開盤成交，任何通過都只是研究候選。</p>
+  <p style={{fontSize:11,color:'#91a1b8',lineHeight:1.7,margin:'8px 0'}}>借鏡 Pine Script 專案的自動化策略驗證流程，使用 EMA 趨勢、MACD 動能、布林均值回歸、SMA 交叉、唐奇安突破、布林 RSI、SuperTrend 與多維度市場結構共識等透明規則。60% 訓練區間與 40% 樣本外區間分開測試，並將樣本外區間切成三段 Walk-forward；另測半成本與雙倍成本情境。市場結構策略只在右側確認 K 線完成後辨識 Swing；訊號收盤確認、下一根 K 線開盤成交，任何通過都只是研究候選。</p>
   <div style={{...metric,margin:'10px 0',padding:11}}>
    <div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',alignItems:'center'}}><b>📈 真實訊號績效追蹤</b><small style={{color:'#91a1b8'}}>Supabase 私有歷史紀錄｜每 5 分鐘更新</small></div>
    <div style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:7,marginTop:9}}>
