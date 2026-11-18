@@ -80,20 +80,21 @@ async function mapLimit(items,limit,fn){
 async function loadMarket(){
   const items=[...STOCKS,...INDICES];
   const rows=await mapLimit(items,3,([symbol])=>getChart(symbol,'1y','1d'));
-  const data={},indices=[];
+  const data={},rawData={},indices=[];
   for(let i=0;i<items.length;i++){
     const row=rows[i];if(!row||row.error)continue;
-    data[row.symbol]=row;
-    if(INDICES.some(x=>x[0]===row.symbol))indices.push(row);
+    const {candles,...quoteSummary}=row;rawData[row.symbol]=row;data[row.symbol]=quoteSummary;
+    if(INDICES.some(x=>x[0]===row.symbol))indices.push(quoteSummary);
   }
   if(!Object.keys(data).length)throw new Error('美股資料來源暫時無法連線');
   let news=[];try{news=await getNews('US stock market');}catch(_){}
   const scanned=STOCKS.map(([symbol,name,sector])=>{
-    const quote=data[symbol];if(!quote)return null;
-    const ind=indicators(quote.candles);
-    const last=quote.candles.at(-1);
-    const scorecard=ind&&last?scoreStock({...ind,signal:ind.macdSignal,asOf:quote.timestamp||last.timestamp,maxAgeMs:5*24*60*60*1000,dailyChangePct:quote.changePct,priceVsEma20Pct:ind.ema20?(last.close/ind.ema20-1)*100:null,priceVsEma60Pct:ind.ema60?(last.close/ind.ema60-1)*100:null,return5dPct:quote.candles.length>=6?(last.close/quote.candles.at(-6).close-1)*100:null,return20dPct:quote.candles.length>=21?(last.close/quote.candles.at(-21).close-1)*100:null}):null;
-    return {symbol,name,sector,...quote,indicators:ind,scorecard};
+    const quote=rawData[symbol];if(!quote)return null;
+    const {candles,...quoteSummary}=quote;
+    const ind=indicators(candles);
+    const last=candles.at(-1);
+    const scorecard=ind&&last?scoreStock({...ind,signal:ind.macdSignal,asOf:quote.timestamp||last.timestamp,maxAgeMs:5*24*60*60*1000,dailyChangePct:quote.changePct,priceVsEma20Pct:ind.ema20?(last.close/ind.ema20-1)*100:null,priceVsEma60Pct:ind.ema60?(last.close/ind.ema60-1)*100:null,return5dPct:candles.length>=6?(last.close/candles.at(-6).close-1)*100:null,return20dPct:candles.length>=21?(last.close/candles.at(-21).close-1)*100:null}):null;
+    return {symbol,name,sector,...quoteSummary,indicators:ind,scorecard};
   }).filter(Boolean);
   return {data,indices,scan:scanned,news,source:'Yahoo Finance Chart 非官方端點；美股涵蓋清單 30 檔大型股／ETF，不代表全市場',timestamp:new Date().toISOString(),market:'US',coverage:{stocks:scanned.length,universe:STOCKS.length,indices:indices.length},disclaimer:'非官方免費端點，可能延遲、限流或中斷；不得作為券商即時報價或下單依據。'};
 }
