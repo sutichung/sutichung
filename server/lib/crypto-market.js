@@ -127,23 +127,28 @@ async function ratioFor(exchange,base){
 }
 async function getDerivatives(symbol,exchange='Binance',nativeSymbol=''){
  const base=String(symbol).toUpperCase().replace(/(USDT|USDC|USD)$/,'');
- const [battle,binance,binanceOi,bybit,okx]=await Promise.all([
+ const okxInst=base+'-USDT-SWAP';
+ const [battle,binance,binanceOi,bybit,okxFunding,okxOi,okxMark]=await Promise.all([
   Promise.all(['Binance','Bybit','OKX'].map(x=>ratioFor(x,base))),
   getJson('https://fapi.binance.com/fapi/v1/premiumIndex?symbol='+base+'USDT').catch(()=>null),
   getJson('https://fapi.binance.com/fapi/v1/openInterest?symbol='+base+'USDT').catch(()=>null),
   getJsonFallback(['https://api.bybit.com','https://api.bytick.com'].map(host=>host+'/v5/market/tickers?category=linear&symbol='+base+'USDT')).then(x=>x.data).catch(()=>null),
-  getJson('https://www.okx.com/api/v5/market/ticker?instId='+base+'-USDT-SWAP').catch(()=>null)
+  getJson('https://www.okx.com/api/v5/public/funding-rate?instId='+okxInst).catch(()=>null),
+  getJson('https://www.okx.com/api/v5/public/open-interest?instType=SWAP&instId='+okxInst).catch(()=>null),
+  getJson('https://www.okx.com/api/v5/public/mark-price?instType=SWAP&instId='+okxInst).catch(()=>null)
  ]);
- const bq=bybit?.result?.list?.[0],oq=okx?.data?.[0];
+ const bq=bybit?.result?.list?.[0],of=okxFunding?.data?.[0],oi=okxOi?.data?.[0],om=okxMark?.data?.[0];
+ const toIso=value=>{const ms=Number(value);return value!==null&&value!==undefined&&Number.isFinite(ms)&&ms>0?new Date(ms).toISOString():null;};
  const rows=[
-  {exchange:'Binance',fundingRate:n(binance?.lastFundingRate),markPrice:n(binance?.markPrice),openInterest:n(binanceOi?.openInterest)},
-  {exchange:'Bybit',fundingRate:n(bq?.fundingRate),markPrice:n(bq?.markPrice),openInterest:n(bq?.openInterest)},
-  {exchange:'OKX',fundingRate:n(oq?.fundingRate),markPrice:null,openInterest:null}
+  {exchange:'Binance',fundingRate:n(binance?.lastFundingRate),markPrice:n(binance?.markPrice),openInterest:n(binanceOi?.openInterest),sourceTime:toIso(binance?.time)},
+  {exchange:'Bybit',fundingRate:n(bq?.fundingRate),markPrice:n(bq?.markPrice),openInterest:n(bq?.openInterest),sourceTime:toIso(bybit?.time)},
+  {exchange:'OKX',fundingRate:n(of?.fundingRate),markPrice:n(om?.markPx),openInterest:n(oi?.oiCcy),sourceTime:toIso(om?.ts)||toIso(of?.fundingTime)}
  ];
  const ratios=battle.filter(x=>x&&Number.isFinite(x.longPct)&&Number.isFinite(x.shortPct));
- const longPct=ratios.length?ratios.reduce((s,x)=>s+x.longPct,0)/ratios.length:null;
+ const longPct=ratios.length?ratios.reduce((sum,x)=>sum+x.longPct,0)/ratios.length:null;
  const selected=rows.find(x=>x.exchange===exchange)||rows[0];
- return {exchange,openInterest:selected?.openInterest??null,fundingRate:selected?.fundingRate??null,markPrice:selected?.markPrice??null,indexPrice:n(binance?.indexPrice),source:'各交易所公開衍生品 API',timestamp:now(),battle:{exchanges:battle,validExchanges:ratios.length,longPct,shortPct:longPct===null?null:100-longPct,stance:longPct===null?'資料不足':longPct>55?'多方佔優':longPct<45?'空方佔優':'多空拉鋸'},liquidationMap:liquidationMap(selected?.markPrice,selected?.openInterest,base)};
+ const receivedAt=now();
+ return {exchange,openInterest:selected?.openInterest??null,openInterestAsset:base,fundingRate:selected?.fundingRate??null,markPrice:selected?.markPrice??null,indexPrice:n(binance?.indexPrice)??n(om?.idxPx),source:'Binance/Bybit/OKX official public funding, mark-price and open-interest endpoints',timestamp:receivedAt,receivedAt,sourceTime:selected?.sourceTime??null,battle:{exchanges:battle,validExchanges:ratios.length,longPct,shortPct:longPct===null?null:100-longPct,stance:longPct===null?'資料不足':longPct>55?'多方佔優':longPct<45?'空方佔優':'多空拉鋸'},liquidationMap:liquidationMap(selected?.markPrice,selected?.openInterest,base)};
 }
 function liquidationMap(price,openInterest,baseAsset){
  if(!(price>0)||!(openInterest>0))return {levels:[],method:'資料不足',note:'缺少未平倉量或標記價格'};
