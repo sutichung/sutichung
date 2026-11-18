@@ -12,6 +12,12 @@ test('order book computes spread and depth imbalance from valid levels', () => {
   assert.equal(book.bidDepth, 10);
   assert.equal(book.askDepth, 5);
   assert.equal(book.obi, 1 / 3);
+  assert.equal(book.weightedObi, (8 + 2 / 2 - (4 + 1 / 2)) / (8 + 2 / 2 + 4 + 1 / 2));
+  assert.equal(book.bestBidSize, 8);
+  assert.equal(book.bestAskSize, 4);
+  assert.ok(book.microPrice > book.midPrice, 'larger bid size should pull microprice upward');
+  assert.equal(book.depthBands[0].levels, 5);
+  assert.equal(book.depthBands[0].imbalance, book.obi);
   assert.equal(book.timestamp, null, 'do not invent an exchange timestamp');
 });
 
@@ -58,4 +64,15 @@ test('unsupported exchanges and malformed symbols fail closed', async () => {
 test('derivative contract sizing can be explicitly disabled when quote notional is not reliable', () => {
   const trade = { id: 'swap-1', timestamp: 1700000000000, side: 'buy', price: '60000', amount: '1', quoteCurrency: 'USDT', whaleClassificationAvailable: false };
   assert.equal(normalizeTrades('OKX', [trade], 50000)[0].large, null);
+});
+
+test('trade tape exposes aggressive buy pressure only from known quote notional', () => {
+  const { normalizeTrades: normalize } = require('../lib/crypto-microstructure');
+  const trades = normalize('Binance', [
+    { id: 'b', timestamp: 2, side: 'buy', price: 100, amount: 3, quoteCurrency: 'USDT' },
+    { id: 's', timestamp: 1, side: 'sell', price: 100, amount: 1, quoteCurrency: 'USDT' }
+  ]);
+  const buy = trades.filter(x => x.side === 'buy').reduce((s, x) => s + x.quoteValue, 0);
+  const sell = trades.filter(x => x.side === 'sell').reduce((s, x) => s + x.quoteValue, 0);
+  assert.equal(buy / (buy + sell) * 100, 75);
 });
