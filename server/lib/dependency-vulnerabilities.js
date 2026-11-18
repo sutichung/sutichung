@@ -126,7 +126,7 @@ function createDependencyVulnerabilityScanner({ lockPath, manifestPath, fetchImp
           if (!packages.length) throw new Error('package-lock.json 沒有可掃描的鎖定套件');
           const batches = [];
           for (let i = 0; i < packages.length; i += BATCH_SIZE) batches.push({ offset: i, packages: packages.slice(i, i + BATCH_SIZE) });
-          const settled = await Promise.all(batches.map(async batch => {
+          const settled = await Promise.allSettled(batches.map(async batch => {
             const response = await fetchImpl('https://api.osv.dev/v1/querybatch', {
               method: 'POST',
               headers: { accept: 'application/json', 'content-type': 'application/json' },
