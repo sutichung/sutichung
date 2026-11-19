@@ -266,3 +266,11 @@ test('market discovery reports license_required without calling exchange APIs wh
   assert.ok(result.exchanges.every(x=>x.status==='not_configured'));assert.equal(calls,0);
  }finally{global.fetch=original;for(const [key,value] of Object.entries(previous)){if(value===undefined)delete process.env[key];else process.env[key]=value;}}
 });
+
+test('derivatives API returns license_required without querying any exchange when all licenses are absent',async()=>{
+ const keys=Object.keys(MARKET_DATA_TEST_LICENSES),previous=Object.fromEntries(keys.map(k=>[k,process.env[k]]));
+ for(const key of keys)delete process.env[key];
+ const original=global.fetch;let calls=0;global.fetch=async()=>{calls++;throw new Error('exchange_fetch_must_not_run');};
+ try{const result=await getDerivatives('BTCUSDT','Binance');assert.equal(result.status,'license_required');assert.equal(calls,0);}
+ finally{global.fetch=original;for(const [key,value] of Object.entries(previous)){if(value===undefined)delete process.env[key];else process.env[key]=value;}}
+});
