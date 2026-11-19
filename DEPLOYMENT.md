@@ -10,7 +10,6 @@
 
 ## 資料來源與密鑰
 API Key 只放 Render Environment，不可放前端、GitHub 程式碼或聊天內容。
-- `FUGLE_API_KEY`：若帳戶已有合法授權，供即時快照使用。不要為本專案自動購買或升級方案。
 - `FINMIND_TOKEN`：若已有可用權限，供日 K、法人、融資融券及估值資料使用。
 - 可選 `MARKET_REALTIME_URL`、`MARKET_SCAN_URL`、`MARKET_FLOWS_URL`、`MARKET_FUTURES_URL`、`MARKET_SENTIMENT_URL`、`MARKET_NEWS_URL`，只可接入合法授權且符合後端 JSON 契約的資料來源。
 - 沒有設定或授權不足時，系統應顯示缺資料；不得用假價格、固定值或過期快取冒充即時行情。
@@ -27,3 +26,5 @@ API Key 只放 Render Environment，不可放前端、GitHub 程式碼或聊天�
 
 ## 不付費原則
 本專案不會自動升級 Render、購買行情方案或啟用付費資源。若免費資料源無法提供所需的即時性或授權，必須明確顯示限制，而不是假裝已具備實盤能力。
+
+- 台股公開行情使用 TWSE／TPEx 官方 OpenAPI 日收盤資料；即時行情需另行取得交易所或核准資料供應商授權。
