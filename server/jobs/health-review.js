@@ -24,14 +24,17 @@ function buildHealthReport(health, diagnostics, marketDiagnostics = null, crypto
   if (marketDiagnostics) {
     const listedCount = finiteOrNull(marketDiagnostics.listedCount);
     const liveQuoteCount = finiteOrNull(marketDiagnostics.quoteCount);
-    const connected = marketDiagnostics.ok === true && listedCount !== null && listedCount > 0;
+    const quoteCount = finiteOrNull(marketDiagnostics.quoteCount ?? marketDiagnostics.scannedCount);
+    const connected = marketDiagnostics.ok === true && (quoteCount !== null && quoteCount > 0 || listedCount !== null && listedCount > 0);
     taiwan = {
       status: connected ? 'connected' : 'unavailable',
       source: marketDiagnostics.source || null,
       listedCount,
       liveQuoteCount,
+      dataMode: marketDiagnostics.dataMode || null,
+      realtime: marketDiagnostics.realtime === true,
       checkedAt: marketDiagnostics.serverTime || null,
-      note: liveQuoteCount === 0 ? '來源連線正常但此刻沒有即時報價；可能是休市或非交易時段' : null
+      note: marketDiagnostics.realtime === false ? '已取得交易所官方日收盤資料；非盤中即時報價' : liveQuoteCount === 0 ? '來源連線正常但此刻沒有即時報價；可能是休市或非交易時段' : null
     };
     if (!connected) dataFailures.push({
       id: 'twse-market-data',
