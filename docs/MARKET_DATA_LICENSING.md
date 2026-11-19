@@ -37,6 +37,17 @@ A flag applies only to its named provider. It does not authorize another exchang
 - Other official market sources (for example TWSE) remain subject to their own data terms and entitlements.
 
 
+## Crypto WebSocket quote ingestion
+
+The server-side Binance feed subscribes to combined `@ticker` and `@bookTicker` streams for the configured symbols. Defaults are BTCUSDT, ETHUSDT and SOLUSDT; `CRYPTO_WS_SYMBOLS` accepts up to 100 comma-separated exchange-native symbols. The optional USD-M perpetual feed is controlled by `CRYPTO_WS_ENABLE_FUTURES=true`.
+
+- The feed starts with the Node API process, reconnects with exponential backoff and jitter, and terminates silent connections with a stale-message watchdog.
+- `GET /api/crypto/realtime/status` reports connection state; `GET /api/crypto/realtime/quotes` returns only fresh in-memory quotes to authenticated clients.
+- The crypto market snapshot overlays fresh Binance WebSocket values while retaining REST snapshot fallback for other symbols and providers.
+- The dashboard synchronizes live quote rows approximately once per second. Full market catalogue and K-line history keep their slower refresh intervals.
+- The container runtime installs production dependencies so the `ws` client is available after deployment.
+- A running WebSocket connection is not proof of redistribution rights. The feed must remain disabled until the Binance license attestation is valid for member display, storage and derived analytics. Render Free may suspend/restart the process, so it cannot guarantee uninterrupted 24/7 ingestion.
+
 ## Taiwan equity provider fallback
 
 - **Fugle HTTP 403** means the current subscription plan does not support the requested feature according to Fugle's official error-code documentation. Check the subscribed plan and whether the selected endpoint (for example, snapshot quotes) is included. Do not treat every 403 as a bad API key or blindly retry. See https://developer.fugle.tw/docs/data/error_codes/ and https://developer.fugle.tw/docs/pricing/.
