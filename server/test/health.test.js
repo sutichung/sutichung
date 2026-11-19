@@ -64,7 +64,8 @@ test('historical provider URL and license gate never masquerades as verified con
 
 test('configured keys are not proof of live provider connectivity', () => {
   const report = buildDependencyReadiness({
-    FUGLE_API_KEY: 'present-but-not-probed',
+    TWSE_REALTIME_PROVIDER_URL: 'https://licensed-provider.example/feed',
+    TWSE_REALTIME_LICENSE_CONFIRMED: 'true',
     SUPABASE_URL: 'https://example.supabase.co',
     SUPABASE_ANON_KEY: 'present',
     SUPABASE_SERVICE_ROLE_KEY: 'present',
