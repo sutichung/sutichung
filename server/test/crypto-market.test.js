@@ -117,6 +117,7 @@ test('official Binance market-data host is tried before alternate official REST 
 test('OKX derivatives use official funding, mark-price and base-currency open-interest fields',async()=>{
  const original=global.fetch;
  const now=Date.parse('2026-11-18T00:00:00.000Z');
+ const previousLicense=process.env.OKX_MARKET_DATA_LICENSE_CONFIRMED;process.env.OKX_MARKET_DATA_LICENSE_CONFIRMED='true';
  global.fetch=async url=>{
   const u=String(url);
   const ok=(data)=>({ok:true,status:200,json:async()=>data});
@@ -142,7 +143,7 @@ test('OKX derivatives use official funding, mark-price and base-currency open-in
   assert.equal(result.indexPrice,65000);
   assert.equal(result.sourceTime,'2026-11-18T00:00:00.000Z');
   assert.equal(result.liquidationMap.levels.length,16);
- }finally{global.fetch=original;}
+ }finally{global.fetch=original;if(previousLicense===undefined)delete process.env.OKX_MARKET_DATA_LICENSE_CONFIRMED;else process.env.OKX_MARKET_DATA_LICENSE_CONFIRMED=previousLicense;}
 });
 
 test('only fresh source-timestamp-verified quotes are eligible for live signals',()=>{
@@ -224,4 +225,10 @@ test('Kraken Futures candle normalization validates timestamp and OHLCV',()=>{
  assert.equal(candles.length,1);
  assert.equal(candles[0].time,new Date(1700000000000).toISOString());
  assert.equal(candles[0].volume,12);
+});
+
+test('Kraken Futures history resolves the official product symbol from the ticker catalogue',async()=>{
+ const original=global.fetch;const calls=[];
+ global.fetch=async url=>{const u=String(url);calls.push(u);const payload=u.includes('/derivatives/api/v3/tickers')?{tickers:[{tag:'perpetual',pair:'XBT:USD',symbol:'pf_xbtusd'}]}:{candles:[{time:1700000000000,open:'100',high:'110',low:'90',close:'105',volume:'12'}]};return {ok:true,status:200,json:async()=>payload};};
+ try{const {getHistory}=require('../lib/crypto-market');const result=await getHistory('BTCUSDT','perpetual','1h','Kraken Futures','BTCUSDT',24);assert.equal(result.data.length,1);assert.ok(calls.some(x=>x.includes('/trade/PF_XBTUSD/1h')));}finally{global.fetch=original;}
 });
