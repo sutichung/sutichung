@@ -637,7 +637,7 @@ async function route(req,res){
     const whaleThresholdUsd=Math.min(5000000,Math.max(1000,Number(u.searchParams.get('whaleUsd'))||50000));
     try{
       const key='crypto-microstructure:'+exchange+':'+marketType+':'+symbol+':'+depth+':'+whaleThresholdUsd;
-      const result=await safeLoad(key,3000,()=>cryptoMicrostructure.fetchMicrostructure({exchange,symbol,marketType,depth,whaleThresholdUsd}),e=>({status:'unavailable',exchange,symbol,error:e.message,book:null,tape:null,timestamp:null}));
+      const result=await safeLoad(key,3000,()=>cryptoMicrostructure.fetchMicrostructure({exchange,symbol,marketType,depth,whaleThresholdUsd}),e=>({status:String(e.message||'').startsWith('market_data_license_required:')?'license_required':'unavailable',exchange,symbol,error:e.message,book:null,tape:null,timestamp:null}));
       return json(res,result.status==='unavailable'?502:200,result);
     }catch(e){return json(res,400,{error:e.message});}
   }
@@ -708,7 +708,7 @@ async function route(req,res){
   }
   if(u.pathname.startsWith('/api/crypto/history/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase(),type=u.searchParams.get('type')==='perpetual'?'perpetual':'spot',interval=u.searchParams.get('interval')||'1d',exchange=u.searchParams.get('exchange')||'Binance',nativeSymbol=u.searchParams.get('nativeSymbol')||symbol;
-    try{return json(res,200,await cryptoMarket.getHistory(symbol,type,interval,exchange,nativeSymbol));}catch(e){return json(res,502,{error:e.message});}
+    try{return json(res,200,await cryptoMarket.getHistory(symbol,type,interval,exchange,nativeSymbol));}catch(e){const licenseRequired=String(e.message||'').startsWith('market_data_license_required:');return json(res,licenseRequired?200:502,{status:licenseRequired?'license_required':'unavailable',error:e.message});}
   }
   if(u.pathname.startsWith('/api/crypto/risk/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase(),type=u.searchParams.get('type')==='perpetual'?'perpetual':'spot',exchange=u.searchParams.get('exchange')||'Binance',nativeSymbol=u.searchParams.get('nativeSymbol')||symbol,interval=u.searchParams.get('interval')||'15m';
