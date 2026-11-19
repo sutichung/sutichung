@@ -1,0 +1,76 @@
+name: Always-on market data refresh
+
+on:
+  schedule:
+    # GitHub scheduled workflows have a 5-minute minimum interval.
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: always-on-market-data-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Refresh market caches every minute while unattended
+        env:
+          MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
+        shell: bash
+        run: |
+          set -u
+          for cycle in 1 2 3 4 5; do
+            echo "=== market refresh cycle ${cycle}/5 at $(date -u +%FT%TZ) ==="
+            OIDC_TOKEN=$(curl --fail --silent --show-error --get \
+              --data-urlencode "audience=taiwan-stock-hunter-automation" \
+              "$ACTIONS_ID_TOKEN_REQUEST_URL" \
+              -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r '.value')
+            if [ -z "$OIDC_TOKEN" ] || [ "$OIDC_TOKEN" = "null" ]; then
+              echo "::error::Unable to obtain GitHub Actions OIDC token"
+              exit 1
+            fi
+            echo "::add-mask::$OIDC_TOKEN"
+            AUTH_HEADER="Authorization: Bearer $OIDC_TOKEN"
+
+            # Refresh independently so one unavailable provider does not hide the others.
+            curl --silent --show-error --max-time 45 -H "$AUTH_HEADER" \
+              "$MARKET_APP_URL/api/market/snapshot" -o /tmp/tw-market.json &
+            TW_PID=$!
+            curl --silent --show-error --max-time 45 -H "$AUTH_HEADER" \
+              "$MARKET_APP_URL/api/crypto/market" -o /tmp/crypto-market.json &
+            CRYPTO_PID=$!
+            curl --silent --show-error --max-time 45 -H "$AUTH_HEADER" \
+              "$MARKET_APP_URL/api/us/market" -o /tmp/us-market.json &
+            US_PID=$!
+
+            TW_OK=0; CRYPTO_OK=0; US_OK=0
+            wait "$TW_PID" && TW_OK=1 || echo "::warning::TWSE/TPEx snapshot refresh failed"
+            wait "$CRYPTO_PID" && CRYPTO_OK=1 || echo "::warning::Crypto market refresh failed"
+            wait "$US_PID" && US_OK=1 || echo "::warning::US market refresh failed"
+
+            node - <<'NODE'
+          const fs = require('node:fs');
+          for (const [label, file, count] of [
+            ['TWSE/TPEx official daily close', '/tmp/tw-market.json', x => x.quoteCount ?? Object.keys(x.data || {}).length],
+            ['Crypto REST snapshots', '/tmp/crypto-market.json', x => x.markets?.length ?? 0],
+            ['US watchlist (non-official source)', '/tmp/us-market.json', x => Object.keys(x.data || {}).length],
+          ]) {
+            try {
+              const x = JSON.parse(fs.readFileSync(file, 'utf8'));
+              console.log(JSON.stringify({market: label, count: count(x), source: x.source || 'unknown', dataMode: x.dataMode || null, timestamp: x.timestamp || null, error: x.error || null}));
+            } catch (e) {
+              console.log(JSON.stringify({market: label, status: 'unavailable', error: e.message}));
+            }
+          }
+          NODE
+
+            if [ "$cycle" -lt 5 ]; then
+              sleep 60
+            fi
+          done
