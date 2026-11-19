@@ -19,7 +19,7 @@ test('normalizes TWSE official daily close without claiming real-time', () => {
   }, 'TWSE', 'twse_openapi_stock_day_all', 'https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL');
   assert.equal(row.symbol, '2330');
   assert.equal(row.price, 905);
-  assert.equal(row.changePct, 100);
+  assert.ok(Math.abs(row.changePct - (5 / 900 * 100)) < 1e-9);
   assert.equal(row.volume, 12345000);
   assert.equal(row.dataMode, 'END_OF_DAY');
   assert.equal(row.delayed, true);
