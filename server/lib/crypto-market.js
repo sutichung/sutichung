@@ -51,7 +51,7 @@ async function okxCategory(instType,marketType){
  const map=new Map(ticks.data.map(x=>[x.instId,x]));
  return ins.data.filter(x=>x.state==='live').map(x=>{const q=map.get(x.instId)||{};const base=x.ctValCcy||x.baseCcy||x.instId.split('-')[0],quote=x.settleCcy||x.quoteCcy||'USDT';return row('OKX',marketType,x.instId.replace(/-/g,''),base,quote,q.last,Number(q.open24h)>0?(Number(q.last)/Number(q.open24h)-1)*100:null,q.volCcyQuote||q.volCcy24h,{high24h:q.high24h,low24h:q.low24h,volume:q.vol24h,sourceTimestamp:timestampIso(q.ts),nativeSymbol:x.instId,nativeType:instType});});
 }
-async function okxMarkets(){const r=await Promise.allSettled([okxCategory('SPOT','spot'),okxCategory('SWAP','perpetual')]);const out=r.flatMap(x=>x.status==='fulfilled'?x.value:[]);if(!out.length)throw new Error(r.filter(x=>x.status==='rejected').map(x=>x.reason.message).join('; '));return out;}
+async function okxMarkets(){if(process.env.OKX_MARKET_DATA_LICENSE_CONFIRMED!=='true')throw new Error('okx_market_data_license_required');const r=await Promise.allSettled([okxCategory('SPOT','spot'),okxCategory('SWAP','perpetual')]);const out=r.flatMap(x=>x.status==='fulfilled'?x.value:[]);if(!out.length)throw new Error(r.filter(x=>x.status==='rejected').map(x=>x.reason.message).join('; '));return out;}
 async function coinbaseMarkets(){
  const products=await getJson('https://api.exchange.coinbase.com/products');
  const active=products.filter(x=>x.status==='online'&&!x.trading_disabled);
@@ -107,6 +107,7 @@ function normalizeKlines(rows,exchange,interval='1d',asOf=Date.now(),includeCurr
 
 async function getHistory(symbol,marketType='spot',interval='1d',exchange='Binance',nativeSymbol='',requestedLimit=240){
  const clean=String(nativeSymbol||symbol||'').toUpperCase();
+ if(exchange==='OKX'&&process.env.OKX_MARKET_DATA_LICENSE_CONFIRMED!=='true')throw new Error('okx_market_data_license_required');
  const cap=exchange==='OKX'?300:exchange==='Coinbase'?300:exchange==='Kraken'?720:1000;
  const limit=Math.max(1,Math.min(cap,Math.floor(Number(requestedLimit)||240)));
  const cacheTtl=interval==='1m'||interval==='5m'?5000:interval==='15m'?10000:interval==='30m'||interval==='1h'?20000:interval==='4h'?60000:300000;
@@ -118,7 +119,7 @@ async function getHistory(symbol,marketType='spot',interval='1d',exchange='Binan
   else if(exchange==='OKX'){const inst=clean.includes('-')?clean:clean.replace(/(USDT|USDC|USD)$/,'-$1')+(marketType==='perpetual'?'-SWAP':'');const x=await getJson('https://www.okx.com/api/v5/market/candles?'+new URLSearchParams({instId:inst,bar:iv==='1d'?'1D':iv,limit:String(Math.min(limit,300))}));if(x.code!=='0')throw new Error(x.msg);rows=x.data;}
   else if(exchange==='Coinbase'){const product=clean.includes('-')?clean:clean.replace(/(USDT|USDC|USD)$/,'-$1');const granularity=({'1m':60,'5m':300,'15m':900,'1h':3600,'1d':86400}[iv]||86400);rows=await getJson('https://api.exchange.coinbase.com/products/'+encodeURIComponent(product)+'/candles?granularity='+granularity);}
   else if(exchange==='Kraken'){const x=await getJson('https://api.kraken.com/0/public/OHLC?'+new URLSearchParams({pair:clean,interval:iv==='4h'?'240':iv==='1h'?'60':iv==='30m'?'30':iv==='15m'?'15':iv==='5m'?'5':iv==='1m'?'1':'1440'}));if(x.error?.length)throw new Error(x.error.join(','));const key=Object.keys(x.result||{}).find(k=>k!=='last');rows=x.result?.[key]||[];}
-  else if(exchange==='Kraken Futures'){const base=clean.replace(/(USDT|USDC|USD)$/,'').replace(/^BTC$/,'XBT');const product='PF_'+base+'USD';const resolution=({'1m':'1m','5m':'5m','15m':'15m','30m':'30m','1h':'1h','4h':'4h','1d':'1d'}[iv]||'1d');const x=await getJson('https://futures.kraken.com/api/charts/v1/trade/'+encodeURIComponent(product)+'/'+resolution+'?count='+String(limit));rows=Array.isArray(x.candles)?x.candles:[];source='Kraken Futures official public '+product+' candles';}
+  else if(exchange==='Kraken Futures'){const base=clean.replace(/(USDT|USDC|USD)$/,'').replace(/^BTC$/,'XBT');const resolution=({'1m':'1m','5m':'5m','15m':'15m','30m':'30m','1h':'1h','4h':'4h','1d':'1d'}[iv]||'1d');const tickerPayload=await getJson('https://futures.kraken.com/derivatives/api/v3/tickers');const tickers=Array.isArray(tickerPayload.tickers)?tickerPayload.tickers:Array.isArray(tickerPayload.result)?tickerPayload.result:[];const ticker=tickers.find(x=>x&&x.tag==='perpetual'&&String(x.pair||'').replace(/[:/]/g,'').replace(/^XBT/,'BTC').toUpperCase()===base+'USD');const product=String(ticker?.symbol||'').toUpperCase();if(!product)throw new Error('Kraken Futures 找不到對應的官方永續商品代碼');const x=await getJson('https://futures.kraken.com/api/charts/v1/trade/'+encodeURIComponent(product)+'/'+resolution+'?count='+String(limit));rows=Array.isArray(x.candles)?x.candles:[];source='Kraken Futures official public '+product+' candles';}
   const candles=normalizeKlines(rows,exchange,iv,Date.now(),true);
   if(!candles.length)throw new Error(exchange+' 此市場沒有可用 K 線');
   return {symbol,marketType,exchange,interval,data:candles,indicators:indicators(candles),asOf:candles.at(-1).time,source,timestamp:now()};
@@ -128,21 +129,23 @@ async function ratioFor(exchange,base){
  try{
   if(exchange==='Binance'){const x=await getJson('https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol='+base+'USDT&period=1h&limit=1');const q=x[0];return q?{exchange,longPct:Number(q.longAccount)*100,shortPct:Number(q.shortAccount)*100,ratio:Number(q.longShortRatio),source:'Binance global account ratio'}:null;}
   if(exchange==='Bybit'){const result=await getJsonFallback(['https://api.bybit.com','https://api.bytick.com'].map(host=>host+'/v5/market/account-ratio?category=linear&symbol='+base+'USDT&period=1h&limit=1'));const x=result.data;const q=x.result?.list?.[0];return q?{exchange,longPct:Number(q.buyRatio)*100,shortPct:Number(q.sellRatio)*100,ratio:Number(q.buyRatio)/Number(q.sellRatio),source:'Bybit account ratio'}:null;}
+  if(exchange==='OKX'&&process.env.OKX_MARKET_DATA_LICENSE_CONFIRMED!=='true')return {exchange,unavailable:true,reason:'license_required'};
   if(exchange==='OKX'){const x=await getJson('https://www.okx.com/api/v5/rubik/stat/contracts/long-short-account-ratio?ccy='+base+'&period=1H');const q=x.data?.[0];return q?{exchange,longPct:Number(q[1])/(1+Number(q[1]))*100,shortPct:100-Number(q[1])/(1+Number(q[1]))*100,ratio:Number(q[1]),source:'OKX contracts long/short ratio'}:null;}
  }catch(e){return {exchange,error:e.message};}
  return {exchange,unavailable:true};
 }
 async function getDerivatives(symbol,exchange='Binance',nativeSymbol=''){
  const base=String(symbol).toUpperCase().replace(/(USDT|USDC|USD)$/,'');
+ const okxAllowed=process.env.OKX_MARKET_DATA_LICENSE_CONFIRMED==='true';
  const okxInst=base+'-USDT-SWAP';
  const [battle,binance,binanceOi,bybit,okxFunding,okxOi,okxMark,krakenFutures]=await Promise.all([
-  Promise.all(['Binance','Bybit','OKX'].map(x=>ratioFor(x,base))),
+  Promise.all(['Binance','Bybit',...(okxAllowed?['OKX']:[])].map(x=>ratioFor(x,base))),
   getJson('https://fapi.binance.com/fapi/v1/premiumIndex?symbol='+base+'USDT').catch(()=>null),
   getJson('https://fapi.binance.com/fapi/v1/openInterest?symbol='+base+'USDT').catch(()=>null),
   getJsonFallback(['https://api.bybit.com','https://api.bytick.com'].map(host=>host+'/v5/market/tickers?category=linear&symbol='+base+'USDT')).then(x=>x.data).catch(()=>null),
-  getJson('https://www.okx.com/api/v5/public/funding-rate?instId='+okxInst).catch(()=>null),
-  getJson('https://www.okx.com/api/v5/public/open-interest?instType=SWAP&instId='+okxInst).catch(()=>null),
-  getJson('https://www.okx.com/api/v5/public/mark-price?instType=SWAP&instId='+okxInst).catch(()=>null),
+  okxAllowed?getJson('https://www.okx.com/api/v5/public/funding-rate?instId='+okxInst).catch(()=>null):Promise.resolve(null),
+  okxAllowed?getJson('https://www.okx.com/api/v5/public/open-interest?instType=SWAP&instId='+okxInst).catch(()=>null):Promise.resolve(null),
+  okxAllowed?getJson('https://www.okx.com/api/v5/public/mark-price?instType=SWAP&instId='+okxInst).catch(()=>null):Promise.resolve(null),
   getJson('https://futures.kraken.com/derivatives/api/v3/tickers').catch(()=>null)
  ]);
  const bq=bybit?.result?.list?.[0],of=okxFunding?.data?.[0],oi=okxOi?.data?.[0],om=okxMark?.data?.[0];
