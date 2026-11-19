@@ -2,7 +2,7 @@
 const MARKET_DATA_TEST_LICENSES={BINANCE_MARKET_DATA_LICENSE_CONFIRMED:'true',BYBIT_MARKET_DATA_LICENSE_CONFIRMED:'true',OKX_MARKET_DATA_LICENSE_CONFIRMED:'true',COINBASE_MARKET_DATA_LICENSE_CONFIRMED:'true',KRAKEN_MARKET_DATA_LICENSE_CONFIRMED:'true',KRAKEN_FUTURES_MARKET_DATA_LICENSE_CONFIRMED:'true'};
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { statusForHttp, safeError, diagnoseProviders } = require('../lib/provider-diagnostics');
+const { statusForHttp, safeError, diagnoseProviders, providerErrorMessage } = require('../lib/provider-diagnostics');
 
 test('provider diagnostics classify common upstream HTTP failures', () => {
   assert.equal(statusForHttp(200), 'connected');
@@ -103,4 +103,30 @@ test('all exchange diagnostics remain blocked without provider-specific redistri
  const hosts=['data-api.binance.vision','fapi.binance.com','api.bybit.com','api.bytick.com','okx.com','api.exchange.coinbase.com','api.kraken.com','futures.kraken.com'];
  global.fetch=async url=>{if(hosts.some(host=>String(url).includes(host)))cryptoCalls++;throw new Error('unexpected_test_url');};
  try{const result=await diagnoseProviders({});for(const id of ['binance','binance-futures','bybit','okx','okx-swap','coinbase','kraken','kraken-futures']){const check=result.checks.find(x=>x.id===id);assert.equal(check.status,'not_configured',id);assert.match(check.message,/書面授權/);}assert.equal(cryptoCalls,0);}finally{global.fetch=original;}
+});
+
+
+test('Fugle HTTP 403 is identified as a subscription feature restriction', () => {
+  const message = providerErrorMessage('fugle', new Error('upstream_http_403'));
+  assert.match(message, /訂閱方案不支援此功能/);
+  assert.match(message, /snapshot/);
+  assert.doesNotMatch(message, /來源 IP 白名單/);
+  assert.match(providerErrorMessage('other', new Error('upstream_http_403')), /HTTP 403/);
+});
+
+test('Shioaji is explicitly shown as not configured until its licensed adapter exists', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async url => {
+    const target = String(url);
+    if (target.includes('openapi.twse.com.tw')) return {ok:true,status:200,text:async()=>JSON.stringify([{Code:'2330'}])};
+    if (target.includes('data-api.ecb.europa.eu')) return {ok:true,status:200,text:async()=>'KEY,OBS_VALUE\\nX,1.1'};
+    if (target.includes('bankofcanada.ca')) return {ok:true,status:200,text:async()=>JSON.stringify({observations:[{d:'2026-11-19',FXCADUSD:{v:'0.7'}}]})};
+    throw new Error('unexpected_test_url');
+  };
+  try {
+    const result = await diagnoseProviders({});
+    const check = result.checks.find(x => x.id === 'shioaji');
+    assert.equal(check.status, 'not_configured');
+    assert.match(check.message, /永豐證券 API 帳戶/);
+  } finally { global.fetch = originalFetch; }
 });
