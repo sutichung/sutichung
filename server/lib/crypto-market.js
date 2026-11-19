@@ -140,6 +140,8 @@ async function ratioFor(exchange,base){
  return {exchange,unavailable:true};
 }
 async function getDerivatives(symbol,exchange='Binance',nativeSymbol=''){
+ const licensedDerivatives=['Binance','Bybit','OKX','Kraken Futures'].filter(isMarketDataLicensed);
+ if(!licensedDerivatives.length)return {status:'license_required',exchange,requestedExchange:exchange,fallbackUsed:false,openInterest:null,fundingRate:null,markPrice:null,indexPrice:null,source:null,timestamp:now(),sourceTime:null,battle:{exchanges:[],validExchanges:0,longPct:null,shortPct:null,stance:'資料不足'},liquidationMap:null};
  const base=String(symbol).toUpperCase().replace(/(USDT|USDC|USD)$/,'');
  const binanceAllowed=isMarketDataLicensed('Binance'),bybitAllowed=isMarketDataLicensed('Bybit'),okxAllowed=isMarketDataLicensed('OKX'),krakenFuturesAllowed=isMarketDataLicensed('Kraken Futures');
  const okxInst=base+'-USDT-SWAP';
@@ -169,7 +171,7 @@ async function getDerivatives(symbol,exchange='Binance',nativeSymbol=''){
  const fallbackUsed=!!(selected&&selected.exchange!==exchange);
  const sourceByExchange={Binance:'Binance official USD-M Futures premiumIndex/openInterest',Bybit:'Bybit official V5 linear tickers',OKX:'OKX official public funding-rate/mark-price/open-interest','Kraken Futures':'Kraken official Futures public tickers'};
  const receivedAt=now();
- return {exchange:selected?.exchange||exchange,requestedExchange:exchange,fallbackUsed,openInterest:selected?.openInterest??null,openInterestAsset:base,fundingRate:selected?.fundingRate??null,markPrice:selected?.markPrice??null,indexPrice:selected?.indexPrice??null,source:sourceByExchange[selected?.exchange]||'官方衍生品 API',timestamp:receivedAt,receivedAt,sourceTime:selected?.sourceTime??null,battle:{exchanges:battle,validExchanges:ratios.length,longPct,shortPct:longPct===null?null:100-longPct,stance:longPct===null?'資料不足':longPct>55?'多方佔優':longPct<45?'空方佔優':'多空拉鋸'},liquidationMap:liquidationMap(selected?.markPrice,selected?.openInterest,base)};
+ return {status:selected?.markPrice?'ok':'unavailable',exchange:selected?.exchange||exchange,requestedExchange:exchange,fallbackUsed,openInterest:selected?.openInterest??null,openInterestAsset:base,fundingRate:selected?.fundingRate??null,markPrice:selected?.markPrice??null,indexPrice:selected?.indexPrice??null,source:sourceByExchange[selected?.exchange]||'官方衍生品 API',timestamp:receivedAt,receivedAt,sourceTime:selected?.sourceTime??null,battle:{exchanges:battle,validExchanges:ratios.length,longPct,shortPct:longPct===null?null:100-longPct,stance:longPct===null?'資料不足':longPct>55?'多方佔優':longPct<45?'空方佔優':'多空拉鋸'},liquidationMap:liquidationMap(selected?.markPrice,selected?.openInterest,base)};
 }
 function liquidationMap(price,openInterest,baseAsset){
  if(!(price>0)||!(openInterest>0))return {levels:[],method:'資料不足',note:'缺少未平倉量或標記價格'};
