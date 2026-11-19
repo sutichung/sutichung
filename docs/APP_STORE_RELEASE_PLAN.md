@@ -82,7 +82,7 @@
 | 上架規格文件 | 已建立 |
 | PWA 基礎（manifest／離線頁／靜態資源快取） | 已在準備分支加入，待 CI 驗證 |
 | Capacitor 設定與雙平台 CI 原生專案生成 | 已在準備分支加入，待 CI 驗證；原生專案由 CI 生成 |
-| 隱私／帳號刪除流程驗收 | 未完成；現有會員介面尚未提供會員自行刪除帳號，且需先盤點所有關聯資料 |
+| 隱私／帳號刪除流程驗收 | 已加入會員端刪除入口、網站申請路徑及伺服器端 Supabase 刪除 API；仍需 CI、Render 設定與端到端驗收 |
 | 真機測試與簽署建置 | 尚未開始 |
 | TestFlight／Play 測試 | 尚未開始 |
 | 商店素材與表單 | 尚未完成 |
@@ -102,4 +102,14 @@
 - 新增 GitHub Actions Android debug APK 與 iOS Simulator unsigned build 流程。Capacitor 8 CI 使用 Node 22 與 Xcode 26；建置產物仍不是可送商店的簽署版。
 - 此分支尚未完成會員自行刪除帳號。不可只刪除 Supabase Auth 身分而忽略關聯資料；需先盤點 Supabase 資料表、研究紀錄、訂閱／稽核保留義務，再設計確認、刪除與完成通知流程。
 - App Store 正式商店圖示需輸出各平台規格 PNG；目前提交的 SVG 是 PWA／開發階段素材，不視為完整商店圖示包。
+
+
+## 9. 帳號刪除功能實作與驗收限制
+
+- 會員登入後可從帳號列啟動刪除，並要求重新輸入目前登入 Email 及 `DELETE` 字樣確認。
+- Google Play 外部帳號刪除資源路徑：`https://taiwan-stock-hunter-o3tt.onrender.com/account-deletion`。使用者登入後會開啟刪除確認流程。
+- 後端只接受有效登入者的請求，核對 Email／確認字串，並要求 Render 設定 `SUPABASE_SERVICE_ROLE_KEY`；缺少金鑰時安全拒絕，不會假稱刪除成功。
+- 目前已檢視的 Supabase migration 中，finance_consents、finance_accounts、finance_balances、finance_transactions 對 auth.users 使用 ON DELETE CASCADE；finance_audit_events 使用 ON DELETE SET NULL，以保留去識別化稽核事件。
+- 仍須在實際 Supabase 專案確認 migration 已套用，檢查是否存在未納入 Git 的資料表、Storage bucket、外部第三方紀錄或法定保存義務，並以測試帳號做端到端刪除驗收。
+- 正式送審前，需確認服務角色金鑰存在於 Render 後端環境、外部刪除網址可公開存取、刪除失敗可重試且客服聯絡資訊已填妥。
 
