@@ -37,11 +37,11 @@ test('microstructure fallback rejects stale or incomplete snapshots',async()=>{
  });
  assert.equal(result.data,null);
  assert.equal(result.exchange,null);
- assert.equal(result.errors.length,2);
+ assert.equal(result.errors.length,3);
 });
 test('exchange candidate order prefers selected exchange then safe alternatives',()=>{
- assert.deepEqual(candidates('Binance','Bybit'),['Bybit','Binance']);
- assert.deepEqual(candidates('Coinbase','Coinbase'),['Binance','Bybit']);
+ assert.deepEqual(candidates('Binance','Bybit'),['Bybit','Binance','Kraken Futures']);
+ assert.deepEqual(candidates('Coinbase','Coinbase'),['Binance','Bybit','Kraken Futures']);
 });
 
 test('perpetual risk history never substitutes spot-only Coinbase or Kraken candles',async()=>{
