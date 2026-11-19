@@ -29,3 +29,44 @@ test('runtime health rejects invalid expected instance counts', () => {
   const report = buildRuntimeHealth({ expectedInstances: '-3' });
   assert.equal(report.deployment.expectedInstances, null);
 });
+
+
+test('dependency readiness distinguishes server readiness from incomplete integrations', () => {
+  const report = require('../lib/health').buildDependencyReadiness({});
+  assert.equal(report.ready, true, 'the HTTP process can serve requests even when optional integrations are absent');
+  assert.equal(report.status, 'degraded');
+  assert.equal(report.checks.httpServer.ready, true);
+  assert.equal(report.checks.supabaseAuth.configured, false);
+  assert.equal(report.checks.adminMemberRecovery.configured, false);
+  assert.equal(report.checks.cryptoRedistributionLicenses.confirmed, 0);
+  assert.ok(report.warnings.some(x => /歷史資料來源或授權/.test(x)));
+});
+
+test('dependency readiness only marks historical providers ready with both URL and explicit license confirmation', () => {
+  const env = {
+    TWSE_HISTORICAL_PROVIDER_URL: 'https://provider.example/api',
+    TWSE_HISTORICAL_LICENSE_CONFIRMED: 'true',
+    TPEX_HISTORICAL_PROVIDER_URL: 'https://provider.example/tpex',
+    TPEX_HISTORICAL_LICENSE_CONFIRMED: 'false'
+  };
+  const report = require('../lib/health').buildDependencyReadiness(env);
+  const twse = report.checks.historicalProviders.find(x => x.id === 'twse');
+  const tpex = report.checks.historicalProviders.find(x => x.id === 'tpex');
+  assert.equal(twse.ready, true);
+  assert.equal(tpex.ready, false);
+  assert.equal(report.status, 'degraded');
+});
+
+test('dependency readiness does not treat configured keys as proof of live provider connectivity', () => {
+  const report = require('../lib/health').buildDependencyReadiness({
+    FUGLE_API_KEY: 'present-but-not-probed',
+    SUPABASE_URL: 'https://example.supabase.co',
+    SUPABASE_ANON_KEY: 'present',
+    SUPABASE_SERVICE_ROLE_KEY: 'present',
+    SUPABASE_ADMIN_EMAIL: 'admin@example.com'
+  });
+  assert.equal(report.checks.realtimeMarket.status, 'configured');
+  assert.equal(report.checks.supabaseAuth.status, 'configured');
+  assert.equal(report.checks.adminMemberRecovery.status, 'configured');
+  assert.ok(report.warnings.some(x => /授權/.test(x)));
+});
