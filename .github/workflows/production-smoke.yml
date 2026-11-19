@@ -101,7 +101,7 @@ jobs:
           const ciDependencyAudit = { status:'passed', blocking:true, source:'blocking Backend checks npm audit --omit=dev', runId:Number(process.env.CI_RUN_ID), runtimeScannerStatus:vulnerabilities.status, runtimeScannedPackageCount:Number(vulnerabilities.scannedPackageCount||0), note:Number(vulnerabilities.scannedPackageCount||0)===0?'Production image intentionally excludes node_modules; Backend checks fails on high/critical production advisories and reports moderate/low findings.':'Runtime dependency scan also returned package coverage.' };
           const listedCount = Number(market.listedCount || 0);
           const quoteCount = Number(market.quoteCount || 0);
-          const taiwanConnected = market.ok === true && listedCount > 0;
+          const taiwanConnected = market.ok === true && listedCount > 0 && quoteCount > 0;
           const officialUs = (providers.checks || []).find(x => x.id === 'us-equities-official') || null;
           const vulnerabilitySeverity = vulnerabilities.severityCounts || {};
           const warnings = [
@@ -126,7 +126,9 @@ jobs:
               coveragePct: market.coveragePct ?? null,
               delayedCount: Number(market.delayedCount || 0),
               serverTime: market.serverTime || null,
-              error: market.error || null
+              error: market.error || null,
+              providerWarning: market.providerWarning || null,
+              fallbackUsed: market.fallbackUsed === true
             },
             crypto: {
               ok: Array.isArray(crypto.markets) && crypto.markets.length > 0 && connectedExchanges > 0,
