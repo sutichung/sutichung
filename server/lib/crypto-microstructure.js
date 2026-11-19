@@ -108,6 +108,7 @@ async function fetchMicrostructure({ exchange = 'Binance', symbol, marketType = 
     trades = normalizeTrades(exchange, (t.result?.list || []).map(x => ({ id: x.execId, timestamp: Number(x.time), side: String(x.side).toLowerCase(), price: x.price, amount: x.size, quoteCurrency, whaleClassificationAvailable })), whaleThresholdUsd);
     source = 'Bybit V5 public order book + recent trades (' + bookResult.base + ')';
   } else if (exchange === 'OKX') {
+    if (process.env.OKX_MARKET_DATA_LICENSE_CONFIRMED !== 'true') throw new Error('okx_market_data_license_required');
     const instId = safeSymbol.includes('-') ? safeSymbol : safeSymbol.replace(/(USDT|USDC|USD)$/, '-$1') + (marketType === 'perpetual' ? '-SWAP' : '');
     const [b, t] = await Promise.all([
       getJson('https://www.okx.com/api/v5/market/books?' + new URLSearchParams({ instId, sz: String(levels) })),
