@@ -145,3 +145,10 @@ test('Kraken Futures microstructure uses official instrument, orderbook and rece
   assert.ok(calls.some(x=>x.includes('/history?symbol=PF_XBTUSD')));
  }finally{global.fetch=original;}
 });
+
+test('microstructure provider fetch fails closed without its own redistribution license',async()=>{
+ const previous=process.env.KRAKEN_FUTURES_MARKET_DATA_LICENSE_CONFIRMED;delete process.env.KRAKEN_FUTURES_MARKET_DATA_LICENSE_CONFIRMED;
+ const original=global.fetch;let calls=0;global.fetch=async()=>{calls++;throw new Error('exchange_fetch_must_not_run');};
+ try{const {fetchMicrostructure}=require('../lib/crypto-microstructure');await assert.rejects(()=>fetchMicrostructure({exchange:'Kraken Futures',symbol:'BTCUSDT',marketType:'perpetual'}),/market_data_license_required/);assert.equal(calls,0);}
+ finally{global.fetch=original;if(previous===undefined)delete process.env.KRAKEN_FUTURES_MARKET_DATA_LICENSE_CONFIRMED;else process.env.KRAKEN_FUTURES_MARKET_DATA_LICENSE_CONFIRMED=previous;}
+});
