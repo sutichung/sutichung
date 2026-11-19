@@ -1,0 +1,77 @@
+# EXAMPLE ONLY — NOT REFERENCED BY render.yaml.
+# Creating these services provisions paid infrastructure. Review costs and
+# configure Cloudflare Load Balancing origins/health monitors before use.
+# Keep render.yaml pointed at the existing production service until approved.
+services:
+  - type: web
+    name: taiwan-stock-hunter-apac
+    runtime: docker
+    region: singapore
+    plan: standard
+    numInstances: 2
+    healthCheckPath: /api/health/ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_REGION
+        value: singapore
+      - key: EXPECTED_INSTANCE_COUNT
+        value: "2"
+      - key: PORT
+        value: "8787"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_ADMIN_EMAIL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+  - type: web
+    name: taiwan-stock-hunter-us
+    runtime: docker
+    region: oregon
+    plan: standard
+    numInstances: 2
+    healthCheckPath: /api/health/ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_REGION
+        value: oregon
+      - key: EXPECTED_INSTANCE_COUNT
+        value: "2"
+      - key: PORT
+        value: "8787"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_ADMIN_EMAIL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+  - type: web
+    name: taiwan-stock-hunter-eu
+    runtime: docker
+    region: frankfurt
+    plan: standard
+    numInstances: 2
+    healthCheckPath: /api/health/ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_REGION
+        value: frankfurt
+      - key: EXPECTED_INSTANCE_COUNT
+        value: "2"
+      - key: PORT
+        value: "8787"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_ADMIN_EMAIL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
