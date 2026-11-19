@@ -218,3 +218,10 @@ test('Bybit ticker response timestamp is preserved as source time',async()=>{
     assert.equal(rows[0].freshnessStatus,'fresh');
   }finally{global.fetch=original;}
 });
+
+test('Kraken Futures candle normalization validates timestamp and OHLCV',()=>{
+ const candles=normalizeKlines([{time:1700000000000,open:'100',high:'110',low:'90',close:'105',volume:12},{time:null,open:'100',high:'110',low:'90',close:'105',volume:12}],'Kraken Futures','15m',Date.now(),true);
+ assert.equal(candles.length,1);
+ assert.equal(candles[0].time,new Date(1700000000000).toISOString());
+ assert.equal(candles[0].volume,12);
+});
