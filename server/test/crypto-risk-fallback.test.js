@@ -79,3 +79,16 @@ test('OKX is excluded from third-party fallback unless written market-data licen
  const previous=process.env.OKX_MARKET_DATA_LICENSE_CONFIRMED;delete process.env.OKX_MARKET_DATA_LICENSE_CONFIRMED;
  try{assert.deepEqual(candidates('Binance','Binance'),['Binance','Bybit']);}finally{if(previous!==undefined)process.env.OKX_MARKET_DATA_LICENSE_CONFIRMED=previous;}
 });
+
+test('perpetual microstructure falls back to Kraken Futures but spot never does',async()=>{
+ const now=Date.now(),calls=[];
+ const result=await loadFreshMicrostructure({
+  symbol:'BTCUSDT',marketType:'perpetual',requestedExchange:'Binance',preferredExchange:'Binance',now:()=>now,
+  safeLoad:async(key,ttl,loader,fallback)=>{const exchange=key.split(':')[1];calls.push(exchange);if(exchange!=='Kraken Futures')return fallback(new Error('provider_unavailable'));return loader();},
+  fetchMicrostructure:async({exchange})=>({exchange,receivedAt:new Date(now).toISOString(),book:{bids:[[100,1]],asks:[[101,1]]},tape:{count:10,knownSideCount:10}})
+ });
+ assert.deepEqual(calls,['Binance','Bybit','Kraken Futures']);
+ assert.equal(result.exchange,'Kraken Futures');
+ assert.equal(result.data.exchange,'Kraken Futures');
+ assert.deepEqual(candidates('Binance','Binance','spot'),['Binance','Bybit']);
+});
