@@ -1,4 +1,6 @@
 'use strict';
+const MARKET_DATA_TEST_LICENSES={BINANCE_MARKET_DATA_LICENSE_CONFIRMED:'true',BYBIT_MARKET_DATA_LICENSE_CONFIRMED:'true',KRAKEN_FUTURES_MARKET_DATA_LICENSE_CONFIRMED:'true'};
+for(const [key,value] of Object.entries(MARKET_DATA_TEST_LICENSES))if(process.env[key]===undefined)process.env[key]=value;
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const {loadRiskHistory,loadFreshMicrostructure,candidates}=require('../lib/crypto-risk-fallback');
