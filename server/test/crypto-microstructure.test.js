@@ -118,3 +118,28 @@ test('Bybit official alternate host fallback records the successful endpoint',as
   assert.equal(calls.length,2);
  }finally{global.fetch=original;}
 });
+
+test('Kraken Futures microstructure uses official instrument, orderbook and recent executions',async()=>{
+ const original=global.fetch;const calls=[];
+ global.fetch=async url=>{
+  const u=String(url);calls.push(u);
+  const ok=data=>({ok:true,status:200,json:async()=>data});
+  if(u.includes('/derivatives/api/v3/tickers'))return ok({tickers:[{tag:'perpetual',pair:'XBT:USD',symbol:'pf_xbtusd'}]});
+  if(u.includes('/derivatives/api/v3/orderbook'))return ok({result:'success',serverTime:'2026-11-19T12:00:00.000Z',orderBook:{bids:[[65000,2],[64999,3]],asks:[[65001,2],[65002,3]]}});
+  if(u.includes('/derivatives/api/v3/history'))return ok({result:'success',serverTime:'2026-11-19T12:00:00.000Z',history:[{trade_id:1,time:'2026-11-19T11:59:59.000Z',side:'buy',price:65001,size:2,type:'fill'}]});
+  return {ok:false,status:404,json:async()=>({})};
+ };
+ try{
+  const {fetchMicrostructure}=require('../lib/crypto-microstructure');
+  const result=await fetchMicrostructure({exchange:'Kraken Futures',symbol:'BTCUSDT',marketType:'perpetual',depth:10});
+  assert.equal(result.exchange,'Kraken Futures');
+  assert.equal(result.book.bestBid,65000);
+  assert.equal(result.book.bestAsk,65001);
+  assert.equal(result.tape.count,1);
+  assert.equal(result.tape.knownSideCount,1);
+  assert.equal(result.tape.largeTradeCount,null);
+  assert.equal(result.tape.buyQuoteValue,null);
+  assert.ok(calls.some(x=>x.includes('/orderbook?symbol=PF_XBTUSD')));
+  assert.ok(calls.some(x=>x.includes('/history?symbol=PF_XBTUSD')));
+ }finally{global.fetch=original;}
+});
