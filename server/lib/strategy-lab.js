@@ -4,6 +4,7 @@ const { indicators } = require('./indicators');
 const { runAdvancedStrategies } = require('./advanced-strategies');
 const { runConsensusResearch } = require('./consensus-market-structure');
 const { runMtfStrategy } = require('./mtf-structure-strategy');
+const { evaluateCandidate } = require('./autonomous-learning');
 
 const STRATEGIES = [
   {id:'ema_trend_rsi',name:'EMA 趨勢＋RSI',category:'trend',description:'EMA20/EMA60 趨勢交叉，RSI 作動能確認',entry:'EMA20 上穿 EMA60 且 RSI 50–68',exit:'EMA20 下穿 EMA60 或 RSI > 75'},
@@ -175,10 +176,20 @@ function runStrategyLab(input, options={}) {
     const results=periods.map(period=>({...period,metrics:runStrategy(strategy.id,candles,period.start,period.end,costs),marketRegime:classifyRegime(candles.slice(period.start,period.end))}));
     const oos=results[1].metrics;
     const wf=walkForward(strategy.id,candles,testStart,testEnd,costs,3);
+    const learningMetricsComplete=wf.folds.length===3&&wf.folds.every(f=>{
+      const m=f.metrics;
+      return m.status==='ok'&&[m.netReturnPct,m.maxDrawdownPct,m.sharpe,m.profitFactor,m.trades].every(finite);
+    });
+    const autonomousLearning=learningMetricsComplete
+      ? evaluateCandidate({candidateId:strategy.id,folds:wf.folds.map(f=>({leakageFree:true,test:{
+          netReturnPct:f.metrics.netReturnPct,maxDrawdownPct:f.metrics.maxDrawdownPct,
+          sharpe:f.metrics.sharpe,profitFactor:f.metrics.profitFactor,tradeCount:f.metrics.trades
+        }}))})
+      : {candidateId:strategy.id,status:'insufficient_evidence',eligible:false,reason:'incomplete_walk_forward_fold_metrics',livePromotion:false};
     const halfCostMetrics=runStrategy(strategy.id,candles,testStart,testEnd,{...costs,feeBps:costs.feeBps*0.5,slippageBps:costs.slippageBps*0.5,sellTaxBps:costs.sellTaxBps*0.5});
     const doubleCostMetrics=runStrategy(strategy.id,candles,testStart,testEnd,{...costs,feeBps:costs.feeBps*2,slippageBps:costs.slippageBps*2,sellTaxBps:costs.sellTaxBps*2});
     const passed=oos.status==='ok'&&oos.trades>=10&&oos.netReturnPct>0&&oos.maxDrawdownPct<=15&&oos.sharpe!==null&&oos.sharpe>0&&oos.profitFactor!==null&&oos.profitFactor>1.1&&wf.passed;
-    return {...strategy,periods:results,walkForward:wf,costSensitivity:{halfCost:halfCostMetrics,baseCost:oos,doubleCost:doubleCostMetrics,doubleCostStillPositive:doubleCostMetrics.netReturnPct!==null&&doubleCostMetrics.netReturnPct>0},validation:{status:passed?'preliminary_pass':'not_validated',level:'single_holdout_plus_three_walk_forward_folds',rules:['單一樣本外區間至少 10 筆交易','樣本外淨報酬大於 0（已扣估算成本）','樣本外最大回撤不超過 15%','樣本外 Sharpe 大於 0','Profit Factor 大於 1.1','三個 Walk-forward 區段都必須有足夠交易樣本','Walk-forward 至少 2/3 區段為正報酬且總交易數至少 10 筆','Walk-forward 平均報酬為正且最差區段回撤不超過 15%','額外呈現半成本與雙倍成本敏感度'],passed}};
+    return {...strategy,periods:results,walkForward:wf,autonomousLearning,costSensitivity:{halfCost:halfCostMetrics,baseCost:oos,doubleCost:doubleCostMetrics,doubleCostStillPositive:doubleCostMetrics.netReturnPct!==null&&doubleCostMetrics.netReturnPct>0},validation:{status:passed?'preliminary_pass':'not_validated',level:'single_holdout_plus_three_walk_forward_folds',rules:['單一樣本外區間至少 10 筆交易','樣本外淨報酬大於 0（已扣估算成本）','樣本外最大回撤不超過 15%','樣本外 Sharpe 大於 0','Profit Factor 大於 1.1','三個 Walk-forward 區段都必須有足夠交易樣本','Walk-forward 至少 2/3 區段為正報酬且總交易數至少 10 筆','Walk-forward 平均報酬為正且最差區段回撤不超過 15%','額外呈現半成本與雙倍成本敏感度'],passed}};
   });
   const consensus=runConsensusResearch(candles,{market,feeBps:costs.feeBps,slippageBps:costs.slippageBps,sellTaxBps:costs.sellTaxBps,annualization:costs.annualization});
   const advancedStrategies=runAdvancedStrategies(candles,split,costs);
