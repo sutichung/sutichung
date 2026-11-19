@@ -28,7 +28,7 @@ test('intraday Taiwan scores fail closed when the technical candle is from a pri
 test('intraday Taiwan scores accept same-session technical data with a fresh live quote',()=>{
  const quoteTime=new Date().toISOString();
  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date());
- const x=scoreStock({trend:'bullish',macd:2,signal:1,rsi:60,volumeRatio:2,institutionalNet:100,fearGreed:15,advanceDecline:1.5,futuresChangePct:1,asOf:quoteTime,maxAgeMs:3600000,technicalAsOf:today,quoteIsLive:true,marketSessionOpen:true});
+ const x=scoreStock({trend:'bullish',macd:2,signal:1,rsi:60,volumeRatio:2,institutionalNet:1,trustFlowPct5d:4,foreignFlowPct5d:6,pe:10,pb:1,dividendYield:5,marginChange:-1,shortChange:1,fearGreed:10,largeHolderChangePct:1,retailBias:10,advanceDecline:2,futuresChangePct:1,adx:30,plusDi:30,minusDi:10,mfi:70,cci:120,priceVsVwap20Pct:1,k:60,priceVsEma20Pct:1,priceVsEma60Pct:1,return5dPct:1,return20dPct:1,asOf:quoteTime,maxAgeMs:3600000,technicalAsOf:today,quoteIsLive:true,marketSessionOpen:true});
  assert.equal(x.fresh,true);assert.equal(x.status,'research-ready');
 });
 test('outside the Taiwan cash session, the latest completed daily technical candle remains usable',()=>{
