@@ -9,5 +9,3 @@ services:
         value: production
       - key: PORT
         value: "8787"
-      - key: FUGLE_BASE_URL
-        value: https://api.fugle.tw/marketdata/v1.0/stock
