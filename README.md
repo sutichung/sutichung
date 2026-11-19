@@ -23,8 +23,8 @@
 - `GET /api/health`：服務健康狀態、Node 版本、執行模式、資料供應商設定狀態與實盤交易鎖定狀態。
 - `GET /api/trading/readiness`：實盤交易就緒檢查；目前固定回報 `executionEnabled: false`，並列出券商 API、成交對帳、稽核、樣本外驗證及硬性風控缺口。
 - `GET /api/market/universe`：FinMind TaiwanStockInfo 股票清單（需 FINMIND_TOKEN）。
-- `GET /api/market/snapshot`：優先使用 Fugle TSE/OTC 全市場快照（`FUGLE_API_KEY`），否則使用 `MARKET_REALTIME_URL`。
-- `GET /api/market/scan`：優先使用 FinMind 全市場日 K + Fugle 即時快照計算所有股票分數；FinMind 方案不足時可改接 `MARKET_SCAN_URL`。回傳每檔 `scorecard` 與技術指標：SMA/EMA、RSI、MACD、KD、布林通道、ATR、ADX/DI、CCI、MFI、OBV、Williams %R、ROC、20 日 VWAP、量比、支撐壓力。
+- `GET /api/market/snapshot`：使用 TWSE 與 TPEx 官方 OpenAPI 取得最新公開日收盤行情；回傳 `dataMode: END_OF_DAY`，不是盤中即時報價。
+- `GET /api/market/scan`：使用已接通的歷史日 K、官方日收盤行情、估值及籌碼計算研究分數；資料不足時標示觀望，不以未授權即時報價補值。
 - `GET /api/market/history/:symbol?interval=1d&limit=120`：FinMind TaiwanStockPrice 日 K 歷史資料（需 FINMIND_TOKEN）。
 - `GET /api/market/fundamentals/:symbol`：單檔公司基本資料、損益表、資產負債表、現金流量表、近 24 個月營收年增率、股利紀錄、PER/PBR/殖利率、毛利率／營業利益率／淨利率、負債／流動比率及附資料覆蓋率的財務體質檢查；財報資料需 FINMIND_TOKEN，缺少憑證時仍回傳官方公司基本資料。
 - `GET /api/market/institutional-flows`：優先使用 FinMind 全市場三大法人與融資融券日資料（需 Backer 以上權限），否則使用 `MARKET_FLOWS_URL`。
@@ -71,7 +71,7 @@
 - 非凡新聞台官方直播：<https://news.ustv.com.tw/livevideo>
 - 非凡商業台官方財經直播：<https://biz.ustv.com.tw/livevideo>
 
-Fugle 全市場快照上游每五秒更新一次；前端每秒輪詢只代表每秒向本系統詢問一次，不代表上游每秒有新成交。FinMind 日 K、法人、融資融券與恐懼貪婪資料屬日資料，不應標成逐秒更新。FinMind 官方免費方案列有 PER/PBR、個股法人買賣超、融資融券與月營收等資料集；但全市場批次查詢的可用範圍、請求額度與速率仍以實際 API 權限及回應為準。系統不會自動升級或付費；遇到權限不足即顯示資料不足並停止使用該因子。PER/PBR 資料約於交易日 18:00 更新，不是盤中即時估值。請見官方 [方案價格](https://finmind.github.io/Pricing/)、[PER/PBR 資料說明](https://finmind.github.io/v3/tutor/TaiwanMarket/Technical/) 與 [商業使用規範](https://finmind.github.io/CommercialUse/)。Fugle 全市場快照需 Developer 或 Advanced 方案，官方快照更新頻率為五秒，方案與價格請見 [Fugle 方案](https://developer.fugle.tw/docs/pricing/)。即時期貨與主力分點資料仍需另有相應授權。前端提供多個 YouTube 官方 `/live` 連結及非凡商業台、非凡新聞台官方直播頁；YouTube 頻道連結不需 Data API Key。站內 HLS 播放僅支援已獲授權且開放 CORS 的串流。
+台股行情目前以 TWSE OpenAPI（上市）與 TPEx OpenAPI（上櫃）官方日收盤資料為主，兩者都不是盤中即時逐筆 feed。前端輪詢只代表每秒向本系統詢問一次，不代表上游每秒有新成交。盤中即時行情須另行申請 TWSE／TPEx 或其核准資訊供應商的適用授權與 feed；未完成前不得將日資料標示為即時。FinMind 日 K、法人、融資融券與恐懼貪婪資料屬日資料，不應標成逐秒更新。FinMind 的資料集、額度與商業使用限制，以實際方案及官方條款為準；遇到權限不足即顯示資料不足並停止使用該因子。PER/PBR 資料不是盤中即時估值。即時期貨與主力分點資料仍需另有相應授權。前端提供官方直播入口；站內 HLS 播放僅支援已獲授權且開放 CORS 的串流。
 
 ## 降低預測錯誤率的防呆原則
 1. 資料時間戳過期、欄位缺漏、OHLC 不合理、歷史不足 60 根時，不產生有效訊號。
@@ -110,7 +110,7 @@ API Key 僅放後端環境變數；不要提交 .env、Token、券商帳密或�
 - 備援策略：TWSE／TPEx 官方服務優先，第二層採交易所官方核准／授權通路；美股使用交易所官方 feeds 或 CTA／UTP（後續 CT Plan）正式授權通路。未核准來源不得自動接手；無有效備援時標示 DATA_UNAVAILABLE。細節見規格第 13 節。
 - 正式規範：[官方行情資料來源與資料品質規格](./docs/OFFICIAL_MARKET_DATA_POLICY.md)。
 - 台股優先採 TWSE／TPEx／TAIFEX 官方資料；美股優先採 Nasdaq／NYSE 官方市場資料與 CTA／UTP SIP 授權資料。SEC／FINRA 僅依其資料集用途使用，不得冒充即時報價。
-- **重要：目前 README 所述美股 Yahoo Finance 非官方端點尚未完成替換；FinMind、Fugle 及 MARKET_* 自訂來源也尚須逐一核實資料來源、授權與即時性。** 在官方端點完成申請、接線及驗收前，必須標示非官方／未驗證／延遲或資料不足，不得宣稱已完成官方行情升級。
+- **重要：美股行情目前仍有非官方 Yahoo Finance 端點，尚未完成官方授權來源替換；FinMind 與 MARKET_* 自訂來源也須逐一核實來源、授權與即時性。** 台股即時 feed 尚未取得授權；目前 TWSE／TPEx OpenAPI 路徑僅提供官方日收盤資料。
 - 此次提交完成的是工程規格文件，不代表已取得交易所即時行情授權或已完成程式接線。驗收清單未通過前，不得將來源標記為正式官方即時行情。
 
 ## Crypto market microstructure (2026-11-18)
@@ -134,6 +134,6 @@ API Key 僅放後端環境變數；不要提交 .env、Token、券商帳密或�
 
 ## 正式環境驗收
 
-正式驗收會檢查 Render commit、TWSE MIS 官方行情抽樣、多交易所加密貨幣、BTC 訂單簿與逐筆成交資料；未通過不會標記上線完成。
+正式驗收會檢查 Render commit、TWSE／TPEx 官方 OpenAPI 日收盤行情抽樣、多交易所加密貨幣、BTC 訂單簿與逐筆成交資料；未通過不會標記上線完成。
 
 `.github/workflows/production-smoke.yml` 會在 main 分支每次推送後，等待 Render 啟用對應 commit，並透過 GitHub Actions OIDC 驗證台股官方行情與多交易所加密貨幣資料；美股官方行情授權未設定時會明確列為警告，不冒充官方報價。
