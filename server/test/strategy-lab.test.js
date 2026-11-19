@@ -31,6 +31,10 @@ test('strategy lab produces separate in-sample and out-of-sample results with ex
  assert.ok(result.strategies.some(s=>s.id==='consensus_market_structure'));
  assert.ok(['sma_cross_20_50','donchian_20_10','bollinger_rsi','supertrend_atr'].every(id=>result.strategies.some(s=>s.id===id)));
  assert.ok(result.strategies.every(s=>s.walkForward.folds.length===3));
+ const core=result.strategies.filter(s=>['ema_trend_rsi','macd_momentum','bb_mean_reversion'].includes(s.id));
+ assert.equal(core.length,3);
+ assert.ok(core.every(s=>s.autonomousLearning&&s.autonomousLearning.livePromotion===false));
+ assert.ok(core.every(s=>['paper_candidate','rejected','insufficient_evidence'].includes(s.autonomousLearning.status)));
  assert.ok(result.strategies.every(s=>s.costSensitivity.halfCost&&s.costSensitivity.doubleCost));
  assert.ok(result.strategies.every(s=>s.validation.status!=='preliminary_pass'||s.walkForward.passed));
  assert.equal(result.costs.feeBps,14.25);
