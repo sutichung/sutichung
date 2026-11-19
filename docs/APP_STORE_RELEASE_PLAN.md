@@ -95,7 +95,7 @@
 
 ## 8. 本次工程準備分支變更
 
-- 新增 `capacitor.config.ts`，以既有 Vite build 輸出目錄 `build` 作為 Capacitor webDir。
+- 新增 `capacitor.config.json`，以既有 Vite build 輸出目錄 `build` 作為 Capacitor webDir。
 - 加入 Capacitor 8 runtime、CLI、iOS／Android 平台套件與 Splash Screen plugin。
 - 加入 PWA manifest、App icon SVG、service worker 及離線說明頁。
 - Service worker 僅快取 manifest／圖示；刻意不快取 `/api`、登入、行情、K 線或訊號，避免舊資料被誤認為即時行情。
