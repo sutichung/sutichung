@@ -21,6 +21,7 @@ const { diagnoseProviders } = require('./lib/provider-diagnostics');
 const { createDependencyVulnerabilityScanner } = require('./lib/dependency-vulnerabilities');
 const { verifyGitHubActionsToken } = require('./lib/github-oidc');
 const { buildRuntimeHealth } = require('./lib/health');
+const { getHistoricalCoverage, validateHistoryRange } = require('./lib/historical-coverage');
 const researchStorage = require('./lib/research-storage').createResearchStorage();
 const dependencyVulnerabilityScanner = createDependencyVulnerabilityScanner({ lockPath: path.join(__dirname, '..', 'package-lock.json'), manifestPath: path.join(__dirname, '..', 'package.json'), auditPath: path.join(__dirname, '..', 'dependency-audit.json') });
 
@@ -566,6 +567,12 @@ async function route(req,res){
   }
   if(req.method!=='GET'){return json(res,405,{error:'method_not_allowed'});}
   if(u.pathname==='/api/colony/status')return json(res,200,antColony.getStatus());
+  if(u.pathname==='/api/diagnostics/historical-coverage'){
+    try{
+      const range=validateHistoryRange({from:u.searchParams.get('from')||'1990-01-01',to:u.searchParams.get('to')||now().slice(0,10)});
+      return json(res,200,{targetFrom:range.from,targetTo:range.to,coverage:getHistoricalCoverage(),warning:'Provider configuration is not proof of licensed or complete coverage; per-instrument probes and gap audits are required.',timestamp:now()});
+    }catch(e){return json(res,400,{error:e.message});}
+  }
   if(u.pathname==='/api/diagnostics/providers'){
     const result=await diagnoseProviders();
     return json(res,200,{...result,security:getTelemetry()});
