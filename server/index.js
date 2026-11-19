@@ -886,7 +886,7 @@ async function route(req,res){
           }
         }
       }catch(error){otcError=error.message;}
-      return {...listed,data:{...listed.data,...otcData},source:'TWSE MIS 官方即時行情 + TPEx 官方日收盤歸檔（上櫃報價明確標示為歷史日收盤）',timestamp:now(),mixedFreshness:Object.keys(otcData).length>0,markets:{TWSE:Object.keys(listed.data||{}).length,TPEx:Object.keys(otcData).length},otcAsOf,otcError};
+      return {...listed,data:{...listed.data,...otcData},source:'TWSE MIS 官方即時行情 + TPEx 官方日收盤歸檔（上櫃報價明確標示為歷史日收盤）'+(primaryProviderError?'（主要供應商失敗，已自動切換官方公開備援）':''),providerWarning:primaryProviderError, timestamp:now(),mixedFreshness:Object.keys(otcData).length>0,markets:{TWSE:Object.keys(listed.data||{}).length,TPEx:Object.keys(otcData).length},otcAsOf,otcError};
     },e=>({data:{},source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
   }
