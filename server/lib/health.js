@@ -56,7 +56,15 @@ function buildDependencyReadiness(env = process.env) {
     httpServer: { status: 'ready', ready: true },
     supabaseAuth: { status: configured('SUPABASE_URL') && configured('SUPABASE_ANON_KEY') ? 'configured_unverified' : 'not_configured', configured: configured('SUPABASE_URL') && configured('SUPABASE_ANON_KEY'), connectivityVerified: false },
     adminMemberRecovery: { status: configured('SUPABASE_SERVICE_ROLE_KEY') && configured('SUPABASE_ADMIN_EMAIL') ? 'configured_unverified' : 'not_configured', configured: configured('SUPABASE_SERVICE_ROLE_KEY') && configured('SUPABASE_ADMIN_EMAIL'), connectivityVerified: false },
-    realtimeMarket: { status: configured('FUGLE_API_KEY') || configured('MARKET_REALTIME_URL') ? 'configured_unverified' : 'not_configured', configured: configured('FUGLE_API_KEY') || configured('MARKET_REALTIME_URL'), connectivityVerified: false },
+    realtimeMarket: {
+      status: (configured('TWSE_REALTIME_PROVIDER_URL') && confirmed('TWSE_REALTIME_LICENSE_CONFIRMED')) || (configured('TPEX_REALTIME_PROVIDER_URL') && confirmed('TPEX_REALTIME_LICENSE_CONFIRMED')) ? 'configured_unverified' : 'not_configured',
+      configured: (configured('TWSE_REALTIME_PROVIDER_URL') && confirmed('TWSE_REALTIME_LICENSE_CONFIRMED')) || (configured('TPEX_REALTIME_PROVIDER_URL') && confirmed('TPEX_REALTIME_LICENSE_CONFIRMED')),
+      connectivityVerified: false,
+      markets: {
+        TWSE: configured('TWSE_REALTIME_PROVIDER_URL') && confirmed('TWSE_REALTIME_LICENSE_CONFIRMED'),
+        TPEx: configured('TPEX_REALTIME_PROVIDER_URL') && confirmed('TPEX_REALTIME_LICENSE_CONFIRMED')
+      }
+    },
     historicalProviders: historical,
     cryptoRedistributionLicenses: {
       confirmed: cryptoLicenses.filter(confirmed).length,
