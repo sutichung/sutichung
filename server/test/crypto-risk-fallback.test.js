@@ -14,7 +14,7 @@ test('risk history fails over across supported exchanges and preserves the real 
  assert.equal(result.errors[0].error,'upstream_http_502');
 });
 test('risk history fails closed when every exchange has fewer than 22 candles',async()=>{
- await assert.rejects(()=>loadRiskHistory({symbol:'BTCUSDT',marketType:'perpetual',getHistory:async()=>({data:[]})}),e=>e.attempts.length===3&&e.message==='all_supported_exchanges_failed_to_supply_risk_candles');
+ await assert.rejects(()=>loadRiskHistory({symbol:'BTCUSDT',marketType:'perpetual',getHistory:async()=>({data:[]})}),e=>e.attempts.length===4&&e.message==='all_supported_exchanges_failed_to_supply_risk_candles');
 });
 test('microstructure fallback accepts only a fresh order book and trade tape',async()=>{
  const now=Date.parse('2026-11-18T16:10:00Z'),calls=[];
@@ -37,7 +37,7 @@ test('microstructure fallback rejects stale or incomplete snapshots',async()=>{
  });
  assert.equal(result.data,null);
  assert.equal(result.exchange,null);
- assert.equal(result.errors.length,3);
+ assert.equal(result.errors.length,4);
 });
 test('exchange candidate order prefers selected exchange then safe alternatives',()=>{
  assert.deepEqual(candidates('Binance','Bybit'),['Bybit','Binance','OKX']);
@@ -64,4 +64,13 @@ test('risk history tries the selected Coinbase spot feed before cross-exchange f
 test('risk history defaults to completed 15-minute candles for current risk monitoring',async()=>{
  const result=await loadRiskHistory({symbol:'BTCUSDT',marketType:'perpetual',getHistory:async(s,t,interval)=>{assert.equal(interval,'15m');return goodHistory;}});
  assert.equal(result.history.source,'public candles');
+});
+
+test('perpetual risk history includes Kraken Futures as a final public-data fallback',async()=>{
+ const calls=[];
+ const result=await loadRiskHistory({symbol:'BTCUSDT',marketType:'perpetual',exchange:'Binance',getHistory:async(s,t,i,e)=>{calls.push(e);if(e!=='Kraken Futures')throw new Error('unavailable');return {...goodHistory,source:'Kraken Futures candles'};}});
+ assert.deepEqual(calls,['Binance','Bybit','OKX','Kraken Futures']);
+ assert.equal(result.exchange,'Kraken Futures');
+ assert.equal(result.history.source,'Kraken Futures candles');
+ assert.equal(result.fallbackUsed,true);
 });
