@@ -84,6 +84,21 @@ test('crypto history excludes the still-forming candle from research data',()=>{
   assert.equal(candles[0].time,new Date(start-86400000).toISOString());
 });
 
+test('intraday normalization can include the forming candle and labels it as unclosed',()=>{
+  const start=Date.parse('2026-11-19T12:00:00.000Z');
+  const rows=[
+    [String(start-60000),'100','105','99','104','12'],
+    [String(start),'104','108','103','107','8']
+  ];
+  const closedOnly=normalizeKlines(rows,'Binance','1m',start+30000);
+  assert.equal(closedOnly.length,1);
+  assert.equal(closedOnly[0].closed,true);
+  const live=normalizeKlines(rows,'Binance','1m',start+30000,true);
+  assert.equal(live.length,2);
+  assert.equal(live.at(-1).time,new Date(start).toISOString());
+  assert.equal(live.at(-1).closed,false);
+});
+
 test('official Binance market-data host is tried before alternate official REST hosts',async()=>{
  const original=global.fetch;const calls=[];
  global.fetch=async url=>{
