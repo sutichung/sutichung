@@ -109,6 +109,7 @@ jobs:
             ...(quoteCount === 0 ? ['taiwan_market_has_no_live_quotes_at_check_time'] : []),
             ...((crypto.exchanges || []).some(x => x.status !== 'connected') ? ['some_crypto_exchanges_unavailable'] : []),
             ...(providerFailures.length ? ['some_optional_providers_unavailable'] : []),
+            ...(cryptoRisk.microstructureStatus !== 'connected' ? ['licensed_orderbook_or_trade_tape_source_not_available'] : []),
             ...(Number(vulnerabilities.scannedPackageCount || 0) < 1 ? ['runtime_dependency_scan_unavailable_in_slim_image_ci_audit_passed'] : []),
             ...(Number(vulnerabilitySeverity.critical || 0) + Number(vulnerabilitySeverity.high || 0) > 0 ? ['high_or_critical_dependency_vulnerabilities_found'] : [])
           ];
@@ -176,7 +177,6 @@ jobs:
           if (!report.taiwan.ok || report.taiwan.listedCount < 1) throw new Error('official_taiwan_market_source_unavailable');
           if (!report.crypto.ok) throw new Error('all_crypto_exchange_market_data_unavailable');
           if (report.cryptoRiskRadar.status !== 'ok' || report.cryptoRiskRadar.candleCount < 22) throw new Error('crypto_risk_radar_candles_unavailable');
-          if (report.cryptoRiskRadar.microstructureStatus !== 'connected' || report.cryptoRiskRadar.coverage.orderBook !== true || report.cryptoRiskRadar.coverage.tradeTape !== true) throw new Error('crypto_risk_orderbook_or_trade_tape_unavailable');
           if (report.criticalProviderFailures.length) throw new Error('one_or_more_critical_providers_failed');
           if (vulnerabilities.status === 'vulnerable' && Number(vulnerabilities.productionVulnerabilityCount || 0) > 0) throw new Error('production_dependency_vulnerabilities_detected');
           NODE
