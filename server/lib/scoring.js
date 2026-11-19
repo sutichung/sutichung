@@ -119,11 +119,15 @@ function scoreStock(input={}) {
   const confidence=Math.round(covered/total*100);
   const asOf=Date.parse(input.asOf||'');
   const ageMs=Number.isFinite(asOf)?Date.now()-asOf:Infinity;
-  const fresh=ageMs>=-30000&&ageMs<=Number(input.maxAgeMs||180000);
+  const technicalDate=String(input.technicalAsOf||'').slice(0,10);
+  const quoteDate=Number.isFinite(asOf)?new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date(asOf)):null;
+  const technicalSessionMatches=input.marketSessionOpen!==true||(input.quoteIsLive===true&&technicalDate&&quoteDate===technicalDate);
+  const fresh=ageMs>=-30000&&ageMs<=Number(input.maxAgeMs||180000)&&technicalSessionMatches;
   const valid=confidence>=60&&fresh;
   let direction='觀望';
   if(valid) direction=scoreValue>=70?'偏向買進':scoreValue<=35?'偏向賣出／避險':'中性觀望';
-  if(!fresh) reasons.unshift('行情時間戳缺失或已過期');
+  if(!technicalSessionMatches) reasons.unshift('盤中技術指標仍是前一交易日完整日K，缺少同交易日盤中K線；暫停方向訊號');
+  if(!fresh&&technicalSessionMatches) reasons.unshift('行情時間戳缺失或已過期');
   if(confidence<60) reasons.unshift('有效因子覆蓋率不足 60%');
   return {
     score:scoreValue,
