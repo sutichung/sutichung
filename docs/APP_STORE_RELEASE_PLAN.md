@@ -1,115 +1,78 @@
-# App Store / Google Play 上架準備計畫
+# 免費手機 App 發布計畫（零新增付費）
 
 > 專案：泰丞・台股 AI 智慧操盤中樞  
-> 目標：iOS App Store 與 Google Play  
-> 狀態：準備文件；尚未建立可簽署的 iOS/Android 安裝包，也尚未送審。
+> 主要目標：不購買 Apple Developer／Google Play 開發者帳號、不新增付費服務，讓會員可在 iPhone 與 Android 以手機 App 形式使用。  
+> 原則：優先使用現有網站、現有 Render 服務與免費開源工具；不得因本計畫新增付費資源。
 
-## 1. 目前程式盤點（依 GitHub main 原始碼）
+## 1. 發布路線
 
-- 前端為 React 18 + Vite，使用 `vite build`。
-- 後端為 Node.js，Render 同一服務提供網站與 `/api`。
-- 已有登入／註冊介面與 Supabase Auth 整合說明。
-- 已有手機版導覽元件（例如 `MobileDock.jsx`）及 K 線／行情等功能。
-- `package.json` 目前未列出 Capacitor、Expo 或 React Native。
-- `index.html` 有 viewport、description、theme-color，但目前檢視的 `public/` 清單未見 App icon、manifest、service worker 等完整 PWA 套件。
-- 專案 README 明確說明實盤下單鎖定；研究評分不可當成交易指令。
-- README 說明美股資料目前包含 Yahoo Finance 非官方端點；台股／其他來源仍需逐一核實授權與延遲狀態。
+### 第一優先：PWA（iPhone／Android 共用）
 
-## 2. 建議技術路線
+- 以現有 HTTPS 網站安裝到手機主畫面，使用者可從主畫面圖示啟動。
+- 不需要 App Store／Google Play 開發者會員，也不需要商店簽署憑證。
+- 保留既有登入、會員、行情、K 線與分析功能，沿用現有後端 API。
+- 以 manifest、圖示、service worker、離線提示與行動版版面完成 PWA。
+- Service worker 只能快取不會過期的靜態外殼資源；不可快取登入、會員、API、報價、K 線或訊號資料。離線時必須明確顯示無網路／資料不可用，不得把舊報價當成即時行情。
 
-採用 Capacitor 將既有 React 網站包裝為 iOS 與 Android App，先共用既有前端與 Render API，避免重寫整套系統。保留原網站正常運作。
+iPhone 安裝方式：使用 Safari 開啟網站，選擇「分享」→「加入主畫面」。  
+Android 安裝方式：使用 Chrome 開啟網站，選擇「安裝應用程式」或「加入主畫面」（依瀏覽器版本顯示）。
 
-建議階段：
-1. 完成 PWA 基礎（manifest、圖示、主畫面啟動、HTTPS、離線錯誤狀態）。
-2. 新增 Capacitor iOS／Android 專案與必要原生設定。
-3. 加入安全的登入狀態保存、深層連結、鍵盤／安全區域／返回鍵處理。
-4. 推播通知採使用者明確同意後啟用；不得以推播暗示保證獲利或未經驗證的即時訊號。
-5. 使用 TestFlight 與 Google Play internal/closed testing 測試，再送正式審核。
+### 第二優先：Android APK（選擇性）
 
-## 3. 商店送審前必備項目
+- 使用 Capacitor 與 GitHub Actions 的免費開源建置流程產生 debug APK，供測試或自行安裝。
+- 不透過 Google Play 發布；使用者可能需要允許安裝外部來源 App。
+- Debug APK 僅供測試，不是正式簽署發布包。若要提供正式 APK，需另外完成 release signing 與安全的金鑰管理；不得把簽署金鑰提交到 Git。
+- 不得為此新增付費建置服務或付費憑證。
 
-### 品牌與商店素材
-- 正式 App 名稱、英文名稱與副標題。
-- App icon（iOS／Android 尺寸與安全區域依最新規格輸出）。
-- iPhone、iPad（若支援）、Android 手機和平板截圖。
-- 商店簡介、完整描述、關鍵字、支援網址、客服聯絡方式。
-- 年齡分級問卷、內容權利聲明及第三方素材授權清單。
+### 暫緩：App Store／Google Play
 
-### 隱私與會員
-- 公開可讀的隱私權政策網址。
-- 蒐集資料清單：帳號／Email、登入識別資料、裝置推播 token、診斷／分析資料，以及實際啟用的第三方服務。
-- 說明每項資料用途、保存期間、第三方處理者、跨境處理、刪除方式及聯絡窗口。
-- 若 App 支援建立帳號，提供 App 內可找到的帳號刪除流程，並同步刪除或依法保留必要資料。
-- 完成 Apple App Privacy 與 Google Play Data safety 表單；不得在未盤點前猜填。
-- 若使用 Google／其他第三方登入，依商店當期登入政策檢查是否需提供相應登入選項。
-- 提供審核人員可用的測試帳號與清楚的測試步驟；不得提供管理員帳號或真實會員資料。
+- 不購買 Apple Developer Program 或 Google Play Console 會員。
+- 不提交商店審核、不宣稱已在商店上架。
+- 未來若使用者主動決定支付相關費用，再另行評估商店上架；目前不以此作為交付前提。
 
-### 金融資訊與風險揭露
-- 清楚說明產品為行情研究、資訊整理與技術分析工具，不保證獲利、不構成個人化投資建議。
-- 每個市場標示資料供應商、最後更新時間、即時／延遲／歷史／不可用狀態。
-- 未取得正式授權的來源不得描述為官方即時行情；美股非官方來源必須清楚標示。
-- AI／規則評分需揭露其方法限制、資料覆蓋率及失效條件，不得宣稱為勝率或保證預測。
-- 實盤下單維持鎖定；未完成券商授權、交易風控、稽核與法規檢查前，不加入交易執行。
-- 檢查金融資料展示、行情再散布及商標／市場資料授權條款。
+## 2. 工程範圍
 
-## 4. 工程驗收門檻
+- React／Vite 前端沿用現有程式，不重寫系統。
+- PWA 使用 manifest、適當尺寸圖示、service worker、離線 fallback 與 HTTPS。
+- 保留既有 Render API；不新增資料庫、付費 CDN、付費推播或第三方訂閱。
+- Capacitor 設定保留作為 Android APK／未來原生包裝選項，但不應讓 PWA 必須依賴 Capacitor 才能運作。
+- 手機版需檢查安全區域、底部導覽、鍵盤遮擋、登入流程、窄螢幕與深色模式。
+- 金鑰只能放伺服器端，不得打包進前端或 APK。
 
-- `npm ci`、`npm run build`、`npm run test:server` 通過。
-- iOS 真機與 Android 真機測試登入、登出、註冊、密碼重設、會員刪除、深層連結及網路中斷。
-- API 只經 HTTPS；金鑰只放伺服器，不得打包在 App 或前端。
-- 檢查 token 儲存方式、憑證／敏感資料日誌、權限最小化及依賴套件漏洞。
-- 行情 API 斷線、限流、休市、過期及來源切換時，顯示正確狀態，不得沿用舊報價冒充即時。
-- 測試小螢幕、平板、動態字體、深色模式、無障礙標籤、旋轉、鍵盤遮擋與耗電。
-- 推播需可關閉、可控頻率，並驗證不會重複或發送過期訊號。
-- 完成隱私政策、服務條款、風險揭露與客服支援頁面。
-- 產生簽署版 IPA／AAB，保存版本號、build number、簽署資訊與可重現建置紀錄。
+## 3. 金融資料與安全要求
 
-## 5. 尚待帳號持有人提供／完成的外部事項
+- 股票及市場資料需標示來源、最後更新時間，以及即時／延遲／歷史／不可用狀態。
+- 未獲授權的來源不得描述成官方即時行情；不可用舊快取假裝即時。
+- API 斷線、限流、休市或資料過期時，顯示明確狀態。
+- 實盤下單維持鎖定；研究評分不是交易指令，不保證獲利。
+- 帳號刪除流程、資料保存義務與 Supabase migration 必須先完成測試帳號端到端驗收；不得用真實會員測試刪除。
+- 不可將 Supabase service role key、API secret、簽署私鑰或其他憑證提交到 Git。
 
-- Apple Developer Program 團隊／帳號及 App Store Connect 權限。
-- Google Play Console 開發者帳號及必要身分／組織驗證。
-- 最終商店顯示名稱、品牌權利確認、客服 Email、支援網站。
-- 隱私權政策與服務條款的正式發布網址。
-- Apple／Google 簽署、商店合約、稅務與付款資料（如適用）。
+## 4. 免費方案驗收門檻
 
-帳號、憑證、付款與商店合約必須由帳號持有人親自完成；本專案不保存或代填密碼、私鑰或付款資料。
+- `npm run test:server` 通過。
+- `npm run build` 通過。
+- PWA manifest 可正常讀取，圖示及啟動畫面可用。
+- iPhone Safari「加入主畫面」及 Android Chrome 安裝流程實測。
+- 登入、登出、註冊、密碼重設與會員資料在手機上正常。
+- 線上行情與 API 仍能正確更新；離線或資料過期時必須明確提示。
+- service worker 不得快取 API、登入資料、行情、K 線及交易訊號。
+- 測試小螢幕、底部導覽、安全區域、鍵盤遮擋、重新整理與網路中斷。
+- Android debug APK 若提供，需另行安裝測試並標示「測試版／未簽署商店發布版」。
+- 不新增任何付費資源；如遇到必須付費才能完成的項目，停止該項並回報免費替代方案。
 
-## 6. 發布階段與狀態
+## 5. 目前分支工程狀態
 
-| 階段 | 狀態 |
-|---|---|
-| 原始碼盤點 | 已完成初步盤點 |
-| 上架規格文件 | 已建立 |
-| PWA 基礎（manifest／離線頁／靜態資源快取） | 已在準備分支加入，待 CI 驗證 |
-| Capacitor 設定與雙平台 CI 原生專案生成 | 已在準備分支加入，待 CI 驗證；原生專案由 CI 生成 |
-| 隱私／帳號刪除流程驗收 | 已加入會員端刪除入口、網站申請路徑及伺服器端 Supabase 刪除 API；仍需 CI、Render 設定與端到端驗收 |
-| 真機測試與簽署建置 | 尚未開始 |
-| TestFlight／Play 測試 | 尚未開始 |
-| 商店素材與表單 | 尚未完成 |
-| 正式送審／上架 | 尚未送審 |
+- 準備分支：`app-store-preparation`。
+- 已加入 Capacitor 設定、PWA 相關資源、離線 fallback、service worker 與 Android／iOS CI 工作流程（仍須以最新 CI 結果驗證）。
+- service worker 設計上只快取靜態資源，不快取 API、登入、行情、K 線或訊號。
+- 已加入會員端帳號刪除入口與伺服器端 Supabase 刪除 API；仍須確認正式 Supabase migration、Render 後端 service role key 設定與測試帳號端到端驗收。
+- Android debug APK 與 iOS Simulator unsigned build 是測試產物，不等同正式簽署版或商店上架。
+- PWA 必須獨立可用；不能把商店建置或 Apple／Google 會員費當成使用者安裝手機版的必要條件。
 
-## 7. 不可跳過的發布原則
+## 6. 不得擅自執行的事項
 
-任何一項關鍵測試未通過，不標示為可上架；不得將網站已部署等同 App 已發布。不得擅自啟用付費服務、改動交易執行、使用者資金權限、正式憑證或商店帳號。
-
-
-## 8. 本次工程準備分支變更
-
-- 新增 `capacitor.config.json`，以既有 Vite build 輸出目錄 `build` 作為 Capacitor webDir。
-- 加入 Capacitor 8 runtime、CLI、iOS／Android 平台套件與 Splash Screen plugin。
-- 加入 PWA manifest、App icon SVG、service worker 及離線說明頁。
-- Service worker 僅快取 manifest／圖示；刻意不快取 `/api`、登入、行情、K 線或訊號，避免舊資料被誤認為即時行情。
-- 新增 GitHub Actions Android debug APK 與 iOS Simulator unsigned build 流程。Capacitor 8 CI 使用 Node 22 與 Xcode 26；建置產物仍不是可送商店的簽署版。
-- 此分支尚未完成會員自行刪除帳號。不可只刪除 Supabase Auth 身分而忽略關聯資料；需先盤點 Supabase 資料表、研究紀錄、訂閱／稽核保留義務，再設計確認、刪除與完成通知流程。
-- App Store 正式商店圖示需輸出各平台規格 PNG；目前提交的 SVG 是 PWA／開發階段素材，不視為完整商店圖示包。
-
-
-## 9. 帳號刪除功能實作與驗收限制
-
-- 會員登入後可從帳號列啟動刪除，並要求重新輸入目前登入 Email 及 `DELETE` 字樣確認。
-- Google Play 外部帳號刪除預定資源路徑：`https://taiwan-stock-hunter-o3tt.onrender.com/account-deletion`。此路徑隨本分支部署後才會生效；目前正式 Render 服務尚未包含此變更。使用者登入後會開啟刪除確認流程。
-- 後端只接受有效登入者的請求，核對 Email／確認字串，並要求 Render 設定 `SUPABASE_SERVICE_ROLE_KEY`；缺少金鑰時安全拒絕，不會假稱刪除成功。
-- 目前已檢視的 Supabase migration 中，finance_consents、finance_accounts、finance_balances、finance_transactions 對 auth.users 使用 ON DELETE CASCADE；finance_audit_events 使用 ON DELETE SET NULL，以保留去識別化稽核事件。
-- 仍須在實際 Supabase 專案確認 migration 已套用，檢查是否存在未納入 Git 的資料表、Storage bucket、外部第三方紀錄或法定保存義務，並以測試帳號做端到端刪除驗收。
-- 正式送審前，需確認服務角色金鑰存在於 Render 後端環境、外部刪除網址可公開存取、刪除失敗可重試且客服聯絡資訊已填妥。
-
+- 不得新增付費 Render 方案、資料庫、第三方 API、推播服務或開發者會員。
+- 不得擅自合併到 main、部署正式服務、變更正式環境變數或刪除真實會員資料。
+- 不得將未通過的測試標記為通過，也不得宣稱已完成手機實機驗收。
+- 不得將網站 PWA、測試 APK 或 CI 產物描述成已經 App Store／Google Play 正式上架。
