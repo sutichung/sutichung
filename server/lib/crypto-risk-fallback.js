@@ -1,9 +1,10 @@
 'use strict';
 
-const SUPPORTED_EXCHANGES=['Binance','Bybit','OKX'];
-const HISTORY_EXCHANGES=['Binance','Bybit','OKX','Coinbase','Kraken'];
+const SUPPORTED_EXCHANGES=['Binance','Bybit','OKX','Kraken Futures'];
+const HISTORY_EXCHANGES=['Binance','Bybit','OKX','Coinbase','Kraken','Kraken Futures'];
 function candidates(primary,preferred){
-  return [...new Set([preferred,primary,...SUPPORTED_EXCHANGES].filter(x=>SUPPORTED_EXCHANGES.includes(x)))];
+  const allowed=[...SUPPORTED_EXCHANGES,'Coinbase','Kraken'];
+  return [...new Set([preferred,primary,...SUPPORTED_EXCHANGES].filter(x=>allowed.includes(x)))];
 }
 async function loadRiskHistory({getHistory,symbol,marketType,interval='15m',exchange='Binance',nativeSymbol=symbol,limit=240}){
   const errors=[];
