@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -38,20 +38,20 @@ jobs:
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
   ios-simulator:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - run: npm install --no-audit --no-fund
       - run: npm run test:server
       - run: npm run build
       - run: npx cap add ios
       - run: npx cap sync ios
       - name: Build iOS simulator app (unsigned)
-        run: xcodebuild -workspace ios/App/App.xcworkspace -scheme App -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO -derivedDataPath /tmp/ios-derived build
+        run: xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO -derivedDataPath /tmp/ios-derived build
       - uses: actions/upload-artifact@v4
         with:
           name: ios-simulator-app
