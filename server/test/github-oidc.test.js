@@ -17,6 +17,10 @@ test('accepts signed short-lived tokens only from the allowlisted market and pro
  const jwk=pair.publicKey.export({format:'jwk'});Object.assign(jwk,{kid:'test-key',use:'sig',alg:'RS256'});
  const fetchImpl=async()=>({ok:true,json:async()=>({keys:[jwk]})});
  assert.equal(await verifyGitHubActionsToken(makeToken(pair),{fetchImpl}),true);
+ const refreshToken=makeToken(pair,{workflow_ref:'sutichung/sutichung/.github/workflows/market-data-refresh.yml@refs/heads/main',event_name:'schedule'});
+ assert.equal(await verifyGitHubActionsToken(refreshToken,{fetchImpl}),true);
+ const refreshDispatchToken=makeToken(pair,{workflow_ref:'sutichung/sutichung/.github/workflows/market-data-refresh.yml@refs/heads/main',event_name:'workflow_dispatch'});
+ assert.equal(await verifyGitHubActionsToken(refreshDispatchToken,{fetchImpl}),true);
  assert.equal(await verifyGitHubActionsToken(makeToken(pair,{event_name:'workflow_dispatch'}),{fetchImpl}),true);
  const smokeToken=makeToken(pair,{workflow_ref:'sutichung/sutichung/.github/workflows/production-smoke.yml@refs/heads/main',event_name:'push'});
  assert.equal(await verifyGitHubActionsToken(smokeToken,{fetchImpl}),false);
