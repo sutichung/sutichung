@@ -10,9 +10,34 @@ async function api(path){const token=localStorage.getItem('ts_access_token')||''
 function Panel({title,children,right}){return <section style={{background:C.panel,border:'1px solid '+C.border,borderRadius:12,padding:13,minWidth:0}}><div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center',marginBottom:10,flexWrap:'wrap'}}><b>{title}</b>{right}</div>{children}</section>}
 function Stat({label,value,note,color=C.text}){return <div style={{background:C.panel2,borderRadius:8,padding:10,minWidth:0}}><small style={{color:C.muted}}>{label}</small><div style={{fontSize:18,fontWeight:800,color,marginTop:4,overflowWrap:'anywhere'}}>{value}</div>{note&&<small style={{color:C.muted}}>{note}</small>}</div>}
 export default function CryptoMarket(){
- const [market,setMarket]=useState(null),[news,setNews]=useState([]),[rows,setRows]=useState([]),[query,setQuery]=useState(''),[type,setType]=useState('all'),[sort,setSort]=useState('volume'),[selected,setSelected]=useState('BTCUSDT'),[selectedType,setSelectedType]=useState('perpetual'),[selectedExchange,setSelectedExchange]=useState('Binance'),[selectedNativeSymbol,setSelectedNativeSymbol]=useState('BTCUSDT'),[selectedInterval,setSelectedInterval]=useState('1m'),[exchangeFilter,setExchangeFilter]=useState('all'),[history,setHistory]=useState(null),[derivatives,setDerivatives]=useState(null),[risk,setRisk]=useState(null),[riskError,setRiskError]=useState(''),[riskLoading,setRiskLoading]=useState(false),[ai,setAi]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(''),[scanBusy,setScanBusy]=useState(false),[scanProgress,setScanProgress]=useState({done:0,total:0}),[techMap,setTechMap]=useState({});
+ const [market,setMarket]=useState(null),[news,setNews]=useState([]),[rows,setRows]=useState([]),[query,setQuery]=useState(''),[type,setType]=useState('all'),[sort,setSort]=useState('volume'),[selected,setSelected]=useState('BTCUSDT'),[selectedType,setSelectedType]=useState('perpetual'),[selectedExchange,setSelectedExchange]=useState('Binance'),[selectedNativeSymbol,setSelectedNativeSymbol]=useState('BTCUSDT'),[selectedInterval,setSelectedInterval]=useState('1m'),[exchangeFilter,setExchangeFilter]=useState('all'),[history,setHistory]=useState(null),[derivatives,setDerivatives]=useState(null),[risk,setRisk]=useState(null),[riskError,setRiskError]=useState(''),[riskLoading,setRiskLoading]=useState(false),[ai,setAi]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(''),[scanBusy,setScanBusy]=useState(false),[scanProgress,setScanProgress]=useState({done:0,total:0}),[techMap,setTechMap]=useState({}),[realtimeStatus,setRealtimeStatus]=useState(null);
  const refresh=useCallback(async()=>{setLoading(true);try{const [m,n]=await Promise.all([api('/market'),api('/news')]);setMarket(m);setRows(m.markets||[]);setNews(n.data||[]);setError(m.status==='license_required'?'加密貨幣行情暫停：尚未設定各交易所的會員展示／再分發書面授權。':m.errors?.join('；')||'');}catch(e){setError(e.message);}finally{setLoading(false);}},[]);
  useEffect(()=>{refresh();const t=setInterval(refresh,15000);return()=>clearInterval(t);},[refresh]);
+ useEffect(()=>{
+  let live=true,busy=false;
+  const syncLiveQuotes=async()=>{
+   if(busy)return;
+   busy=true;
+   try{
+    const payload=await api('/realtime/quotes');
+    if(!live)return;
+    const quotes=Array.isArray(payload.quotes)?payload.quotes:[];
+    const byKey=new Map(quotes.map(q=>[q.exchange+':'+q.marketType+':'+q.symbol,q]));
+    const apply=items=>(items||[]).map(item=>{
+     const quote=byKey.get(item.exchange+':'+item.marketType+':'+(item.nativeSymbol||item.symbol));
+     if(!quote)return item;
+     return {...item,price:quote.price,changePct:quote.changePct??item.changePct,quoteVolume:quote.quoteVolume??item.quoteVolume,bid:quote.bid??item.bid??null,ask:quote.ask??item.ask??null,bidSize:quote.bidSize??item.bidSize??null,askSize:quote.askSize??item.askSize??null,sourceTimestamp:quote.sourceTimestamp,timestamp:quote.sourceTimestamp,sourceAgeMs:quote.sourceAgeMs,receivedAt:quote.receivedAt,freshnessStatus:'fresh',signalEligible:true,delayed:false,quoteMode:'WebSocket push'};
+    });
+    setRows(prev=>apply(prev));
+    setMarket(prev=>prev?{...prev,markets:apply(prev.markets),realtime:payload.status||null,summary:{...(prev.summary||{}),websocketQuoteCount:quotes.length}}:prev);
+    setRealtimeStatus(payload.status||null);
+   }catch(e){if(live)setRealtimeStatus(prev=>prev?{...prev,lastError:e.message}:{lastError:e.message});}
+   finally{busy=false;}
+  };
+  syncLiveQuotes();
+  const timer=setInterval(syncLiveQuotes,1000);
+  return()=>{live=false;clearInterval(timer);};
+ },[]);
  useEffect(()=>{
   let live=true;
   const query='?type='+selectedType+'&exchange='+encodeURIComponent(selectedExchange)+'&nativeSymbol='+encodeURIComponent(selectedNativeSymbol);
@@ -60,7 +85,7 @@ export default function CryptoMarket(){
  <style>{'@media(max-width:760px){#crypto-market .crypto-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important}#crypto-market .crypto-detail{grid-template-columns:repeat(2,minmax(0,1fr))!important}#crypto-market .crypto-row{grid-template-columns:1fr 1fr!important}}'}</style>
  <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center',flexWrap:'wrap'}}><div><div style={{fontSize:21,fontWeight:900}}>₿ 加密貨幣智慧研究中心</div><small style={{color:C.muted}}>交易所市場掃描・技術指標・衍生品・清算風險地圖・AI 多空・新聞・量化回測</small></div><button onClick={refresh} disabled={loading} style={{background:C.blue,color:'#fff',border:0,borderRadius:7,padding:'8px 12px'}}>{loading?'更新中…':'重新掃描'}</button></div>
  <CryptoSignalRadar rows={rows} techMap={techMap} onSelect={choose}/>
- <div style={{fontSize:11,color:C.muted,margin:'10px 0'}}>資料來源：{market?.source||'連線中'}｜資料擷取：{market?.receivedAt?new Date(market.receivedAt).toLocaleString('zh-TW'):'—'}｜輪詢約 15 秒｜來源時間戳覆蓋 {market?.summary?.sourceTimestampCoveragePct??0}%｜新鮮 {market?.summary?.freshQuoteCount??0}｜過期 {market?.summary?.staleQuoteCount??0}｜未驗證 {market?.summary?.unverifiedQuoteCount??0}｜市場總數 {market?.summary?.total??'—'}｜現貨 {market?.summary?.spot??'—'}｜永續 {market?.summary?.perpetual??'—'}</div><div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>{(market?.exchanges||[]).map(x=><span key={x.name} title={x.error||''} style={{fontSize:11,padding:'5px 8px',borderRadius:20,background:x.status==='connected'?'#12382e':'#39232a',color:x.status==='connected'?C.green:C.red,border:'1px solid '+C.border}}>{x.name} · {x.status==='connected'?'連線':x.status==='not_configured'?'授權未設定':'未連線'} · {x.markets} · {x.latencyMs==null?'—':x.latencyMs+'ms'} · {x.updatedAt?new Date(x.updatedAt).toLocaleTimeString('zh-TW'):'—'}{x.coverageNote?' · 部分覆蓋':''}</span>)}</div>
+ <div style={{fontSize:11,color:C.muted,margin:'10px 0'}}>資料來源：{market?.source||'連線中'}｜資料擷取：{market?.receivedAt?new Date(market.receivedAt).toLocaleString('zh-TW'):'—'}｜即時串流：{realtimeStatus?.connectedFeedCount||0} 個連線｜WebSocket 新鮮報價：{realtimeStatus?.freshQuoteCount||0}｜畫面同步約 1 秒｜來源時間戳覆蓋 {market?.summary?.sourceTimestampCoveragePct??0}%｜新鮮 {market?.summary?.freshQuoteCount??0}｜過期 {market?.summary?.staleQuoteCount??0}｜未驗證 {market?.summary?.unverifiedQuoteCount??0}｜市場總數 {market?.summary?.total??'—'}｜現貨 {market?.summary?.spot??'—'}｜永續 {market?.summary?.perpetual??'—'}</div><div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>{(market?.exchanges||[]).map(x=><span key={x.name} title={x.error||''} style={{fontSize:11,padding:'5px 8px',borderRadius:20,background:x.status==='connected'?'#12382e':'#39232a',color:x.status==='connected'?C.green:C.red,border:'1px solid '+C.border}}>{x.name} · {x.status==='connected'?'連線':x.status==='not_configured'?'授權未設定':'未連線'} · {x.markets} · {x.latencyMs==null?'—':x.latencyMs+'ms'} · {x.updatedAt?new Date(x.updatedAt).toLocaleTimeString('zh-TW'):'—'}{x.coverageNote?' · 部分覆蓋':''}</span>)}</div>
  {market?.coverage?.timestampLimit&&<div style={{fontSize:11,color:C.muted,margin:'-3px 0 10px'}}>資料品質：{market.coverage.timestampLimit}；交易所回應時間不等於最後成交時間。</div>}
  {error&&<div role="status" style={{background:'#351b20',color:'#fecdd3',padding:9,borderRadius:8,fontSize:12,marginBottom:10}}>{error}</div>}
  {market?.status==='license_required'&&<div role="status" style={{background:'#3a2b16',color:'#fde68a',padding:11,borderRadius:8,fontSize:12,marginBottom:10}}><b>加密貨幣行情已安全暫停</b><div style={{marginTop:5}}>目前沒有任何交易所完成會員展示／再分發授權，因此不會載入未授權報價、K 線、委託簿或交易流。待書面授權完成後，管理員設定對應的 Render 授權旗標才會恢復。尚待授權：{(market.licenseRequiredProviders||[]).join('、')||'交易所資料來源'}。</div></div>}
