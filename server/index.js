@@ -639,6 +639,7 @@ async function route(req,res){
     const offset=Math.max(0,Number(u.searchParams.get('offset'))||0),limit=Math.min(10,Math.max(1,Number(u.searchParams.get('limit'))||8));
     const batch=(market.markets||[]).slice(offset,offset+limit);
     const results=await Promise.all(batch.map(async item=>{
+      if(item.signalEligible!==true)return {...item,technical:{status:'blocked-data-quality',direction:'資料品質不足',score:null,reason:item.freshnessStatus==='stale'?'來源報價已過期':'來源時間戳未驗證'}};
       try{
         const h=await cryptoMarket.getHistory(item.symbol,item.marketType,'1d',item.exchange,item.nativeSymbol),v=h.indicators;
         if(!v)return {...item,technical:{status:'insufficient',direction:'資料不足',score:null,asOf:h.asOf}};
