@@ -19,6 +19,8 @@ test('provider diagnostics sanitize credentials and classify timeout messages', 
   const longTimeout = new Error('request timeout'); longTimeout.timeoutMs = 12000;
   assert.equal(safeError(shortTimeout), '連線逾時（5 秒）');
   assert.equal(safeError(longTimeout), '連線逾時（12 秒）');
+  const invalidTimeout = new Error('request timeout'); invalidTimeout.timeoutMs = -1;
+  assert.equal(safeError(invalidTimeout), '連線逾時（12 秒）', 'invalid timeout metadata falls back to the documented default');
   assert.equal(safeError(new Error('upstream_http_401')), 'API 金鑰驗證失敗（HTTP 401）');
   assert.match(safeError(new Error('upstream_http_451')), /地區或法規限制/);
   assert.ok(!safeError(new Error('Bearer secret-token')).includes('secret-token'));
