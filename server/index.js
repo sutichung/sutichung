@@ -825,8 +825,10 @@ async function route(req,res){
   if(u.pathname==='/api/diagnostics/market'){
     try{
       const live=await twseMisSnapshot(5);
-      const sample=Object.values(live.data).slice(0,5).map(x=>({symbol:x.symbol,name:x.name,price:x.price,timestamp:x.timestamp,delayed:x.delayed,quoteType:x.quoteType}));
-      return json(res,200,{ok:true,connection:'connected',source:live.source,listedCount:live.listedCount,requestedCount:live.requestedCount,quoteCount:live.scannedCount,coveragePct:live.coveragePct,delayedCount:live.delayedCount,serverTime:now(),sample});
+      const allRows=Object.values(live.data||{});
+      const validRows=allRows.filter(x=>Number.isFinite(Number(x.price))&&Number(x.price)>0);
+      const sample=validRows.slice(0,5).map(x=>({symbol:x.symbol,name:x.name,price:x.price,timestamp:x.timestamp,delayed:x.delayed,quoteType:x.quoteType}));
+      return json(res,200,{ok:validRows.length>0,connection:validRows.length?'connected':'no_valid_quotes',source:live.source,listedCount:live.listedCount,requestedCount:live.requestedCount,scannedCount:live.scannedCount,quoteCount:validRows.length,coveragePct:live.requestedCount?Math.round(validRows.length/live.requestedCount*100):0,delayedCount:validRows.filter(x=>x.delayed).length,serverTime:now(),error:validRows.length?null:'TWSE MIS 有回應但抽樣商品沒有有效價格',sample});
     }catch(e){
       console.error('[market-diagnostics] '+(e.stack||e.message));
       return json(res,200,{ok:false,connection:'disconnected',error:e.message,serverTime:now()});
