@@ -149,10 +149,10 @@
 
 ## 11. 舊供應商處理清單
 
-現有專案 README 提及的 FinMind、Fugle、MARKET_REALTIME_URL、MARKET_SCAN_URL、MARKET_FLOWS_URL、MARKET_FUTURES_URL、MARKET_SENTIMENT_URL、MARKET_NEWS_URL 必須逐一盤點：
+現有專案的 FinMind 與 MARKET_* 自訂來源必須逐一盤點；Fugle 已從正式行情程式路徑移除：
 
 - 不得因為目前程式有接線，就推定它們是官方來源。
-- FinMind、Fugle 等第三方服務需重新分類其資料來源、授權與用途；未通過核准不得作為台股官方行情來源。
+- FinMind 僅可用於已驗證的歷史／基本面研究資料；不得作為官方即時行情來源。Fugle 股票與期貨行情整合已移除，不再作為執行期依賴。
 - MARKET_* 自訂 URL 預設視為未驗證來源，除非完成來源與授權登記。
 - 可保留非行情研究資料的供應商，但需與官方報價路徑隔離、標示來源，且不得冒充官方。
 - 不可在未確認替代官方端點、欄位與授權前，直接刪除現有服務造成整個行情功能中斷；先切換為明確的資料不足狀態。
@@ -241,3 +241,4 @@ TPEx 官方資料產品頁列有即時及延遲資料的申請方式與費用；
 - [ ] 台股上市與上櫃分開驗證，不以 TWSE 備援覆蓋 TPEx。
 - [ ] 備援恢復後完成缺口補抓與來源一致性檢查。
 - [ ] 無合格備援時，系統安全降級為 DATA_UNAVAILABLE，而不是假裝正常。
+\n\n## 14. 本次供應商切換紀錄\n\n- 股票行情路徑已移除 Fugle API Key、REST snapshot 與 FutOpt 即時行情呼叫。\n- 台股上市收盤行情改接 TWSE 官方 OpenAPI `GET /v1/exchangeReport/STOCK_DAY_ALL`。\n- 台股上櫃收盤行情改接 TPEx 官方 OpenAPI `GET /openapi/v1/tpex_mainboard_daily_close_quotes`。\n- 兩個端點均標記 `END_OF_DAY`，不宣稱盤中即時。\n- 任一交易所端點故障時回報 partial coverage；兩者均失敗則回報 unavailable，不以非官方報價補值。\n- 盤中即時行情需另行取得 TWSE／TPEx 或其核准資訊供應商之適用授權與 feed，完成前不顯示為即時。\n
