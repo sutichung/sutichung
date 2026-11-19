@@ -9,7 +9,7 @@ test('daily health report distinguishes missing optional APIs from real failures
     { checks: [
       { id: 'twse', label: 'TWSE', status: 'connected', latencyMs: 50 },
       { id: 'finmind', label: 'FinMind', status: 'not_configured', message: 'missing token' },
-      { id: 'fugle', label: 'Fugle', status: 'permission_error', message: 'plan permission denied' }
+      { id: 'tpex', label: 'TPEx', status: 'permission_error', message: 'official endpoint permission denied' }
     ] }
   );
   assert.equal(report.application.ok, true);
