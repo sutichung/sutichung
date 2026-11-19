@@ -6,7 +6,8 @@ const { statusForHttp, safeError, diagnoseProviders } = require('../lib/provider
 test('provider diagnostics classify common upstream HTTP failures', () => {
   assert.equal(statusForHttp(200), 'connected');
   assert.equal(statusForHttp(401), 'auth_error');
-  assert.equal(statusForHttp(403), 'auth_error');
+  assert.equal(statusForHttp(403), 'permission_error');
+  assert.equal(statusForHttp(451), 'region_restricted');
   assert.equal(statusForHttp(429), 'rate_limited');
   assert.equal(statusForHttp(503), 'upstream_error');
 });
@@ -14,6 +15,7 @@ test('provider diagnostics classify common upstream HTTP failures', () => {
 test('provider diagnostics sanitize credentials and classify timeout messages', () => {
   assert.equal(safeError(new Error('request timeout')), '連線逾時（12 秒）');
   assert.equal(safeError(new Error('upstream_http_401')), 'API 金鑰驗證失敗（HTTP 401）');
+  assert.match(safeError(new Error('upstream_http_451')), /地區或法規限制/);
   assert.ok(!safeError(new Error('Bearer secret-token')).includes('secret-token'));
 });
 
@@ -39,7 +41,7 @@ test('provider diagnostics verify actual public crypto ticker responses and expo
   };
   try {
     const result = await diagnoseProviders({});
-    for (const id of ['binance', 'binance-futures', 'bybit', 'okx', 'coinbase', 'kraken']) {
+    for (const id of ['binance', 'binance-futures', 'bybit', 'okx', 'okx-swap', 'coinbase', 'kraken']) {
       const check = result.checks.find(x => x.id === id);
       assert.equal(check.status, 'connected', id + ' should validate a real quote-shaped response');
       assert.equal(check.dataCount, 1);
@@ -80,4 +82,10 @@ test('ECB provider falls back to the official daily XML feed when the primary AP
     assert.equal(ecb.sourceTime, '2026-11-19');
     assert.match(ecb.message, /XML 備援/);
   } finally { global.fetch = originalFetch; }
+});
+
+test('provider diagnostics classify regional restrictions and permission denials distinctly', () => {
+  assert.equal(statusForHttp(403), 'permission_error');
+  assert.equal(statusForHttp(451), 'region_restricted');
+  assert.match(safeError(new Error('upstream_http_451')), /不可用代理或偽裝地區繞過/);
 });
