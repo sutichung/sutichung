@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 const palette = { bg:'#0b1422', panel:'#111d30', border:'#2b405c', text:'#e7eef9', muted:'#91a1b8', green:'#34d399', yellow:'#fbbf24', red:'#fb7185', blue:'#60a5fa' };
 const crews = [
   { id:'network', name:'網路與伺服器維修組', icon:'🌐', test:/health|伺服器|網路|api/i, action:'檢查服務存活、API 回應與上游連線；若服務無回應，先確認 Render 部署與日誌。' },
-  { id:'data', name:'行情資料維修組', icon:'📡', test:/twse|finmind|fugle|行情|資料/i, action:'核對來源時間戳、資料筆數與延遲標記；來源故障時切換已配置的公開資料備援，不把舊資料冒充即時。' },
+  { id:'data', name:'行情資料維修組', icon:'📡', test:/twse|tpex|finmind|行情|資料/i, action:'核對來源時間戳、資料筆數與延遲標記；來源故障時切換已配置的公開資料備援，不把舊資料冒充即時。' },
   { id:'security', name:'安全防護維修組', icon:'🛡️', test:/auth|supabase|安全|登入/i, action:'檢查登入服務與防火牆狀態；不自動變更帳號、金鑰或權限。' },
   { id:'ai', name:'AI 與模型維修組', icon:'🧠', test:/gemini|groq|openrouter|cloudflare|ai|模型/i, action:'辨識金鑰缺漏、權限錯誤、額度限制與上游故障；不會自動更換或讀取金鑰。' },
   { id:'workers', name:'蟻群工作調度組', icon:'🐜', test:/colony|蟻群|worker|佇列/i, action:'檢查工作佇列、執行中工蜂、失敗與重試數；佇列阻塞時先保留證據再處理。' }
