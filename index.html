@@ -2,14 +2,21 @@
 <html lang="zh-TW">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#080d18" />
     <meta name="description" content="台股全市場掃描、法人籌碼、台指期、三方 AI 多空分析與風險劇本。" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="泰丞 AI" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="/icons/app-icon.svg" />
+    <link rel="apple-touch-icon" href="/icons/app-icon.svg" />
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="zh_TW" />
     <meta property="og:site_name" content="泰丞・台股 AI 智慧操盤中樞" />
     <meta property="og:title" content="泰丞・台股 AI 智慧操盤中樞" />
-    <meta property="og:description" content="全市場台股掃描・台指期夜盤・法人籌碼・Gemini／Grok／DeepSeek 三方 AI 分析。" />
+    <meta property="og:description" content="全市場台股掃描・台指期夜盤・法人籌碼・三方 AI 風險分析。" />
     <meta property="og:image" content="https://taiwan-stock-hunter-o3tt.onrender.com/social-preview-v2.svg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -22,5 +29,10 @@
   <body style="margin:0;background-color:#090d16">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      if ('serviceWorker' in navigator && location.protocol === 'https:') {
+        window.addEventListener('load', () => navigator.serviceWorker.register('/service-worker.js').catch(() => {}));
+      }
+    </script>
   </body>
 </html>
