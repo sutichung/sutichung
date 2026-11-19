@@ -78,6 +78,7 @@ function normalizeTrades(exchange, rows, thresholdUsd = 50000) {
     .slice(0, 100);
 }
 async function fetchMicrostructure({ exchange = 'Binance', symbol, marketType = 'perpetual', depth = 10, whaleThresholdUsd = 50000 }) {
+  if (!['Binance', 'Bybit', 'OKX', 'Kraken Futures'].includes(exchange)) throw new Error('unsupported_exchange');
   requireMarketDataLicense(exchange);
   const safeSymbol = String(symbol || '').toUpperCase();
   if (!/^[A-Z0-9-]{2,30}$/.test(safeSymbol)) throw new Error('invalid_symbol');
