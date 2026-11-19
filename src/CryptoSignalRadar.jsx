@@ -5,7 +5,7 @@ export default function CryptoSignalRadar({rows=[],techMap={},onSelect}){
  const [mode,setMode]=useState('quick'),[direction,setDirection]=useState('all');
  const items=useMemo(()=>rows.map(x=>{const t=techMap[x.id]||{},change=n(x.changePct),vol=n(x.quoteVolume),rsi=n(t.rsi),hist=n(t.macdHistogram),adx=n(t.adx),ema20=n(t.ema20),ema60=n(t.ema60),hasTech=[rsi,hist,adx,ema20,ema60].filter(v=>v!==null).length>=3;
   let bull=0,bear=0;if(change!==null){if(change>0)bull+=1;if(change<0)bear+=1;}if(vol!==null&&vol>0)bull+=1;if(rsi!==null){if(rsi>=52&&rsi<=72)bull+=1;if(rsi<45)bear+=1;if(rsi>78)bear+=1;}if(hist!==null){if(hist>0)bull+=1;if(hist<0)bear+=1;}if(ema20!==null&&ema60!==null){if(ema20>ema60)bull+=1;else bear+=1;}if(adx!==null&&adx>=20){if(bull>bear)bull+=1;else if(bear>bull)bear+=1;}
-  const score=Math.round(50+Math.max(-45,Math.min(45,(bull-bear)*9)));const ready=mode==='quick'?change!==null&&vol!==null&&vol>0:hasTech&&change!==null;
+  const score=Math.round(50+Math.max(-45,Math.min(45,(bull-bear)*9)));const ready=x.freshnessStatus==='fresh'&&x.signalEligible===true&&(mode==='quick'?change!==null&&vol!==null&&vol>0:hasTech&&change!==null);
   const side=bull>bear?'多方候選':bear>bull?'空方候選':'中立觀察';
   const risk=change!==null&&change>15?'急漲追價風險':rsi!==null&&rsi>78?'超買風險':change!==null&&change< -8?'急跌風險':vol===0?'成交量資料異常':'需確認流動性';
   return {...x,_sig:{score,side,risk,ready,bull,bear,rsi,hist,adx,change,vol,hasTech}};

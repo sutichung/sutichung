@@ -130,7 +130,7 @@ test('OKX derivatives use official funding, mark-price and base-currency open-in
  }finally{global.fetch=original;}
 });
 
-test('exchange quote freshness explicitly marks stale and missing source timestamps',()=>{
+test('only fresh source-timestamp-verified quotes are eligible for live signals',()=>{\n  const originalNow=Date.now; Date.now=()=>Date.parse('2026-11-19T00:00:00.000Z');\n  try {\n    const fresh=buildQuoteRow('OKX','spot','BTC-USDT','BTC','USDT',65000,1,1000,{sourceTimestamp:'2026-11-18T23:59:00.000Z'});\n    const stale=buildQuoteRow('Coinbase','spot','BTC-USD','BTC','USD',65000,1,1000,{sourceTimestamp:'2026-11-18T23:54:00.000Z'});\n    const unknown=buildQuoteRow('Kraken','spot','BTCUSD','BTC','USD',65000,1,1000);\n    assert.equal(fresh.signalEligible,true); assert.equal(stale.signalEligible,false); assert.equal(unknown.signalEligible,false);\n  } finally { Date.now=originalNow; }\n});\n\ntest('exchange quote freshness explicitly marks stale and missing source timestamps',()=>{
   const originalNow=Date.now;
   Date.now=()=>Date.parse('2026-11-19T00:00:00.000Z');
   try{
