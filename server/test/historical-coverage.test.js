@@ -18,4 +18,5 @@ test('provider configuration alone does not claim coverage is verified',()=>{
 test('history range validates order and date shape',()=>{
  assert.deepEqual(validateHistoryRange({from:'1990-01-01',to:'2026-11-19'}),{from:'1990-01-01',to:'2026-11-19'});
  assert.throws(()=>validateHistoryRange({from:'2027-01-01',to:'2026-01-01'}),/invalid_history_range/);
+ assert.throws(()=>validateHistoryRange({from:'2026-02-31',to:'2026-03-01'}),/invalid_history_range/);
 });
