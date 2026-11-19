@@ -5,12 +5,12 @@ const SUPPORTED_EXCHANGES=['Binance','Bybit','OKX','Kraken Futures'];
 const HISTORY_EXCHANGES=['Binance','Bybit','OKX','Coinbase','Kraken','Kraken Futures'];
 function okxLicensed(){return isMarketDataLicensed('OKX');}
 function candidates(primary,preferred,marketType='perpetual'){
-  const microstructureExchanges=['Binance','Bybit','OKX',...(marketType==='perpetual'?['Kraken Futures']:[])].filter(isMarketDataLicensed);
+  const microstructureExchanges=['Binance','Bybit','OKX',...(marketType==='perpetual'?['Kraken Futures']:[])].filter(provider=>isMarketDataLicensed(provider));
   return [...new Set([preferred,primary,...microstructureExchanges].filter(x=>microstructureExchanges.includes(x)))];
 }
 async function loadRiskHistory({getHistory,symbol,marketType,interval='15m',exchange='Binance',nativeSymbol=symbol,limit=240}){
   const errors=[];
-  const eligible=(marketType==='perpetual'?SUPPORTED_EXCHANGES:HISTORY_EXCHANGES).filter(isMarketDataLicensed);
+  const eligible=(marketType==='perpetual'?SUPPORTED_EXCHANGES:HISTORY_EXCHANGES).filter(provider=>isMarketDataLicensed(provider));
   const order=[...new Set([exchange,...eligible])].filter(x=>eligible.includes(x));
   for(const candidate of order){
     try{
