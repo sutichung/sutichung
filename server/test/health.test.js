@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildRuntimeHealth } = require('../lib/health');
+const { buildRuntimeHealth, buildDependencyReadiness } = require('../lib/health');
 
 test('runtime health reports process liveness without leaking environment secrets', () => {
   const report = buildRuntimeHealth({ mode: 'production', region: 'singapore', service: 'api-apac', instance: 'instance-a', expectedInstances: '2' });
@@ -30,43 +30,49 @@ test('runtime health rejects invalid expected instance counts', () => {
   assert.equal(report.deployment.expectedInstances, null);
 });
 
-
 test('dependency readiness distinguishes server readiness from incomplete integrations', () => {
-  const report = require('../lib/health').buildDependencyReadiness({});
+  const report = buildDependencyReadiness({});
   assert.equal(report.ready, true, 'the HTTP process can serve requests even when optional integrations are absent');
   assert.equal(report.status, 'degraded');
   assert.equal(report.checks.httpServer.ready, true);
   assert.equal(report.checks.supabaseAuth.configured, false);
   assert.equal(report.checks.adminMemberRecovery.configured, false);
   assert.equal(report.checks.cryptoRedistributionLicenses.confirmed, 0);
+  assert.equal(report.connectivityVerified, false);
+  assert.equal(report.coverageVerified, false);
   assert.ok(report.warnings.some(x => /歷史資料來源或授權/.test(x)));
 });
 
-test('dependency readiness only marks historical providers ready with both URL and explicit license confirmation', () => {
+test('historical provider URL and license gate never masquerades as verified connectivity or coverage', () => {
   const env = {
     TWSE_HISTORICAL_PROVIDER_URL: 'https://provider.example/api',
     TWSE_HISTORICAL_LICENSE_CONFIRMED: 'true',
     TPEX_HISTORICAL_PROVIDER_URL: 'https://provider.example/tpex',
     TPEX_HISTORICAL_LICENSE_CONFIRMED: 'false'
   };
-  const report = require('../lib/health').buildDependencyReadiness(env);
+  const report = buildDependencyReadiness(env);
   const twse = report.checks.historicalProviders.find(x => x.id === 'twse');
   const tpex = report.checks.historicalProviders.find(x => x.id === 'tpex');
-  assert.equal(twse.ready, true);
-  assert.equal(tpex.ready, false);
+  assert.equal(twse.configurationComplete, true);
+  assert.equal(twse.status, 'verification_required');
+  assert.equal(twse.connectivityVerified, false);
+  assert.equal(twse.coverageVerified, false);
+  assert.equal(tpex.configurationComplete, false);
+  assert.equal(tpex.status, 'not_configured');
   assert.equal(report.status, 'degraded');
 });
 
-test('dependency readiness does not treat configured keys as proof of live provider connectivity', () => {
-  const report = require('../lib/health').buildDependencyReadiness({
+test('configured keys are not proof of live provider connectivity', () => {
+  const report = buildDependencyReadiness({
     FUGLE_API_KEY: 'present-but-not-probed',
     SUPABASE_URL: 'https://example.supabase.co',
     SUPABASE_ANON_KEY: 'present',
     SUPABASE_SERVICE_ROLE_KEY: 'present',
     SUPABASE_ADMIN_EMAIL: 'admin@example.com'
   });
-  assert.equal(report.checks.realtimeMarket.status, 'configured');
-  assert.equal(report.checks.supabaseAuth.status, 'configured');
-  assert.equal(report.checks.adminMemberRecovery.status, 'configured');
+  assert.equal(report.checks.realtimeMarket.status, 'configured_unverified');
+  assert.equal(report.checks.supabaseAuth.status, 'configured_unverified');
+  assert.equal(report.checks.adminMemberRecovery.status, 'configured_unverified');
+  assert.equal(report.connectivityVerified, false);
   assert.ok(report.warnings.some(x => /授權/.test(x)));
 });
