@@ -54,7 +54,16 @@ jobs:
             fi
             if curl --fail --silent --show-error --max-time 10 "$MARKET_APP_URL/api/health" -o /tmp/health.json; then
               ACTUAL_COMMIT=$(node -e "const h=require('/tmp/health.json');process.stdout.write(h.commit||'')")
+              MATCHED_COMMIT=false
               if [ "$ACTUAL_COMMIT" = "$EXPECTED_COMMIT" ] || [ "$ACTUAL_COMMIT" = "$DEPLOY_COMMIT" ]; then
+                MATCHED_COMMIT=true
+              elif git merge-base --is-ancestor "$ACTUAL_COMMIT" "$EXPECTED_COMMIT"; then
+                BETWEEN_FILES=$(git diff --name-only "$ACTUAL_COMMIT" "$EXPECTED_COMMIT")
+                if [ -z "$BETWEEN_FILES" ] || ! printf '%s\n' "$BETWEEN_FILES" | grep -Evq '^(\.github/workflows/|server/test/|docs/)'; then
+                  MATCHED_COMMIT=true
+                fi
+              fi
+              if [ "$MATCHED_COMMIT" = true ]; then
                 node -e "const h=require('/tmp/health.json');if(!h.ok||h.branch!=='main')process.exit(1)"
                 echo "deploy_commit=$ACTUAL_COMMIT" >> "$GITHUB_OUTPUT"
                 echo "skip=false" >> "$GITHUB_OUTPUT"
