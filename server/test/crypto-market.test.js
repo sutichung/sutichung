@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {buildQuoteRow,mapLimit,normalizeKlines,getJsonFallback,getDerivatives}=require('../lib/crypto-market');
+const {buildQuoteRow,mapLimit,normalizeKlines,getJsonFallback,getDerivatives,binanceMarkets,bybitCategory,timestampIso}=require('../lib/crypto-market');
 
 test('crypto quote rows reject missing, zero and invalid prices',()=>{
   assert.equal(buildQuoteRow('Binance','spot','BTCUSDT','BTC','USDT',null,0,0),null);
@@ -128,4 +128,66 @@ test('OKX derivatives use official funding, mark-price and base-currency open-in
   assert.equal(result.sourceTime,'2026-11-18T00:00:00.000Z');
   assert.equal(result.liquidationMap.levels.length,16);
  }finally{global.fetch=original;}
+});
+
+test('exchange quote freshness explicitly marks stale and missing source timestamps',()=>{
+  const originalNow=Date.now;
+  Date.now=()=>Date.parse('2026-11-19T00:00:00.000Z');
+  try{
+    const fresh=buildQuoteRow('OKX','spot','BTC-USDT','BTC','USDT',65000,1,1000,{sourceTimestamp:'2026-11-19T00:04:00.000Z'});
+    const stale=buildQuoteRow('Coinbase','spot','BTC-USD','BTC','USD',65000,1,1000,{sourceTimestamp:'2026-11-18T23:54:00.000Z'});
+    const unknown=buildQuoteRow('Kraken','spot','BTCUSD','BTC','USD',65000,1,1000);
+    assert.equal(fresh.freshnessStatus,'fresh');
+    assert.equal(fresh.delayed,false);
+    assert.equal(stale.freshnessStatus,'stale');
+    assert.equal(stale.delayed,true);
+    assert.equal(unknown.freshnessStatus,'unverified');
+    assert.equal(unknown.delayed,true);
+    assert.equal(unknown.sourceAgeMs,null);
+  }finally{Date.now=originalNow;}
+});
+
+test('exchange timestamp normalization rejects missing and invalid source times',()=>{
+  assert.equal(timestampIso(null),null);
+  assert.equal(timestampIso(''),null);
+  assert.equal(timestampIso('not-a-time'),null);
+  assert.equal(timestampIso(0),null);
+  const stamp=Date.parse('2026-11-19T00:00:00.000Z');
+  assert.equal(timestampIso(stamp),'2026-11-19T00:00:00.000Z');
+});
+
+test('Binance spot and perpetual tickers preserve exchange closeTime timestamps',async()=>{
+  const original=global.fetch,closeTime=Date.now()-1000;
+  const ok=data=>({ok:true,status:200,json:async()=>data});
+  global.fetch=async url=>{
+    const u=String(url);
+    if(u.includes('data-api.binance.vision/api/v3/exchangeInfo'))return ok({symbols:[{symbol:'BTCUSDT',baseAsset:'BTC',quoteAsset:'USDT',status:'TRADING',isSpotTradingAllowed:true}]});
+    if(u.includes('data-api.binance.vision/api/v3/ticker/24hr'))return ok([{symbol:'BTCUSDT',lastPrice:'65000',priceChangePercent:'1',quoteVolume:'1000',closeTime}]);
+    if(u.includes('fapi.binance.com/fapi/v1/exchangeInfo'))return ok({symbols:[{symbol:'BTCUSDT',baseAsset:'BTC',quoteAsset:'USDT',status:'TRADING',contractType:'PERPETUAL',quoteAsset:'USDT'}]});
+    if(u.includes('fapi.binance.com/fapi/v1/ticker/24hr'))return ok([{symbol:'BTCUSDT',lastPrice:'65000',priceChangePercent:'1',quoteVolume:'1000',closeTime}]);
+    return {ok:false,status:404,json:async()=>({})};
+  };
+  try{
+    const rows=await binanceMarkets();
+    const expected=new Date(closeTime).toISOString();
+    assert.equal(rows.find(x=>x.marketType==='spot').sourceTimestamp,expected);
+    assert.equal(rows.find(x=>x.marketType==='perpetual').sourceTimestamp,expected);
+    assert.equal(rows.every(x=>x.freshnessStatus==='fresh'),true);
+  }finally{global.fetch=original;}
+});
+
+test('Bybit ticker response timestamp is preserved as source time',async()=>{
+  const original=global.fetch,sourceTime=Date.now()-1000;
+  const ok=data=>({ok:true,status:200,json:async()=>data});
+  global.fetch=async url=>{
+    const u=String(url);
+    if(u.includes('/v5/market/instruments-info?'))return ok({retCode:0,result:{list:[{symbol:'BTCUSDT',baseCoin:'BTC',quoteCoin:'USDT',status:'Trading'}],nextPageCursor:''}});
+    if(u.includes('/v5/market/tickers?category=spot'))return ok({retCode:0,time:sourceTime,result:{list:[{symbol:'BTCUSDT',lastPrice:'65000',price24hPcnt:'0.01',turnover24h:'1000',highPrice24h:'66000',lowPrice24h:'64000',volume24h:'10'}]}});
+    return {ok:false,status:404,json:async()=>({})};
+  };
+  try{
+    const rows=await bybitCategory('spot');
+    assert.equal(rows[0].sourceTimestamp,new Date(sourceTime).toISOString());
+    assert.equal(rows[0].freshnessStatus,'fresh');
+  }finally{global.fetch=original;}
 });
