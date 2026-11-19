@@ -10,7 +10,7 @@ test('promotes robust walk-forward candidate only to paper trading',()=>{
  assert.equal(r.status,'paper_candidate');assert.equal(r.eligible,true);assert.equal(r.livePromotion,false);
 });
 test('rejects candidates with weak out-of-sample performance',()=>{
- const f=folds();f[1].test=good(-2);
+ const f=folds();f[0].test=good(-2);f[1].test=good(-2);
  const r=evaluateCandidate({candidateId:'weak',folds:f});
  assert.equal(r.status,'rejected');assert.ok(r.failures.includes('insufficient_fold_consistency'));
 });
