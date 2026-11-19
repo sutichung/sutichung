@@ -3,8 +3,9 @@ FROM node:20-alpine AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm install --no-audit --no-fund
-RUN npm audit --json > /app/dependency-audit.json || true
 COPY . .
+# Refresh advisory data on every source commit instead of reusing a cached audit layer.
+RUN npm audit --json > /app/dependency-audit.json || true
 RUN node --check server/index.js && npm run test:server
 RUN npm run build
 
