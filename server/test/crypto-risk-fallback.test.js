@@ -77,7 +77,7 @@ test('perpetual risk history includes Kraken Futures as a final public-data fall
 
 test('OKX is excluded from third-party fallback unless written market-data license is confirmed',()=>{
  const previous=process.env.OKX_MARKET_DATA_LICENSE_CONFIRMED;delete process.env.OKX_MARKET_DATA_LICENSE_CONFIRMED;
- try{assert.deepEqual(candidates('Binance','Binance'),['Binance','Bybit']);}finally{if(previous!==undefined)process.env.OKX_MARKET_DATA_LICENSE_CONFIRMED=previous;}
+ try{assert.deepEqual(candidates('Binance','Binance'),['Binance','Bybit','Kraken Futures']);}finally{if(previous!==undefined)process.env.OKX_MARKET_DATA_LICENSE_CONFIRMED=previous;}
 });
 
 test('perpetual microstructure falls back to Kraken Futures but spot never does',async()=>{
