@@ -17,7 +17,8 @@ const { loadRiskHistory, loadFreshMicrostructure } = require('./lib/crypto-risk-
 const { runStrategyLab } = require('./lib/strategy-lab');
 const globalFinance = require('./lib/global-finance');
 const globalIntelligence = require('./lib/intelligence');
-const { diagnoseProviders, providerErrorMessage } = require('./lib/provider-diagnostics');
+const { diagnoseProviders } = require('./lib/provider-diagnostics');
+const { loadOfficialDailyQuotes, diagnoseOfficialDailyQuotes } = require('./lib/official-tw-market');
 const { epochMilliseconds, isStaleTimestamp } = require('./lib/market-timestamps');
 const { createDependencyVulnerabilityScanner } = require('./lib/dependency-vulnerabilities');
 const { verifyGitHubActionsToken } = require('./lib/github-oidc');
@@ -29,8 +30,6 @@ const dependencyVulnerabilityScanner = createDependencyVulnerabilityScanner({ lo
 const PORT = Number(process.env.PORT || 8787);
 const FINMIND_BASE = process.env.FINMIND_BASE || 'https://api.finmindtrade.com/api/v4/data';
 const FINMIND_TOKEN = process.env.FINMIND_TOKEN || '';
-const FUGLE_API_KEY = process.env.FUGLE_API_KEY || '';
-const FUGLE_BASE = process.env.FUGLE_BASE_URL || 'https://api.fugle.tw/marketdata/v1.0/stock';
 const CACHE = new Map();
 const PENDING = new Map();
 const RATE = new Map();
@@ -44,40 +43,6 @@ async function fetchJson(url, timeoutMs=8000, extraHeaders={}) {
   const controller=new AbortController(); const timer=setTimeout(()=>controller.abort(),timeoutMs);
   try { const r=await fetch(url,{signal:controller.signal,headers:{accept:'application/json',...extraHeaders}}); if(!r.ok) throw new Error('upstream_http_'+r.status); return await r.json(); }
   finally { clearTimeout(timer); }
-}
-async function twseMisSnapshot(symbolLimit=null){
-  const listed=await safeLoad('universe',TTL.universe,twseListedUniverse);
-  const allSymbols=(listed.data||[]).filter(x=>(x.exchange||'TWSE')==='TWSE').map(x=>x.symbol).filter(x=>/^[0-9]{4,6}$/.test(x));
-  const symbols=Number.isInteger(symbolLimit)&&symbolLimit>0?allSymbols.slice(0,symbolLimit):allSymbols;
-  if(!symbols.length)throw new Error('無上市股票清單，無法連接證交所行情');
-  const headers={'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36','Referer':'https://mis.twse.com.tw/stock/index.jsp','Origin':'https://mis.twse.com.tw','Accept':'application/json, text/plain, */*'};
-  const warmUrl='https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_2330.tw&json=1&delay=0&_='+Date.now();
-  const warm=await fetch(warmUrl,{headers,signal:AbortSignal.timeout(12000)});
-  if(!warm.ok)throw new Error('證交所 MIS 初始化連線失敗 HTTP '+warm.status);
-  const cookies=(warm.headers.getSetCookie?.()||[]).map(x=>x.split(';')[0]).filter(Boolean).join('; ');
-  const warmBody=await warm.json();
-  if(warmBody.rtmessage && warmBody.rtmessage!=='OK')throw new Error('證交所 MIS 初始化回應：'+warmBody.rtmessage);
-  const chunks=[];for(let i=0;i<symbols.length;i+=25)chunks.push(symbols.slice(i,i+25));
-  const payloads=await mapLimit(chunks,4,async chunk=>{
-    const params=new URLSearchParams({ex_ch:chunk.map(x=>'tse_'+x+'.tw').join('|'),json:'1',delay:'0',_:String(Date.now())});
-    const h={...headers};if(cookies)h.Cookie=cookies;
-    const payload=await fetchJson('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?'+params.toString(),10000,h);
-    if(payload.rtmessage && payload.rtmessage!=='OK')throw new Error('證交所 MIS 回應：'+payload.rtmessage);
-    return payload;
-  });
-  const data={};
-  for(const payload of payloads)for(const q of (payload.msgArray||[])){
-    const symbol=String(q.c||'');if(!symbol)continue;
-    const lastTradePrice=Number(q.z),referencePrice=Number(q.pz),preClose=Number(q.y),volume=Number(q.v??q.tv);
-    const hasLastTrade=Number.isFinite(lastTradePrice)&&lastTradePrice>0;
-    const displayPrice=hasLastTrade?lastTradePrice:(Number.isFinite(referencePrice)&&referencePrice>0?referencePrice:null);
-    const quoteTime=q.tlong?new Date(Number(q.tlong)).toISOString():(q.t&&q.d?new Date(String(q.d).replace(/\//g,'-')+'T'+q.t+'+08:00').toISOString():null);
-    const delayed=!hasLastTrade||!quoteTime||!Number.isFinite(Date.parse(quoteTime))||Date.now()-Date.parse(quoteTime)>5*60*1000;
-    data[symbol]={symbol,name:q.n||symbol,price:displayPrice,changePct:hasLastTrade&&Number.isFinite(preClose)&&preClose>0?((lastTradePrice/preClose)-1)*100:null,volume:Number.isFinite(volume)?volume:null,timestamp:quoteTime,market:'TSE',source:'TWSE MIS',delayed,quoteType:!hasLastTrade?'previous-close':delayed?'stale-snapshot':'realtime'};
-  }
-  if(!Object.keys(data).length)throw new Error('證交所 MIS 已連線但未回傳股票報價；回應 '+(payloads[0]?.rtmessage||'無有效 msgArray'));
-  const delayedCount=Object.values(data).filter(x=>x.delayed).length;
-  return {data,source:'證交所 TWSE MIS 官方行情（逐檔依來源時間戳判定新鮮度）',timestamp:now(),delayed:delayedCount===Object.keys(data).length,mixedFreshness:delayedCount>0&&delayedCount<Object.keys(data).length,delayedCount,scannedCount:Object.keys(data).length,requestedCount:symbols.length,coveragePct:symbols.length?Math.round(Object.keys(data).length/symbols.length*100):0,listedCount:allSymbols.length};
 }
 async function finmind(dataset, extra={}, timeoutMs=8000) {
   if(!FINMIND_TOKEN) throw new Error('未設定 FINMIND_TOKEN');
@@ -588,7 +553,7 @@ async function route(req,res){
   }
   if(u.pathname==='/api/health/live')return json(res,200,buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}));
   if(u.pathname==='/api/health/ready'){const readiness=buildDependencyReadiness();return json(res,200,{...buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}),...readiness});}
-  if(u.pathname==='/api/health')return json(res,200,{...buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}),auth:{configured:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY},provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),providers:{finmind:!!FINMIND_TOKEN,fugle:!!FUGLE_API_KEY,youtubeApiKeyConfigured:!!process.env.YOUTUBE_API_KEY,youtubeLiveResolver:!!process.env.YOUTUBE_API_KEY,youtubeChannelEmbedFallback:true,openrouter:!!process.env.OPENROUTER_API_KEY,gemini:!!process.env.GEMINI_API_KEY,groq:!!process.env.GROQ_API_KEY,xai:!!process.env.XAI_API_KEY,deepseek:!!process.env.DEEPSEEK_API_KEY,cloudflare:!!(process.env.CLOUDFLARE_API_TOKEN&&process.env.CLOUDFLARE_ACCOUNT_ID),realtime:null,realtimeProviderConfigured:!!(FUGLE_API_KEY||process.env.MARKET_REALTIME_URL),twseMisFallback:true,tpexRealtimeConfigured:!!FUGLE_API_KEY,tpexHistoricalFallback:true,scan:true,flows:true,futures:true,sentiment:true,news:true,openDataArchive:true}});
+  if(u.pathname==='/api/health')return json(res,200,{...buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}),auth:{configured:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY},provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),providers:{finmind:!!FINMIND_TOKEN,youtubeApiKeyConfigured:!!process.env.YOUTUBE_API_KEY,youtubeLiveResolver:!!process.env.YOUTUBE_API_KEY,youtubeChannelEmbedFallback:true,openrouter:!!process.env.OPENROUTER_API_KEY,gemini:!!process.env.GEMINI_API_KEY,groq:!!process.env.GROQ_API_KEY,xai:!!process.env.XAI_API_KEY,deepseek:!!process.env.DEEPSEEK_API_KEY,cloudflare:!!(process.env.CLOUDFLARE_API_TOKEN&&process.env.CLOUDFLARE_ACCOUNT_ID),realtime:false,realtimeProviderConfigured:false,officialDailyMarketData:true,twseOfficialOpenApi:true,tpexOfficialOpenApi:true,licensedRealtimeFeedConfigured:false,scan:true,flows:true,futures:true,sentiment:true,news:true,openDataArchive:true}});
   if(SUPABASE_CONFIGURED&&u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/api/auth/')){
     const automationPaths=new Set(['/api/market/snapshot','/api/market/institutional-flows','/api/market/futures','/api/market/sentiment','/api/market/scan','/api/market/news','/api/market/calendar','/api/diagnostics/providers','/api/diagnostics/vulnerabilities','/api/diagnostics/market','/api/crypto/market','/api/crypto/risk/BTCUSDT']);
     const smokeReadOnlyPaths=new Set(['/api/diagnostics/providers','/api/diagnostics/vulnerabilities','/api/diagnostics/market','/api/crypto/market','/api/crypto/risk/BTCUSDT']);
@@ -825,85 +790,15 @@ async function route(req,res){
     return json(res,200,result);
   }
   if(u.pathname==='/api/diagnostics/market'){
-    let primaryProviderWarning=null;
-    try{
-      if(FUGLE_API_KEY){
-        try{
-          const endpoint=new URL(FUGLE_BASE+'/snapshot/quotes/TSE');
-          const payload=await fetchJson(endpoint.toString(),10000,{'X-API-KEY':FUGLE_API_KEY});
-          const rows=Array.isArray(payload.data)?payload.data:[];
-          const validRows=rows.filter(x=>x&&x.symbol&&!x.isTrial&&Number.isFinite(Number(x.lastPrice))&&Number(x.lastPrice)>0);
-          if(!validRows.length)throw new Error('Fugle TSE 快照沒有有效報價');
-          const sample=validRows.slice(0,5).map(x=>({symbol:String(x.symbol),name:x.name||String(x.symbol),price:Number(x.lastPrice),timestamp:epochMilliseconds(x.lastUpdated)?new Date(epochMilliseconds(x.lastUpdated)).toISOString():null,delayed:isStaleTimestamp(epochMilliseconds(x.lastUpdated)),quoteType:'fugle-snapshot'}));
-          return json(res,200,{ok:true,connection:'connected',source:'Fugle TSE 官方行情快照',provider:'fugle',fallbackUsed:false,listedCount:null,requestedCount:5,scannedCount:rows.length,quoteCount:validRows.length,coveragePct:null,delayedCount:sample.filter(x=>x.delayed).length,serverTime:now(),sample});
-        }catch(error){primaryProviderWarning=providerErrorMessage('fugle',error);}
-      }
-      const live=await twseMisSnapshot(5);
-      const allRows=Object.values(live.data||{});
-      const validRows=allRows.filter(x=>Number.isFinite(Number(x.price))&&Number(x.price)>0);
-      const sample=validRows.slice(0,5).map(x=>({symbol:x.symbol,name:x.name,price:x.price,timestamp:x.timestamp,delayed:x.delayed,quoteType:x.quoteType}));
-      return json(res,200,{ok:validRows.length>0,connection:validRows.length?'connected':'no_valid_quotes',source:live.source,provider:'twse-mis',fallbackUsed:!!primaryProviderWarning,providerWarning:primaryProviderWarning,listedCount:live.listedCount,requestedCount:live.requestedCount,scannedCount:live.scannedCount,quoteCount:validRows.length,coveragePct:live.requestedCount?Math.round(validRows.length/live.requestedCount*100):0,delayedCount:validRows.filter(x=>x.delayed).length,serverTime:now(),error:validRows.length?null:'TWSE MIS 有回應但抽樣商品沒有有效價格',sample});
-    }catch(e){
-      console.error('[market-diagnostics] '+(e.stack||e.message));
-      return json(res,200,{ok:false,connection:'disconnected',providerWarning:primaryProviderWarning,error:e.message,serverTime:now()});
+    try {
+      const result=await diagnoseOfficialDailyQuotes();
+      return json(res,result.ok?200:503,result);
+    } catch(error) {
+      return json(res,503,{ok:false,connection:'disconnected',provider:'twse+tpex-openapi',dataMode:'END_OF_DAY',realtime:false,error:String(error.message||error).slice(0,240),serverTime:now()});
     }
   }
   if(u.pathname==='/api/market/snapshot'){
-    const result=await safeLoad('snapshot',TTL.snapshot,async()=>{
-      let primaryProviderError=null;
-      if(FUGLE_API_KEY){
-        try{
-          const markets=['TSE','OTC','ESB','TIB'];
-          const settled=await Promise.allSettled(markets.map(async market=>{const u=new URL(FUGLE_BASE+'/snapshot/quotes/'+market);const payload=await fetchJson(u.toString(),10000,{'X-API-KEY':FUGLE_API_KEY});return {...payload,market:payload.market||market};}));
-          const payloads=settled.filter(x=>x.status==='fulfilled').map(x=>x.value);
-          if(!payloads.length)throw new Error('Fugle 上市、上櫃、興櫃與創新板快照均無法取得：'+settled.map(x=>x.reason?.message||'unknown').join('；'));
-          const data={};for(const payload of payloads){for(const row of (payload.data||[])){if(!row.symbol)continue;const quoteTimeMs=epochMilliseconds(row.lastUpdated);const quoteTime=quoteTimeMs?new Date(quoteTimeMs).toISOString():null;
-          const isIndex=String(row.type||'').toUpperCase()==='INDEX',lastPrice=Number(row.lastPrice),closePrice=Number(row.closePrice);
-          const price=isIndex?(Number.isFinite(closePrice)&&closePrice>0?closePrice:null):(!row.isTrial&&Number.isFinite(lastPrice)&&lastPrice>0?lastPrice:null);
-          const hasPrice=price!==null,delayed=!hasPrice||isStaleTimestamp(quoteTimeMs);
-          const rawChange=row.changePercent,rawVolume=row.tradeVolume,change=rawChange!==null&&rawChange!==undefined&&rawChange!==''?Number(rawChange):NaN,volume=rawVolume!==null&&rawVolume!==undefined&&rawVolume!==''?Number(rawVolume):NaN;
-          data[String(row.symbol)]={symbol:String(row.symbol),name:row.name||String(row.symbol),type:row.type||'EQUITY',price,changePct:Number.isFinite(change)?change:null,volume:Number.isFinite(volume)&&volume>=0?volume:null,timestamp:quoteTime,sourceTimestamp:quoteTime,market:payload.market,source:'Fugle snapshot quotes',delayed,quoteType:isIndex?'index-snapshot':row.isTrial?'trial':!hasPrice?'no-trade':delayed?'stale-snapshot':'realtime'};}}
-          const quoteRows=Object.values(data);
-          if(!quoteRows.length)throw new Error('Fugle 快照端點有回應，但沒有任何有效商品報價');
-          const delayedCount=quoteRows.filter(x=>x.delayed).length,freshCount=quoteRows.length-delayedCount;
-          const returnedMarkets=payloads.map(x=>x.market),unavailableMarkets=markets.filter(m=>!returnedMarkets.includes(m));
-          const indexCount=quoteRows.filter(x=>x.type==='INDEX').length;
-          const marketErrors=markets.flatMap((market,i)=>settled[i].status==='rejected'?[{market,error:settled[i].reason?.message||'API error'}]:[]);
-          return {data,source:'Fugle TSE／OTC／ESB／TIB 官方行情快照（股票與指數分型；逐檔依來源時間戳分級）',timestamp:now(),delayed:freshCount===0,mixedFreshness:delayedCount>0&&freshCount>0,delayedCount,freshCount,quoteCount:quoteRows.length,indexCount,markets:returnedMarkets,unavailableMarkets,marketErrors,coverage:{requestedMarkets:markets.length,returnedMarkets:returnedMarkets.length,partial:unavailableMarkets.length>0}};
-        }catch(error){
-          primaryProviderError='Fugle：'+String(error.message||error).slice(0,220);
-          console.error('[market-snapshot] '+primaryProviderError+'；切換官方公開行情備援');
-        }
-      }
-      if(process.env.MARKET_REALTIME_URL){
-        try{
-          const x=await external('MARKET_REALTIME_URL','');
-          const data=x.data&&typeof x.data==='object'?x.data:{};
-          if(Object.keys(data).length)return {data,source:x.source||'Configured realtime provider',timestamp:x.timestamp||now(),delayed:!!x.delayed,primaryProviderWarning:primaryProviderError};
-          throw new Error('Configured realtime provider returned no quote rows');
-        }catch(error){
-          const message='Configured realtime provider：'+String(error.message||error).slice(0,180);
-          primaryProviderError=[primaryProviderError,message].filter(Boolean).join('；');
-          console.error('[market-snapshot] '+message+'；切換 TWSE MIS 官方公開行情備援');
-        }
-      }
-      const listed=await twseMisSnapshot();
-      let otcData={},otcAsOf=null,otcError=null;
-      try{
-        const otc=await recentOpenArchive('price_tpex',1);
-        const doc=otc.at(-1);
-        if(doc){
-          otcAsOf=doc.trade_date;
-          const fields=doc.fields||[],closeIndex=fields.indexOf('close'),volumeIndex=fields.indexOf('volume_shares');
-          for(const [symbol,values] of Object.entries(doc.rows||{})){
-            const price=Number(values?.[closeIndex]);
-            if(!validateSymbol(symbol)||!Number.isFinite(price)||price<=0)continue;
-            otcData[symbol]={symbol,name:symbol,price,changePct:null,volume:Number(values?.[volumeIndex])||null,timestamp:doc.fetched_at||null,market:'OTC',source:'TPEx 官方日收盤歸檔',delayed:true,quoteType:'daily-close',asOf:doc.trade_date};
-          }
-        }
-      }catch(error){otcError=error.message;}
-      return {...listed,data:{...listed.data,...otcData},source:'TWSE MIS 官方即時行情 + TPEx 官方日收盤歸檔（上櫃報價明確標示為歷史日收盤）'+(primaryProviderError?'（主要供應商失敗，已自動切換官方公開備援）':''),providerWarning:primaryProviderError, timestamp:now(),mixedFreshness:Object.keys(otcData).length>0,markets:{TWSE:Object.keys(listed.data||{}).length,TPEx:Object.keys(otcData).length},otcAsOf,otcError};
-    },e=>({data:{},source:'unavailable',timestamp:now(),error:e.message}));
+    const result=await safeLoad('snapshot',TTL.snapshot,loadOfficialDailyQuotes,e=>({data:{},source:'unavailable',timestamp:now(),dataMode:'END_OF_DAY',delayed:true,error:e.message,quoteCount:0}));
     return json(res,200,result);
   }
   if(u.pathname==='/api/diagnostics/analysis'){
@@ -1114,45 +1009,8 @@ async function route(req,res){
     return json(res,200,result);
   }
   if(u.pathname==='/api/market/futures'){
-    const result=await safeLoad('futures',FUGLE_API_KEY?5000:TTL.futures,async()=>{
+    const result=await safeLoad('futures',TTL.futures,async()=>{
       let nightSession=null,nightSessionError=null,daySession=null;
-      if(FUGLE_API_KEY){
-        const base=(process.env.FUGLE_FUTOPT_BASE_URL||'https://api.fugle.tw/marketdata/v1.0/futopt').replace(/\/$/,'');
-        const headers={'X-API-KEY':FUGLE_API_KEY};
-        const toIso=value=>{const n=Number(value);if(Number.isFinite(n)&&n>0)return new Date(n>1e14?n/1000:n>1e11?n:n*1000).toISOString();const parsed=Date.parse(String(value||''));return Number.isFinite(parsed)?new Date(parsed).toISOString():null;};
-        const normalize=(q,session)=>{
-          if(!q||typeof q!=='object')return null;
-          const timestamp=toIso(q.lastUpdated||q.lastTrade?.time||q.closeTime);
-          const quoteAge=timestamp?Date.now()-Date.parse(timestamp):Infinity;
-          const staleQuote=!Number.isFinite(quoteAge)||quoteAge < -30000||quoteAge>5*60*1000;
-          const rawLast=Number(q.lastPrice);
-          const hasLastTrade=Number.isFinite(rawLast)&&rawLast>0;
-          const last=q.isTrial||staleQuote||!hasLastTrade?null:rawLast;
-          const openInterestRaw=q.openInterest??q.openInterestQty??q.total?.openInterest;
-          const openInterest= openInterestRaw==null||openInterestRaw===''?null:Number(openInterestRaw);
-          const openInterestChangeRaw=q.openInterestChange??q.openInterestChangeQty;
-          const openInterestChange=openInterestChangeRaw==null||openInterestChangeRaw===''?null:Number(openInterestChangeRaw);
-          return {symbol:q.symbol||'TXF1!',name:q.name||'臺股期貨近月',last,change:Number.isFinite(Number(q.change))?Number(q.change):null,changePct:Number.isFinite(Number(q.changePercent))?Number(q.changePercent):null,previousClose:Number(q.previousClose)>0?Number(q.previousClose):null,open:Number(q.openPrice)>0?Number(q.openPrice):null,high:Number(q.highPrice)>0?Number(q.highPrice):null,low:Number(q.lowPrice)>0?Number(q.lowPrice):null,volume:Number(q.total?.tradeVolume??0),openInterest:Number.isFinite(openInterest)?openInterest:null,openInterestChange:Number.isFinite(openInterestChange)?openInterestChange:null,timestamp,date:q.date||null,isTrial:!!q.isTrial,stale:staleQuote,quoteType:staleQuote?'stale':q.isTrial?'trial':!hasLastTrade?'no-trade':'realtime',session};
-        };
-        try{
-          const q=await fetchJson(base+'/intraday/quote/TXF1!?session=afterhours',8000,headers);
-          nightSession=normalize(q,'afterhours');
-          if(!nightSession||nightSession.last==null)nightSessionError=nightSession?.stale?'富果回傳的夜盤最後成交時間已超過 5 分鐘或缺少時間戳；不顯示為即時成交價。':'富果已回應，但目前沒有可用的正式夜盤成交價（可能尚未開盤或只有試撮）';
-        }catch(e){
-          const message=String(e.message||e);
-          if(message.includes('upstream_http_403'))nightSessionError='富果拒絕期權即時行情（HTTP 403）：目前 API 方案未開通期權即時行情權限。請在 Fugle 會員中心升級至支援期權行情的「開發者」或「進階用戶」方案，並確認期權即時行情已啟用；一般股票 API Key 不代表具備期權權限。';
-          else if(message.includes('upstream_http_401'))nightSessionError='富果期權 API 金鑰驗證失敗（HTTP 401）：請在 Fugle 行情 API 金鑰頁重新建立 Key，並更新 Render 的 FUGLE_API_KEY。';
-          else if(message.includes('upstream_http_429'))nightSessionError='富果期權 API 呼叫已達方案限制（HTTP 429）：請稍後重試或確認方案呼叫額度。';
-          else nightSessionError='富果夜盤報價連線失敗：'+message;
-        }
-        try{
-          const q=await fetchJson(base+'/intraday/quote/TXF1!',8000,headers);
-          daySession=normalize(q,'regular');
-        }catch(e){if(!nightSessionError)nightSessionError='富果日盤報價連線失敗：'+e.message;}
-        if(nightSession||daySession){
-          return {data:{last:daySession?.last??null,changePct:daySession?.changePct??null,openInterest:daySession?.openInterest??null,openInterestChange:daySession?.openInterestChange??null,volume:daySession?.volume??null,contractDate:nightSession?.symbol||daySession?.symbol||'TXF1!',frequency:'intraday-rest',daySession,nightSession,nightSessionError,nightSessionErrorCode:nightSessionError?.includes('HTTP 403')?'permission_denied':nightSessionError?.includes('HTTP 401')?'invalid_api_key':nightSessionError?.includes('HTTP 429')?'rate_limited':nightSessionError?'upstream_error':null,nightSessionAction:nightSessionError?.includes('HTTP 403')?'升級 Fugle 期權即時行情權限後再測試':nightSessionError?.includes('HTTP 401')?'重新建立 API Key 並更新 Render 環境變數':null,nightSessionSource:'Fugle Futopt REST API',nightSessionRefreshMs:5000},source:'Fugle Futopt REST API（TXF1!；日盤／夜盤分開查詢）',timestamp:now()};
-        }
-      }
       if(process.env.MARKET_FUTURES_URL){
         const x=await external('MARKET_FUTURES_URL','');
         return {data:x.data||null,source:x.source||'Configured futures provider',timestamp:x.timestamp||now()};
