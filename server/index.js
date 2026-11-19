@@ -21,7 +21,7 @@ const { diagnoseProviders, providerErrorMessage } = require('./lib/provider-diag
 const { epochMilliseconds, isStaleTimestamp } = require('./lib/market-timestamps');
 const { createDependencyVulnerabilityScanner } = require('./lib/dependency-vulnerabilities');
 const { verifyGitHubActionsToken } = require('./lib/github-oidc');
-const { buildRuntimeHealth } = require('./lib/health');
+const { buildRuntimeHealth, buildDependencyReadiness } = require('./lib/health');
 const { getHistoricalCoverage, validateHistoryRange } = require('./lib/historical-coverage');
 const researchStorage = require('./lib/research-storage').createResearchStorage();
 const dependencyVulnerabilityScanner = createDependencyVulnerabilityScanner({ lockPath: path.join(__dirname, '..', 'package-lock.json'), manifestPath: path.join(__dirname, '..', 'package.json'), auditPath: path.join(__dirname, '..', 'dependency-audit.json') });
@@ -587,7 +587,7 @@ async function route(req,res){
     return json(res,result.status==='unavailable'?503:200,result);
   }
   if(u.pathname==='/api/health/live')return json(res,200,buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}));
-  if(u.pathname==='/api/health/ready')return json(res,200,{...buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}),ready:true,checks:{httpServer:'ready'}});
+  if(u.pathname==='/api/health/ready'){const readiness=buildDependencyReadiness();return json(res,200,{...buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}),...readiness});}
   if(u.pathname==='/api/health')return json(res,200,{...buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}),auth:{configured:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY},provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),providers:{finmind:!!FINMIND_TOKEN,fugle:!!FUGLE_API_KEY,youtubeApiKeyConfigured:!!process.env.YOUTUBE_API_KEY,youtubeLiveResolver:!!process.env.YOUTUBE_API_KEY,youtubeChannelEmbedFallback:true,openrouter:!!process.env.OPENROUTER_API_KEY,gemini:!!process.env.GEMINI_API_KEY,groq:!!process.env.GROQ_API_KEY,xai:!!process.env.XAI_API_KEY,deepseek:!!process.env.DEEPSEEK_API_KEY,cloudflare:!!(process.env.CLOUDFLARE_API_TOKEN&&process.env.CLOUDFLARE_ACCOUNT_ID),realtime:null,realtimeProviderConfigured:!!(FUGLE_API_KEY||process.env.MARKET_REALTIME_URL),twseMisFallback:true,tpexRealtimeConfigured:!!FUGLE_API_KEY,tpexHistoricalFallback:true,scan:true,flows:true,futures:true,sentiment:true,news:true,openDataArchive:true}});
   if(SUPABASE_CONFIGURED&&u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/api/auth/')){
     const automationPaths=new Set(['/api/market/snapshot','/api/market/institutional-flows','/api/market/futures','/api/market/sentiment','/api/market/scan','/api/market/news','/api/market/calendar','/api/diagnostics/providers','/api/diagnostics/vulnerabilities','/api/diagnostics/market','/api/crypto/market','/api/crypto/risk/BTCUSDT']);
