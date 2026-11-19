@@ -33,7 +33,7 @@ const FINMIND_TOKEN = process.env.FINMIND_TOKEN || '';
 const CACHE = new Map();
 const PENDING = new Map();
 const RATE = new Map();
-const TTL = { universe: 6*60*60*1000, snapshot: 10000, scan: 10000, history: 5*60*1000, flows: 30*60*1000, futures: 5*60*1000, sentiment: 30*60*1000, news: 5*60*1000 };
+const TTL = { universe: 6*60*60*1000, snapshot: 5*60*1000, scan: 10000, history: 5*60*1000, flows: 30*60*1000, futures: 5*60*1000, sentiment: 30*60*1000, news: 5*60*1000 };
 const now = () => new Date().toISOString();
 const parseMarketNumber = value => value===null||value===undefined||String(value).trim()===''?NaN:Number(String(value).replace(/,/g,'').trim());
 const json = (res, status, body) => { res.writeHead(status, {'content-type':'application/json; charset=utf-8','cache-control':'no-store'}); res.end(JSON.stringify(body)); };
