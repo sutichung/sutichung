@@ -2,13 +2,14 @@
 
 const SUPPORTED_EXCHANGES=['Binance','Bybit','OKX','Kraken Futures'];
 const HISTORY_EXCHANGES=['Binance','Bybit','OKX','Coinbase','Kraken','Kraken Futures'];
+function okxLicensed(){return process.env.OKX_MARKET_DATA_LICENSE_CONFIRMED==='true';}
 function candidates(primary,preferred){
-  const microstructureExchanges=['Binance','Bybit','OKX'];
+  const microstructureExchanges=['Binance','Bybit',...(okxLicensed()?['OKX']:[])];
   return [...new Set([preferred,primary,...microstructureExchanges].filter(x=>microstructureExchanges.includes(x)))];
 }
 async function loadRiskHistory({getHistory,symbol,marketType,interval='15m',exchange='Binance',nativeSymbol=symbol,limit=240}){
   const errors=[];
-  const eligible=marketType==='perpetual'?SUPPORTED_EXCHANGES:HISTORY_EXCHANGES;
+  const eligible=(marketType==='perpetual'?SUPPORTED_EXCHANGES:HISTORY_EXCHANGES).filter(x=>x!=='OKX'||okxLicensed());
   const order=[...new Set([exchange,...eligible])].filter(x=>eligible.includes(x));
   for(const candidate of order){
     try{
@@ -36,4 +37,4 @@ async function loadFreshMicrostructure({safeLoad,fetchMicrostructure,symbol,mark
   }
   return {data:null,exchange:null,fallbackUsed:false,errors};
 }
-module.exports={loadRiskHistory,loadFreshMicrostructure,candidates,HISTORY_EXCHANGES};
+module.exports={loadRiskHistory,loadFreshMicrostructure,candidates,HISTORY_EXCHANGES,okxLicensed};
