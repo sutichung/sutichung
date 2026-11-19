@@ -15,6 +15,10 @@ test('provider diagnostics classify common upstream HTTP failures', () => {
 
 test('provider diagnostics sanitize credentials and classify timeout messages', () => {
   assert.equal(safeError(new Error('request timeout')), '連線逾時（12 秒）');
+  const shortTimeout = new Error('request timeout'); shortTimeout.timeoutMs = 5000;
+  const longTimeout = new Error('request timeout'); longTimeout.timeoutMs = 12000;
+  assert.equal(safeError(shortTimeout), '連線逾時（5 秒）');
+  assert.equal(safeError(longTimeout), '連線逾時（12 秒）');
   assert.equal(safeError(new Error('upstream_http_401')), 'API 金鑰驗證失敗（HTTP 401）');
   assert.match(safeError(new Error('upstream_http_451')), /地區或法規限制/);
   assert.ok(!safeError(new Error('Bearer secret-token')).includes('secret-token'));
