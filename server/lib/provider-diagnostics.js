@@ -180,7 +180,7 @@ async function diagnoseProviders(env = process.env) {
   const cryptoQuotes = [
     ['binance', 'Binance 官方 Spot 市場資料 API', 'https://data-api.binance.vision/api/v3/ticker/price?symbol=BTCUSDT', payload => payload.symbol === 'BTCUSDT' && Number(payload.price) > 0, 'Binance 官方 data-only Spot API 成功；不代表 USDⓈ-M 永續 API 可用'],
     ['binance-futures', 'Binance 官方 USDⓈ-M 永續 API', 'https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT', payload => payload.symbol === 'BTCUSDT' && Number(payload.markPrice) > 0, 'BTCUSDT 永續標記價格端點成功'],
-    ['bybit', 'Bybit 官方 V5 BTC/USDT 現貨 API（api.bytick.com）', 'https://api.bytick.com/v5/market/tickers?category=spot&symbol=BTCUSDT', payload => payload.retCode === 0 && Number(payload.result?.list?.[0]?.lastPrice) > 0, 'Bybit 官方 alternate mainnet host 回應成功；美國 IP 仍受地區限制'],
+    ['bybit', 'Bybit 官方 V5 BTC/USDT 現貨 API（api.bybit.com／api.bytick.com 備援）', 'https://api.bytick.com/v5/market/tickers?category=spot&symbol=BTCUSDT', payload => payload.retCode === 0 && Number(payload.result?.list?.[0]?.lastPrice) > 0, 'Bybit 官方 alternate mainnet host 回應成功；美國 IP 仍受地區限制'],
     ['okx', 'OKX 官方 BTC-USDT 現貨報價', 'https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT', payload => payload.code === '0' && Number(payload.data?.[0]?.last) > 0, 'BTC-USDT 公開現貨報價端點成功；僅驗證單一商品連線'],
     ['okx-swap', 'OKX 官方 BTC-USDT 永續合約報價', 'https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT-SWAP', payload => payload.code === '0' && Number(payload.data?.[0]?.last) > 0, 'BTC-USDT-SWAP 公開永續合約報價端點成功；可作為其他衍生品來源受限時的獨立資料源'],
     ['coinbase', 'Coinbase Exchange 官方 BTC-USD 報價', 'https://api.exchange.coinbase.com/products/BTC-USD/ticker', payload => Number(payload.price) > 0, 'BTC-USD 公開現貨報價端點成功；僅驗證單一商品連線'],
