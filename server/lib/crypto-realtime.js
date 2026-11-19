@@ -1,6 +1,5 @@
 'use strict';
 
-const WebSocket = require('ws');
 const { requireMarketDataLicense } = require('./market-data-license');
 
 const DEFAULT_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
@@ -20,7 +19,7 @@ function isoTimestamp(value) {
   return Number.isFinite(n) && n > 0 ? new Date(n).toISOString() : null;
 }
 function createCryptoRealtimeFeed(options = {}) {
-  const WebSocketImpl = options.WebSocketImpl || WebSocket;
+  const WebSocketImpl = options.WebSocketImpl || (() => { try { return require('ws'); } catch (_) { return null; } })();
   const now = options.now || Date.now;
   const setTimer = options.setTimeout || setTimeout;
   const clearTimer = options.clearTimeout || clearTimeout;
@@ -90,6 +89,7 @@ function createCryptoRealtimeFeed(options = {}) {
   function connect(type) {
     if (stopped || !symbols.length) return;
     const f = feeds.get(type);
+    if (!WebSocketImpl) { f.state = 'unavailable'; f.lastError = 'ws_dependency_not_installed'; return; }
     if (!f) return;
     f.state = 'connecting';
     const host = type === 'perpetual' ? 'wss://fstream.binance.com/stream?streams=' : 'wss://stream.binance.com:9443/stream?streams=';
