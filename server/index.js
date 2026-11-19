@@ -757,7 +757,8 @@ async function route(req,res){
       return json(res,200,result);
     }catch(e){
       console.error('[crypto-risk] '+exchange+' '+symbol+' '+String(e.message||e));
-      return json(res,502,{status:'unavailable',error:String(e.message||e),attempts:e.attempts||[],scenarios:[]});
+      const licenseRequired=e.code==='MARKET_DATA_LICENSE_REQUIRED'||String(e.message||'').startsWith('market_data_license_required:');
+      return json(res,licenseRequired?200:502,{status:licenseRequired?'license_required':'unavailable',error:String(e.message||e),attempts:e.attempts||[],scenarios:[]});
     }
   }
   if(u.pathname.startsWith('/api/crypto/derivatives/')){
