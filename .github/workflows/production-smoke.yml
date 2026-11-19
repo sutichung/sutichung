@@ -104,6 +104,8 @@ jobs:
           const taiwanConnected = market.ok === true && listedCount > 0 && quoteCount > 0;
           const officialUs = (providers.checks || []).find(x => x.id === 'us-equities-official') || null;
           const vulnerabilitySeverity = vulnerabilities.severityCounts || {};
+          const connectedExchanges = Number(crypto.summary?.connectedExchangeCount || 0);
+          const cryptoLicenseRequired = crypto.status === 'license_required' || ((crypto.exchanges || []).length > 0 && (crypto.exchanges || []).every(x => x.status === 'not_configured'));
           const warnings = [
             ...(officialUs?.status === 'not_configured' ? ['us_official_equities_feed_not_configured'] : []),
             ...(quoteCount === 0 ? ['taiwan_market_has_no_live_quotes_at_check_time'] : []),
@@ -114,8 +116,6 @@ jobs:
             ...(Number(vulnerabilities.scannedPackageCount || 0) < 1 ? ['runtime_dependency_scan_unavailable_in_slim_image_ci_audit_passed'] : []),
             ...(Number(vulnerabilitySeverity.critical || 0) + Number(vulnerabilitySeverity.high || 0) > 0 ? ['high_or_critical_dependency_vulnerabilities_found'] : [])
           ];
-          const connectedExchanges = Number(crypto.summary?.connectedExchangeCount || 0);
-          const cryptoLicenseRequired = crypto.status === 'license_required' || ((crypto.exchanges || []).length > 0 && (crypto.exchanges || []).every(x => x.status === 'not_configured'));
           const report = {
             generatedAt: new Date().toISOString(),
             commit: health.commit,
