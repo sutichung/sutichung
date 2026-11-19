@@ -107,7 +107,7 @@
 ## 9. 帳號刪除功能實作與驗收限制
 
 - 會員登入後可從帳號列啟動刪除，並要求重新輸入目前登入 Email 及 `DELETE` 字樣確認。
-- Google Play 外部帳號刪除資源路徑：`https://taiwan-stock-hunter-o3tt.onrender.com/account-deletion`。使用者登入後會開啟刪除確認流程。
+- Google Play 外部帳號刪除預定資源路徑：`https://taiwan-stock-hunter-o3tt.onrender.com/account-deletion`。此路徑隨本分支部署後才會生效；目前正式 Render 服務尚未包含此變更。使用者登入後會開啟刪除確認流程。
 - 後端只接受有效登入者的請求，核對 Email／確認字串，並要求 Render 設定 `SUPABASE_SERVICE_ROLE_KEY`；缺少金鑰時安全拒絕，不會假稱刪除成功。
 - 目前已檢視的 Supabase migration 中，finance_consents、finance_accounts、finance_balances、finance_transactions 對 auth.users 使用 ON DELETE CASCADE；finance_audit_events 使用 ON DELETE SET NULL，以保留去識別化稽核事件。
 - 仍須在實際 Supabase 專案確認 migration 已套用，檢查是否存在未納入 Git 的資料表、Storage bucket、外部第三方紀錄或法定保存義務，並以測試帳號做端到端刪除驗收。
