@@ -1,6 +1,6 @@
 'use strict';
 
-const CHECK_TIMEOUT_MS = 7000;
+const CHECK_TIMEOUT_MS = 12000;
 
 function statusForHttp(status) {
   if (status >= 200 && status < 300) return 'connected';
@@ -13,7 +13,7 @@ function statusForHttp(status) {
 
 function safeError(error) {
   const raw = String(error && error.message || error || 'unknown_error');
-  if (/abort|timeout/i.test(raw)) return '連線逾時（7 秒）';
+  if (/abort|timeout/i.test(raw)) return '連線逾時（12 秒）';
   const match = raw.match(/upstream_http_(\d{3})/i);
   if (match) {
     const status = Number(match[1]);
@@ -85,11 +85,25 @@ async function diagnoseProviders(env = process.env) {
     return { httpStatus: response.status, dataCount: rows.length, message: '官方資料端點有回應；此端點不是盤中逐筆報價' };
   }));
   checks.push(probe('ecb', '歐洲央行每日外匯參考 API', async () => {
-    const { response, body } = await request('https://data-api.ecb.europa.eu/service/data/EXR/D.USD.EUR.SP00.A?format=csvdata&lastNObservations=1', { headers: { accept: 'text/csv' } });
-    if (!response.ok) throw new Error('upstream_http_' + response.status);
-    const lines = body.trim().split(/\r?\n/);
-    if (lines.length < 2 || !lines[0].includes('OBS_VALUE')) throw new Error('ECB 回應格式錯誤或沒有觀測值');
-    return { httpStatus: response.status, dataCount: lines.length - 1, message: '每日參考匯率端點正常；不是即時外匯報價' };
+    let primaryError = null;
+    try {
+      const { response, body } = await request('https://data-api.ecb.europa.eu/service/data/EXR/D.USD.EUR.SP00.A?format=csvdata&lastNObservations=1', { headers: { accept: 'text/csv' } });
+      if (!response.ok) throw new Error('upstream_http_' + response.status);
+      const lines = body.trim().split(/\r?\n/);
+      if (lines.length < 2 || !lines[0].includes('OBS_VALUE')) throw new Error('ECB CSV 回應格式錯誤或沒有觀測值');
+      const columns = lines[0].split(',');
+      const valueIndex = columns.indexOf('OBS_VALUE');
+      const dateIndex = columns.indexOf('TIME_PERIOD');
+      const row = lines[lines.length - 1].split(',');
+      if (valueIndex < 0 || !(Number(row[valueIndex]) > 0)) throw new Error('ECB CSV 沒有有效匯率觀測值');
+      return { httpStatus: response.status, dataCount: 1, sourceTime: dateIndex >= 0 ? row[dateIndex] : null, message: 'ECB 官方每日參考匯率 API 正常；不是即時外匯報價' };
+    } catch (error) { primaryError = error; }
+    const { response, body } = await request('https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml', { headers: { accept: 'application/xml,text/xml' } });
+    if (!response.ok) throw new Error('ECB primary unavailable (' + safeError(primaryError) + '); official XML fallback HTTP ' + response.status);
+    const dateMatch = body.match(/<Cube\s+time="(\d{4}-\d{2}-\d{2})"/);
+    const usdMatch = body.match(/<Cube\s+currency="USD"\s+rate="([0-9.]+)"\s*\/?>/);
+    if (!dateMatch || !(Number(usdMatch?.[1]) > 0)) throw new Error('ECB 官方 XML 備援缺少有效 USD 匯率觀測值');
+    return { httpStatus: response.status, dataCount: 1, sourceTime: dateMatch[1], message: 'ECB 官方每日 XML 備援正常（主 API 暫時不可用）；不是即時外匯報價' };
   }));
   checks.push(probe('bank-of-canada', '加拿大央行 Valet CAD/USD 每日平均匯率', async () => {
     const { response, body } = await request('https://www.bankofcanada.ca/valet/observations/FXCADUSD/json?recent=1', { headers: { accept: 'application/json' } });
