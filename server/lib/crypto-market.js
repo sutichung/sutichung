@@ -1,6 +1,7 @@
 'use strict';
 const { indicators } = require('./indicators');
 const { createAsyncCache } = require('./market-cache');
+const { isMarketDataLicensed, requireMarketDataLicense } = require('./market-data-license');
 const marketCache=createAsyncCache({maxEntries:500});
 const now=()=>new Date().toISOString();
 async function getJson(url,timeout=14000){
@@ -21,6 +22,7 @@ const n=v=>v===null||v===undefined||v===''?null:Number.isFinite(Number(v))?Numbe
 function row(exchange,marketType,symbol,baseAsset,quoteAsset,price,changePct,quoteVolume,extra={}){const p=n(price);if(!(p>0))return null;const sourceTimestamp=extra.sourceTimestamp&&Number.isFinite(Date.parse(extra.sourceTimestamp))?new Date(extra.sourceTimestamp).toISOString():null;const sourceTimeMs=sourceTimestamp?Date.parse(sourceTimestamp):NaN;const sourceAgeMs=Number.isFinite(sourceTimeMs)?Date.now()-sourceTimeMs:null;const freshnessStatus=sourceAgeMs===null?'unverified':sourceAgeMs>300000||sourceAgeMs< -60000?'stale':'fresh';return {id:exchange+':'+marketType+':'+symbol,exchange,marketType,symbol,baseAsset,quoteAsset,price:p,changePct:n(changePct),quoteVolume:n(quoteVolume),high24h:n(extra.high24h),low24h:n(extra.low24h),volume:n(extra.volume),timestamp:sourceTimestamp,sourceTimestamp,sourceAgeMs,freshnessStatus,signalEligible:freshnessStatus==='fresh',delayed:freshnessStatus!=='fresh',receivedAt:now(),nativeSymbol:extra.nativeSymbol||symbol,nativeType:extra.nativeType||marketType,endpointBase:extra.endpointBase||null};}
 async function mapLimit(items,limit,worker){const out=new Array(items.length);let next=0;await Promise.all(Array.from({length:Math.min(limit,items.length)},async()=>{while(true){const i=next++;if(i>=items.length)return;try{out[i]=await worker(items[i],i);}catch(_){out[i]=null;}}}));return out;}
 async function binanceMarkets(){
+ requireMarketDataLicense('Binance');
  const spotBases=['https://data-api.binance.vision','https://api.binance.com','https://api1.binance.com','https://api2.binance.com','https://api3.binance.com','https://api4.binance.com'];
  const spotInfoUrls=spotBases.map(base=>base+'/api/v3/exchangeInfo');
  const spotTickerUrls=spotBases.map(base=>base+'/api/v3/ticker/24hr');
@@ -44,15 +46,17 @@ async function bybitCategory(category){
  const map=new Map((t.result?.list||[]).map(x=>[x.symbol,x]));
  return items.filter(x=>x.status==='Trading').map(x=>{const q=map.get(x.symbol)||{};return row('Bybit',category==='spot'?'spot':'perpetual',x.symbol,x.baseCoin,x.quoteCoin,q.lastPrice,Number(q.price24hPcnt)*100,q.turnover24h,{high24h:q.highPrice24h,low24h:q.lowPrice24h,volume:q.volume24h,sourceTimestamp:timestampIso(t.time),nativeSymbol:x.symbol,nativeType:category});});
 }
-async function bybitMarkets(){const r=await Promise.allSettled([bybitCategory('spot'),bybitCategory('linear')]);const out=r.flatMap(x=>x.status==='fulfilled'?x.value:[]);if(!out.length)throw new Error(r.filter(x=>x.status==='rejected').map(x=>x.reason.message).join('; '));return out;}
+async function bybitMarkets(){
+ requireMarketDataLicense('Bybit');const r=await Promise.allSettled([bybitCategory('spot'),bybitCategory('linear')]);const out=r.flatMap(x=>x.status==='fulfilled'?x.value:[]);if(!out.length)throw new Error(r.filter(x=>x.status==='rejected').map(x=>x.reason.message).join('; '));return out;}
 async function okxCategory(instType,marketType){
  const [ins,ticks]=await Promise.all([getJson('https://www.okx.com/api/v5/public/instruments?instType='+instType),getJson('https://www.okx.com/api/v5/market/tickers?instType='+instType)]);
  if(ins.code!=='0'||ticks.code!=='0')throw new Error('OKX public API error');
  const map=new Map(ticks.data.map(x=>[x.instId,x]));
  return ins.data.filter(x=>x.state==='live').map(x=>{const q=map.get(x.instId)||{};const base=x.ctValCcy||x.baseCcy||x.instId.split('-')[0],quote=x.settleCcy||x.quoteCcy||'USDT';return row('OKX',marketType,x.instId.replace(/-/g,''),base,quote,q.last,Number(q.open24h)>0?(Number(q.last)/Number(q.open24h)-1)*100:null,q.volCcyQuote||q.volCcy24h,{high24h:q.high24h,low24h:q.low24h,volume:q.vol24h,sourceTimestamp:timestampIso(q.ts),nativeSymbol:x.instId,nativeType:instType});});
 }
-async function okxMarkets(){if(process.env.OKX_MARKET_DATA_LICENSE_CONFIRMED!=='true')throw new Error('okx_market_data_license_required');const r=await Promise.allSettled([okxCategory('SPOT','spot'),okxCategory('SWAP','perpetual')]);const out=r.flatMap(x=>x.status==='fulfilled'?x.value:[]);if(!out.length)throw new Error(r.filter(x=>x.status==='rejected').map(x=>x.reason.message).join('; '));return out;}
+async function okxMarkets(){requireMarketDataLicense('OKX');const r=await Promise.allSettled([okxCategory('SPOT','spot'),okxCategory('SWAP','perpetual')]);const out=r.flatMap(x=>x.status==='fulfilled'?x.value:[]);if(!out.length)throw new Error(r.filter(x=>x.status==='rejected').map(x=>x.reason.message).join('; '));return out;}
 async function coinbaseMarkets(){
+ requireMarketDataLicense('Coinbase');
  const products=await getJson('https://api.exchange.coinbase.com/products');
  const active=products.filter(x=>x.status==='online'&&!x.trading_disabled);
  const top=active.slice(0,100);
@@ -60,6 +64,7 @@ async function coinbaseMarkets(){
  return top.map((x,i)=>{const q=quotes[i]||{};const price=n(q.price),baseVolume=n(q.volume),sourceTimestamp=q.time&&Number.isFinite(Date.parse(q.time))?new Date(q.time).toISOString():null;return row('Coinbase','spot',x.id.replace('-',''),x.base_currency,x.quote_currency,price,null,price!==null&&baseVolume!==null?price*baseVolume:null,{volume:baseVolume,sourceTimestamp,nativeSymbol:x.id,nativeType:'spot'});}).filter(Boolean);
 }
 async function krakenMarkets(){
+ requireMarketDataLicense('Kraken');
  const pairs=await getJson('https://api.kraken.com/0/public/AssetPairs');
  if(pairs.error?.length)throw new Error(pairs.error.join(','));
  const entries=Object.entries(pairs.result||{}).filter(([k,x])=>x.status==='online'&&x.wsname&&x.wsname.includes('/'));
@@ -74,12 +79,12 @@ async function loadMarket(){
   const jobs=[['Binance',binanceMarkets],['Bybit',bybitMarkets],['OKX',okxMarkets],['Coinbase',coinbaseMarkets],['Kraken',krakenMarkets]];
   const settled=await Promise.allSettled(jobs.map(async([name,loader])=>{const started=Date.now();const data=await loader();return {data,updatedAt:now(),latencyMs:Date.now()-started};}));
   const markets=settled.flatMap(x=>x.status==='fulfilled'?x.value.data:[]).filter(x=>x&&Number.isFinite(x.price)&&x.price>0);
-  if(!markets.length)throw new Error('所有交易所公開市場 API 均無法連線');
+  
   const coverageNotes={Binance:'公開現貨與 USDT 永續商品清單；不含所有交易所衍生商品類型',Bybit:'商品清單最多讀取 8 頁、每頁最多 1,000 筆；若尚有 nextPageCursor，結果可能截斷',OKX:'讀取公開 SPOT 與 SWAP 商品清單',Coinbase:'目前僅掃描商品清單前 100 個可交易產品，非全商品覆蓋',Kraken:'目前僅掃描商品清單前 100 個可交易交易對，非全商品覆蓋'};
-  const exchanges=jobs.map((j,i)=>{const result=settled[i].status==='fulfilled'?settled[i].value:null;const rows=result?.data||[];const count=rows.filter(x=>x&&x.price>0).length;return {name:j[0],status:count?'connected':'unavailable',markets:count,updatedAt:result?.updatedAt||null,latencyMs:result?.latencyMs??null,quoteMode:'REST snapshot polling',sourceTimestampCount:rows.filter(x=>x.sourceTimestamp).length,freshQuoteCount:rows.filter(x=>x.freshnessStatus==='fresh').length,staleQuoteCount:rows.filter(x=>x.freshnessStatus==='stale').length,unverifiedQuoteCount:rows.filter(x=>x.freshnessStatus==='unverified').length,coverageNote:coverageNotes[j[0]],error:count?null:settled[i].status==='rejected'?String(settled[i].reason?.message||'API error'):'上游未回傳有效價格'};});
+  const exchanges=jobs.map((j,i)=>{const result=settled[i].status==='fulfilled'?settled[i].value:null;const rows=result?.data||[];const count=rows.filter(x=>x&&x.price>0).length;return {name:j[0],status:count?'connected':String(settled[i].reason?.message||'').startsWith('market_data_license_required:')?'not_configured':'unavailable',markets:count,updatedAt:result?.updatedAt||null,latencyMs:result?.latencyMs??null,quoteMode:'REST snapshot polling',sourceTimestampCount:rows.filter(x=>x.sourceTimestamp).length,freshQuoteCount:rows.filter(x=>x.freshnessStatus==='fresh').length,staleQuoteCount:rows.filter(x=>x.freshnessStatus==='stale').length,unverifiedQuoteCount:rows.filter(x=>x.freshnessStatus==='unverified').length,coverageNote:coverageNotes[j[0]],error:count?null:settled[i].status==='rejected'?String(settled[i].reason?.message||'API error'):'上游未回傳有效價格'};});
   markets.sort((a,b)=>b.quoteVolume-a.quoteVolume);
   const receivedAt=now(),sourceTimestampCount=markets.filter(x=>x.sourceTimestamp).length,freshQuoteCount=markets.filter(x=>x.freshnessStatus==='fresh').length,staleQuoteCount=markets.filter(x=>x.freshnessStatus==='stale').length,unverifiedQuoteCount=markets.filter(x=>x.freshnessStatus==='unverified').length;
-  return {markets,summary:{total:markets.length,spot:markets.filter(x=>x.marketType==='spot').length,perpetual:markets.filter(x=>x.marketType==='perpetual').length,exchanges:exchanges.filter(x=>x.status==='connected').map(x=>x.name),connectedExchangeCount:exchanges.filter(x=>x.status==='connected').length,sourceTimestampCount,sourceTimestampCoveragePct:markets.length?Math.round(sourceTimestampCount/markets.length*100):0,freshQuoteCount,staleQuoteCount,unverifiedQuoteCount},exchanges,coverage:{scope:'僅涵蓋下列五家交易所公開 API 可取得的商品；不代表全世界所有交易所或所有商品',partialProviders:exchanges.filter(x=>x.coverageNote).map(x=>x.name),timestampLimit:'來源時間戳依交易所欄位可能是最後成交或回應時間；超過 5 分鐘標示過期，缺少時間戳標示未驗證'},source:'Binance／Bybit／OKX／Coinbase／Kraken 各自公開行情 API；價格不跨交易所混合',quoteMode:'REST snapshot polling；非 WebSocket 逐筆推送',refreshIntervalMs:15000,receivedAt,timestamp:null};
+  return {markets,status:markets.length?'ok':exchanges.every(x=>x.status==='not_configured')?'license_required':'degraded',licenseRequiredProviders:exchanges.filter(x=>x.status==='not_configured').map(x=>x.name),summary:{total:markets.length,spot:markets.filter(x=>x.marketType==='spot').length,perpetual:markets.filter(x=>x.marketType==='perpetual').length,exchanges:exchanges.filter(x=>x.status==='connected').map(x=>x.name),connectedExchangeCount:exchanges.filter(x=>x.status==='connected').length,sourceTimestampCount,sourceTimestampCoveragePct:markets.length?Math.round(sourceTimestampCount/markets.length*100):0,freshQuoteCount,staleQuoteCount,unverifiedQuoteCount},exchanges,coverage:{scope:'僅涵蓋下列五家交易所公開 API 可取得的商品；不代表全世界所有交易所或所有商品',partialProviders:exchanges.filter(x=>x.coverageNote).map(x=>x.name),timestampLimit:'來源時間戳依交易所欄位可能是最後成交或回應時間；超過 5 分鐘標示過期，缺少時間戳標示未驗證'},source:'Binance／Bybit／OKX／Coinbase／Kraken 各自公開行情 API；價格不跨交易所混合',quoteMode:'REST snapshot polling；非 WebSocket 逐筆推送',refreshIntervalMs:15000,receivedAt,timestamp:null};
  });
 }
 function timestampIso(value,multiplier=1){
@@ -107,7 +112,7 @@ function normalizeKlines(rows,exchange,interval='1d',asOf=Date.now(),includeCurr
 
 async function getHistory(symbol,marketType='spot',interval='1d',exchange='Binance',nativeSymbol='',requestedLimit=240){
  const clean=String(nativeSymbol||symbol||'').toUpperCase();
- if(exchange==='OKX'&&process.env.OKX_MARKET_DATA_LICENSE_CONFIRMED!=='true')throw new Error('okx_market_data_license_required');
+ requireMarketDataLicense(exchange);
  const cap=exchange==='OKX'?300:exchange==='Coinbase'?300:exchange==='Kraken'?720:1000;
  const limit=Math.max(1,Math.min(cap,Math.floor(Number(requestedLimit)||240)));
  const cacheTtl=interval==='1m'||interval==='5m'?5000:interval==='15m'?10000:interval==='30m'||interval==='1h'?20000:interval==='4h'?60000:300000;
@@ -136,17 +141,17 @@ async function ratioFor(exchange,base){
 }
 async function getDerivatives(symbol,exchange='Binance',nativeSymbol=''){
  const base=String(symbol).toUpperCase().replace(/(USDT|USDC|USD)$/,'');
- const okxAllowed=process.env.OKX_MARKET_DATA_LICENSE_CONFIRMED==='true';
+ const binanceAllowed=isMarketDataLicensed('Binance'),bybitAllowed=isMarketDataLicensed('Bybit'),okxAllowed=isMarketDataLicensed('OKX'),krakenFuturesAllowed=isMarketDataLicensed('Kraken Futures');
  const okxInst=base+'-USDT-SWAP';
  const [battle,binance,binanceOi,bybit,okxFunding,okxOi,okxMark,krakenFutures]=await Promise.all([
-  Promise.all(['Binance','Bybit',...(okxAllowed?['OKX']:[])].map(x=>ratioFor(x,base))),
-  getJson('https://fapi.binance.com/fapi/v1/premiumIndex?symbol='+base+'USDT').catch(()=>null),
-  getJson('https://fapi.binance.com/fapi/v1/openInterest?symbol='+base+'USDT').catch(()=>null),
-  getJsonFallback(['https://api.bybit.com','https://api.bytick.com'].map(host=>host+'/v5/market/tickers?category=linear&symbol='+base+'USDT')).then(x=>x.data).catch(()=>null),
+  Promise.all(['Binance','Bybit',...(okxAllowed?['OKX']:[]),...(krakenFuturesAllowed?['Kraken Futures']:[])].filter(x=>isMarketDataLicensed(x)).map(x=>ratioFor(x,base))),
+  binanceAllowed?getJson('https://fapi.binance.com/fapi/v1/premiumIndex?symbol='+base+'USDT').catch(()=>null):Promise.resolve(null),
+  binanceAllowed?getJson('https://fapi.binance.com/fapi/v1/openInterest?symbol='+base+'USDT').catch(()=>null):Promise.resolve(null),
+  bybitAllowed?getJsonFallback(['https://api.bybit.com','https://api.bytick.com'].map(host=>host+'/v5/market/tickers?category=linear&symbol='+base+'USDT')).then(x=>x.data).catch(()=>null):Promise.resolve(null),
   okxAllowed?getJson('https://www.okx.com/api/v5/public/funding-rate?instId='+okxInst).catch(()=>null):Promise.resolve(null),
   okxAllowed?getJson('https://www.okx.com/api/v5/public/open-interest?instType=SWAP&instId='+okxInst).catch(()=>null):Promise.resolve(null),
   okxAllowed?getJson('https://www.okx.com/api/v5/public/mark-price?instType=SWAP&instId='+okxInst).catch(()=>null):Promise.resolve(null),
-  getJson('https://futures.kraken.com/derivatives/api/v3/tickers').catch(()=>null)
+  krakenFuturesAllowed?getJson('https://futures.kraken.com/derivatives/api/v3/tickers').catch(()=>null):Promise.resolve(null)
  ]);
  const bq=bybit?.result?.list?.[0],of=okxFunding?.data?.[0],oi=okxOi?.data?.[0],om=okxMark?.data?.[0];
  const toIso=value=>{if(value===null||value===undefined||value==='')return null;const numeric=Number(value);const ms=Number.isFinite(numeric)&&numeric>0?numeric:Date.parse(String(value));return Number.isFinite(ms)&&ms>0?new Date(ms).toISOString():null;};
