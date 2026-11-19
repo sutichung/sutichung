@@ -17,7 +17,7 @@ const { loadRiskHistory, loadFreshMicrostructure } = require('./lib/crypto-risk-
 const { runStrategyLab } = require('./lib/strategy-lab');
 const globalFinance = require('./lib/global-finance');
 const globalIntelligence = require('./lib/intelligence');
-const { diagnoseProviders } = require('./lib/provider-diagnostics');
+const { diagnoseProviders, providerErrorMessage } = require('./lib/provider-diagnostics');
 const { epochMilliseconds, isStaleTimestamp } = require('./lib/market-timestamps');
 const { createDependencyVulnerabilityScanner } = require('./lib/dependency-vulnerabilities');
 const { verifyGitHubActionsToken } = require('./lib/github-oidc');
@@ -836,7 +836,7 @@ async function route(req,res){
           if(!validRows.length)throw new Error('Fugle TSE 快照沒有有效報價');
           const sample=validRows.slice(0,5).map(x=>({symbol:String(x.symbol),name:x.name||String(x.symbol),price:Number(x.lastPrice),timestamp:epochMilliseconds(x.lastUpdated)?new Date(epochMilliseconds(x.lastUpdated)).toISOString():null,delayed:isStaleTimestamp(epochMilliseconds(x.lastUpdated)),quoteType:'fugle-snapshot'}));
           return json(res,200,{ok:true,connection:'connected',source:'Fugle TSE 官方行情快照',provider:'fugle',fallbackUsed:false,listedCount:null,requestedCount:5,scannedCount:rows.length,quoteCount:validRows.length,coveragePct:null,delayedCount:sample.filter(x=>x.delayed).length,serverTime:now(),sample});
-        }catch(error){primaryProviderWarning='Fugle：'+String(error.message||error).slice(0,200);}
+        }catch(error){primaryProviderWarning=providerErrorMessage('fugle',error);}
       }
       const live=await twseMisSnapshot(5);
       const allRows=Object.values(live.data||{});
