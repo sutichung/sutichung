@@ -107,13 +107,15 @@ jobs:
           const warnings = [
             ...(officialUs?.status === 'not_configured' ? ['us_official_equities_feed_not_configured'] : []),
             ...(quoteCount === 0 ? ['taiwan_market_has_no_live_quotes_at_check_time'] : []),
-            ...((crypto.exchanges || []).some(x => x.status !== 'connected') ? ['some_crypto_exchanges_unavailable'] : []),
+            ...(cryptoLicenseRequired ? ['crypto_market_data_redistribution_licenses_not_configured'] : []),
+            ...(!cryptoLicenseRequired && (crypto.exchanges || []).some(x => x.status !== 'connected') ? ['some_crypto_exchanges_unavailable'] : []),
             ...(providerFailures.length ? ['some_optional_providers_unavailable'] : []),
             ...(cryptoRisk.microstructureStatus !== 'connected' ? ['licensed_orderbook_or_trade_tape_source_not_available'] : []),
             ...(Number(vulnerabilities.scannedPackageCount || 0) < 1 ? ['runtime_dependency_scan_unavailable_in_slim_image_ci_audit_passed'] : []),
             ...(Number(vulnerabilitySeverity.critical || 0) + Number(vulnerabilitySeverity.high || 0) > 0 ? ['high_or_critical_dependency_vulnerabilities_found'] : [])
           ];
           const connectedExchanges = Number(crypto.summary?.connectedExchangeCount || 0);
+          const cryptoLicenseRequired = crypto.status === 'license_required' || ((crypto.exchanges || []).length > 0 && (crypto.exchanges || []).every(x => x.status === 'not_configured'));
           const report = {
             generatedAt: new Date().toISOString(),
             commit: health.commit,
@@ -132,7 +134,9 @@ jobs:
               fallbackUsed: market.fallbackUsed === true
             },
             crypto: {
-              ok: Array.isArray(crypto.markets) && crypto.markets.length > 0 && connectedExchanges > 0,
+              ok: (Array.isArray(crypto.markets) && crypto.markets.length > 0 && connectedExchanges > 0) || cryptoLicenseRequired,
+              status: cryptoLicenseRequired ? 'license_required' : crypto.status || 'ok',
+              licenseRequiredProviders: crypto.licenseRequiredProviders || [],
               marketCount: Array.isArray(crypto.markets) ? crypto.markets.length : 0,
               connectedExchangeCount: connectedExchanges,
               sourceTimestampCoveragePct: crypto.summary?.sourceTimestampCoveragePct ?? null,
@@ -175,9 +179,13 @@ jobs:
           if (!report.application.ok) throw new Error('production_health_not_ok');
           if (healthAfter.commit !== process.env.EXPECTED_COMMIT) throw new Error('deployment_changed_during_production_smoke');
           if (!report.taiwan.ok || report.taiwan.listedCount < 1) throw new Error('official_taiwan_market_source_unavailable');
-          if (!report.crypto.ok) throw new Error('all_crypto_exchange_market_data_unavailable');
-          if (report.cryptoRiskRadar.status !== 'ok' || report.cryptoRiskRadar.candleCount < 22) throw new Error('crypto_risk_radar_candles_unavailable');
-          if (report.cryptoRiskRadar.microstructureStatus !== 'connected' || report.cryptoRiskRadar.coverage.orderBook !== true || report.cryptoRiskRadar.coverage.tradeTape !== true) throw new Error('licensed_crypto_risk_orderbook_or_trade_tape_unavailable');
+          if (!report.crypto.ok) throw new Error('all_crypto_exchange_market_data_unavailable_without_license_status');
+          if (cryptoLicenseRequired) {
+            if (report.cryptoRiskRadar.status !== 'license_required') throw new Error('crypto_risk_license_status_mismatch');
+          } else {
+            if (report.cryptoRiskRadar.status !== 'ok' || report.cryptoRiskRadar.candleCount < 22) throw new Error('crypto_risk_radar_candles_unavailable');
+            if (report.cryptoRiskRadar.microstructureStatus !== 'connected' || report.cryptoRiskRadar.coverage.orderBook !== true || report.cryptoRiskRadar.coverage.tradeTape !== true) throw new Error('licensed_crypto_risk_orderbook_or_trade_tape_unavailable');
+          }
           if (report.criticalProviderFailures.length) throw new Error('one_or_more_critical_providers_failed');
           if (vulnerabilities.status === 'vulnerable' && Number(vulnerabilities.productionVulnerabilityCount || 0) > 0) throw new Error('production_dependency_vulnerabilities_detected');
           NODE
