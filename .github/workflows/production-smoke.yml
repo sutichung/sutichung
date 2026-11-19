@@ -119,9 +119,8 @@ jobs:
           const optionalProviderRestrictions = providerFailures.filter(x => !requiredProviderIds.has(x.id)).map(x => ({ id:x.id, label:x.label, status:x.status, httpStatus:x.httpStatus, reason:x.httpStatus===451?'region_restricted':x.id==='fugle'&&x.httpStatus===403?'plan_does_not_include_requested_feature':x.id==='fugle'&&x.httpStatus===401?'invalid_api_key':'optional_provider_unavailable' }));
           const criticalProviderFailures = providerFailures.filter(x => requiredProviderIds.has(x.id));
           const ciDependencyAudit = { status:'passed', blocking:true, source:'blocking Backend checks npm audit --omit=dev', runId:Number(process.env.CI_RUN_ID), runtimeScannerStatus:vulnerabilities.status, runtimeScannedPackageCount:Number(vulnerabilities.scannedPackageCount||0), note:Number(vulnerabilities.scannedPackageCount||0)===0?'Production image intentionally excludes node_modules; Backend checks fails on high/critical production advisories and reports moderate/low findings.':'Runtime dependency scan also returned package coverage.' };
-          const listedCount = Number(market.listedCount || 0);
           const quoteCount = Number(market.quoteCount || 0);
-          const taiwanConnected = market.ok === true && listedCount > 0 && quoteCount > 0;
+          const taiwanConnected = market.ok === true && quoteCount > 0;
           const officialUs = (providers.checks || []).find(x => x.id === 'us-equities-official') || null;
           const vulnerabilitySeverity = vulnerabilities.severityCounts || {};
           const connectedExchanges = Number(crypto.summary?.connectedExchangeCount || 0);
@@ -143,8 +142,10 @@ jobs:
             taiwan: {
               ok: taiwanConnected,
               source: market.source || null,
-              listedCount,
               quoteCount,
+              dataMode: market.dataMode || null,
+              realtime: market.realtime === true,
+              markets: market.markets || {},
               requestedCount: Number(market.requestedCount || 0),
               coveragePct: market.coveragePct ?? null,
               delayedCount: Number(market.delayedCount || 0),
@@ -198,7 +199,8 @@ jobs:
           console.log(JSON.stringify(report, null, 2));
           if (!report.application.ok) throw new Error('production_health_not_ok');
           if (healthAfter.commit !== process.env.EXPECTED_COMMIT) throw new Error('deployment_changed_during_production_smoke');
-          if (!report.taiwan.ok || report.taiwan.listedCount < 1) throw new Error('official_taiwan_market_source_unavailable');
+          if (!report.taiwan.ok || report.taiwan.quoteCount < 1) throw new Error('official_taiwan_market_source_unavailable');
+          if (report.taiwan.dataMode !== 'END_OF_DAY' || report.taiwan.realtime !== false) throw new Error('official_taiwan_data_mode_not_explicitly_end_of_day');
           if (!report.crypto.ok) throw new Error('all_crypto_exchange_market_data_unavailable_without_license_status');
           if (cryptoLicenseRequired) {
             if (report.cryptoRiskRadar.status !== 'license_required') throw new Error('crypto_risk_license_status_mismatch');
