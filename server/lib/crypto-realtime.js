@@ -191,4 +191,9 @@ function createCryptoRealtimeFeed(options = {}) {
   }
   return { start, stop, status, getQuotes, mergeMarket, applyEvent };
 }
-module.exports = { createCryptoRealtimeFeed, normalizeSymbols, splitSymbol, isoTimestamp };
+let defaultFeed = null;
+function createDefaultCryptoRealtimeFeed() {
+  if (!defaultFeed) defaultFeed = createCryptoRealtimeFeed();
+  return defaultFeed;
+}
+module.exports = { createCryptoRealtimeFeed, createDefaultCryptoRealtimeFeed, normalizeSymbols, splitSymbol, isoTimestamp };
