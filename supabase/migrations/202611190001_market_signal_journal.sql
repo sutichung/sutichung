@@ -37,7 +37,7 @@ begin
  perform pg_advisory_xact_lock(hashtext(upper(p_market)||':'||upper(p_symbol)));
  if exists(select 1 from public.market_signal_events where signal_key=p_signal_key) then return jsonb_build_object('status','duplicate','reason','IDEMPOTENCY_KEY_EXISTS'); end if;
  if p_action<>'HOLD' then
-  select count(*) into v_count from public.market_signal_events where market=upper(p_market) and symbol=upper(p_symbol) and action<>'HOLD' and created_at>=date_trunc('day',v_now);
+  select count(*) into v_count from public.market_signal_events where market=upper(p_market) and symbol=upper(p_symbol) and action<>'HOLD' and created_at>=(date_trunc('day',v_now at time zone 'Asia/Taipei') at time zone 'Asia/Taipei');
   if v_count>=greatest(1,least(p_daily_max_triggers,500)) then return jsonb_build_object('status','suppressed','reason','DAILY_CAP_REACHED'); end if;
   select * into v_state from public.market_signal_trigger_state where subject_key=v_subject for update;
   if found then
