@@ -33,7 +33,7 @@ begin
  if p_signal_key is null or length(p_signal_key)<16 or p_price<=0 or p_confidence<0 or p_confidence>1
   or p_action not in ('ALERT_BULLISH','ALERT_BEARISH','HOLD') or p_side not in ('LONG','SHORT','FLAT')
   or p_source is null or length(trim(p_source))=0 then raise exception 'invalid_signal_payload' using errcode='22023'; end if;
- perform pg_advisory_xact_lock(hashtext(v_subject));
+ -- Serialize all timeframes/strategies for one instrument so the daily cap cannot race.\n perform pg_advisory_xact_lock(hashtext(upper(p_market)||':'||upper(p_symbol)));
  if exists(select 1 from public.market_signal_events where signal_key=p_signal_key) then return jsonb_build_object('status','duplicate','reason','IDEMPOTENCY_KEY_EXISTS'); end if;
  if p_action<>'HOLD' then
   select count(*) into v_count from public.market_signal_events where market=upper(p_market) and symbol=upper(p_symbol) and action<>'HOLD' and created_at>=date_trunc('day',v_now);
