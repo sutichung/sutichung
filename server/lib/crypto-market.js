@@ -140,7 +140,7 @@ async function ratioFor(exchange,base){
  return {exchange,unavailable:true};
 }
 async function getDerivatives(symbol,exchange='Binance',nativeSymbol=''){
- const licensedDerivatives=['Binance','Bybit','OKX','Kraken Futures'].filter(isMarketDataLicensed);
+ const licensedDerivatives=['Binance','Bybit','OKX','Kraken Futures'].filter(provider=>isMarketDataLicensed(provider));
  if(!licensedDerivatives.length)return {status:'license_required',exchange,requestedExchange:exchange,fallbackUsed:false,openInterest:null,fundingRate:null,markPrice:null,indexPrice:null,source:null,timestamp:now(),sourceTime:null,battle:{exchanges:[],validExchanges:0,longPct:null,shortPct:null,stance:'資料不足'},liquidationMap:null};
  const base=String(symbol).toUpperCase().replace(/(USDT|USDC|USD)$/,'');
  const binanceAllowed=isMarketDataLicensed('Binance'),bybitAllowed=isMarketDataLicensed('Bybit'),okxAllowed=isMarketDataLicensed('OKX'),krakenFuturesAllowed=isMarketDataLicensed('Kraken Futures');
