@@ -11,6 +11,8 @@ const { applyFirewall, getTelemetry } = require('./lib/firewall');
 const antColony = require('./lib/ant-colony');
 const { loadMarket: loadUsMarket, getChart: getUsChart, searchSymbols: searchUsSymbols, getUniversePage: getUsUniversePage } = require('./lib/us-market');
 const cryptoMarket = require('./lib/crypto-market');
+const cryptoRealtime = require('./lib/crypto-realtime');
+const cryptoRealtimeFeed = cryptoRealtime.createDefaultCryptoRealtimeFeed();
 const cryptoMicrostructure = require('./lib/crypto-microstructure');
 const { assessMarketRisk } = require('./lib/market-risk');
 const { loadRiskHistory, loadFreshMicrostructure } = require('./lib/crypto-risk-fallback');
@@ -555,8 +557,8 @@ async function route(req,res){
   if(u.pathname==='/api/health/ready'){const readiness=buildDependencyReadiness();return json(res,200,{...buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}),...readiness});}
   if(u.pathname==='/api/health')return json(res,200,{...buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}),auth:{configured:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY},provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),providers:{finmind:!!FINMIND_TOKEN,youtubeApiKeyConfigured:!!process.env.YOUTUBE_API_KEY,youtubeLiveResolver:!!process.env.YOUTUBE_API_KEY,youtubeChannelEmbedFallback:true,openrouter:!!process.env.OPENROUTER_API_KEY,gemini:!!process.env.GEMINI_API_KEY,groq:!!process.env.GROQ_API_KEY,xai:!!process.env.XAI_API_KEY,deepseek:!!process.env.DEEPSEEK_API_KEY,cloudflare:!!(process.env.CLOUDFLARE_API_TOKEN&&process.env.CLOUDFLARE_ACCOUNT_ID),realtime:false,realtimeProviderConfigured:false,officialDailyMarketData:true,twseOfficialOpenApi:true,tpexOfficialOpenApi:true,licensedRealtimeFeedConfigured:false,scan:true,flows:true,futures:true,sentiment:true,news:true,openDataArchive:true}});
   if(SUPABASE_CONFIGURED&&u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/api/auth/')){
-    const automationPaths=new Set(['/api/market/snapshot','/api/market/institutional-flows','/api/market/futures','/api/market/sentiment','/api/market/scan','/api/market/news','/api/market/calendar','/api/diagnostics/providers','/api/diagnostics/vulnerabilities','/api/diagnostics/market','/api/crypto/market','/api/crypto/risk/BTCUSDT','/api/us/market']);
-    const smokeReadOnlyPaths=new Set(['/api/diagnostics/providers','/api/diagnostics/vulnerabilities','/api/diagnostics/market','/api/crypto/market','/api/crypto/risk/BTCUSDT']);
+    const automationPaths=new Set(['/api/market/snapshot','/api/market/institutional-flows','/api/market/futures','/api/market/sentiment','/api/market/scan','/api/market/news','/api/market/calendar','/api/diagnostics/providers','/api/diagnostics/vulnerabilities','/api/diagnostics/market','/api/crypto/market','/api/crypto/realtime/status','/api/crypto/risk/BTCUSDT','/api/us/market']);
+    const smokeReadOnlyPaths=new Set(['/api/diagnostics/providers','/api/diagnostics/vulnerabilities','/api/diagnostics/market','/api/crypto/market','/api/crypto/realtime/status','/api/crypto/risk/BTCUSDT']);
     const automationAuthorized=req.method==='GET'&&automationPaths.has(u.pathname)&&await verifyGitHubActionsToken(bearerToken(req),{allowProductionSmoke:smokeReadOnlyPaths.has(u.pathname)});
     if(!automationAuthorized){
       const user=await authenticatedUser(req);if(!user)return json(res,401,{error:'authentication_required'});
@@ -605,6 +607,9 @@ async function route(req,res){
       const result=await safeLoad(key,3000,()=>cryptoMicrostructure.fetchMicrostructure({exchange,symbol,marketType,depth,whaleThresholdUsd}),e=>({status:String(e.message||'').startsWith('market_data_license_required:')?'license_required':'unavailable',exchange,symbol,error:e.message,book:null,tape:null,timestamp:null}));
       return json(res,result.status==='unavailable'?502:200,result);
     }catch(e){return json(res,400,{error:e.message});}
+  }
+  if(u.pathname==='/api/crypto/realtime/status'){
+    return json(res,200,cryptoRealtimeFeed.status());
   }
   if(u.pathname==='/api/crypto/market'){
     const result=await safeLoad('crypto-market',15000,cryptoMarket.loadMarket,e=>({markets:[],summary:{total:0,spot:0,perpetual:0},source:'unavailable',timestamp:now(),error:e.message}));
@@ -1137,4 +1142,9 @@ const server=http.createServer(async(req,res)=>{
   if(!applyFirewall(req,res))return;
   try{await route(req,res);}catch(e){json(res,500,{error:'internal_error',message:process.env.NODE_ENV==='production'?'服務暫時無法處理請求':e.message});}
 });
-server.listen(PORT,()=>process.stdout.write('Taiwan stock API listening on '+PORT+'\n'));
+server.listen(PORT,()=>{
+  cryptoRealtimeFeed.start();
+  process.stdout.write('Taiwan stock API listening on '+PORT+'\\n');
+});
+process.once('SIGTERM',()=>{cryptoRealtimeFeed.stop();server.close(()=>process.exit(0));});
+process.once('SIGINT',()=>{cryptoRealtimeFeed.stop();server.close(()=>process.exit(0));});
