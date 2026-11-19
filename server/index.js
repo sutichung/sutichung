@@ -24,6 +24,7 @@ const { createDependencyVulnerabilityScanner } = require('./lib/dependency-vulne
 const { verifyGitHubActionsToken } = require('./lib/github-oidc');
 const { buildRuntimeHealth, buildDependencyReadiness } = require('./lib/health');
 const { getHistoricalCoverage, validateHistoryRange } = require('./lib/historical-coverage');
+const { getMarketRegistry } = require('./lib/unified-market-core');
 const researchStorage = require('./lib/research-storage').createResearchStorage();
 const dependencyVulnerabilityScanner = createDependencyVulnerabilityScanner({ lockPath: path.join(__dirname, '..', 'package-lock.json'), manifestPath: path.join(__dirname, '..', 'package.json'), auditPath: path.join(__dirname, '..', 'dependency-audit.json') });
 
@@ -1083,6 +1084,9 @@ async function route(req,res){
       return {data,source:'TWSE OpenAPI newsList（交易所公告，不等同即時財經新聞）',timestamp:now()};
     },e=>({data:[],source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
+  }
+  if(u.pathname==='/api/market/registry'){
+    return json(res,200,getMarketRegistry());
   }
   if(u.pathname==='/api/finance/registry'){
     return json(res,200,globalFinance.getRegistry());
