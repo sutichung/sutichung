@@ -70,7 +70,7 @@ async function probe(id, label, run) {
       sourceTime: result.sourceTime || null
     };
   } catch (error) {
-    const message = safeError(error);
+    const message = providerErrorMessage(id, error);
     const http = String(error && error.message || '').match(/upstream_http_(\d{3})/i);
     return {
       id, label,
@@ -87,6 +87,15 @@ async function probe(id, label, run) {
 
 function notConfigured(id, label, message) {
   return { id, label, status: 'not_configured', httpStatus: null, latencyMs: null, checkedAt: new Date().toISOString(), message };
+}
+
+function providerErrorMessage(id, error) {
+  const raw = String(error && error.message || error || 'unknown_error');
+  const match = raw.match(/upstream_http_(\\d{3})/i);
+  if (id === 'fugle' && match && Number(match[1]) === 403) {
+    return 'Fugle HTTP 403：官方錯誤碼定義為目前訂閱方案不支援此功能。請核對方案是否包含 snapshot／即時行情權限；這不等同 API Key 錯誤，也不要反覆重試。';
+  }
+  return safeError(error);
 }
 
 async function diagnoseProviders(env = process.env) {
@@ -241,6 +250,8 @@ async function diagnoseProviders(env = process.env) {
     '尚未設定 Nasdaq／NYSE／CTA／UTP 或其授權資料商的有效行情 API；Yahoo Finance 僅為非官方備援，不列為官方行情連線。'
   ));
 
+  checks.push(notConfigured('shioaji', '永豐 Shioaji 官方行情串流', '尚未部署 Shioaji 串流轉接服務；需要永豐證券 API 帳戶、憑證及行情權限。完成接入前不會宣稱已取得即時行情。'));
+
   const results = await Promise.all(checks);
   const connected = results.filter(x => x.status === 'connected').length;
   const failed = results.filter(x => ['error','timeout','auth_error','permission_error','region_restricted','rate_limited','upstream_error','http_error','endpoint_error'].includes(x.status)).length;
@@ -254,4 +265,4 @@ async function diagnoseProviders(env = process.env) {
   };
 }
 
-module.exports = { diagnoseProviders, statusForHttp, safeError };
+module.exports = { diagnoseProviders, statusForHttp, safeError, providerErrorMessage };
