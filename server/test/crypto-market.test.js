@@ -257,7 +257,7 @@ test('Kraken Futures REST ticker fallback preserves funding, index and source ti
 });
 
 test('market discovery reports license_required without calling exchange APIs when no redistribution licenses exist',async()=>{
- const keys=Object.keys(MARKET_DATA_TEST_LICENSES),previous=Object.fromEntries(keys.map(k=>[k,process.env[k]));
+ const keys=Object.keys(MARKET_DATA_TEST_LICENSES),previous=Object.fromEntries(keys.map(k=>[k,process.env[k]]));
  for(const key of keys)delete process.env[key];
  const original=global.fetch;let calls=0;global.fetch=async()=>{calls++;throw new Error('exchange_fetch_must_not_run');};
  try{
