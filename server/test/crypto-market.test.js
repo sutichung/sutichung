@@ -232,3 +232,24 @@ test('Kraken Futures history resolves the official product symbol from the ticke
  global.fetch=async url=>{const u=String(url);calls.push(u);const payload=u.includes('/derivatives/api/v3/tickers')?{tickers:[{tag:'perpetual',pair:'XBT:USD',symbol:'pf_xbtusd'}]}:{candles:[{time:1700000000000,open:'100',high:'110',low:'90',close:'105',volume:'12'}]};return {ok:true,status:200,json:async()=>payload};};
  try{const {getHistory}=require('../lib/crypto-market');const result=await getHistory('BTCUSDT','perpetual','1h','Kraken Futures','BTCUSDT',24);assert.equal(result.data.length,1);assert.ok(calls.some(x=>x.includes('/trade/PF_XBTUSD/1h')));}finally{global.fetch=original;}
 });
+
+test('Kraken Futures REST ticker fallback preserves funding, index and source timestamp fields',async()=>{
+ const original=global.fetch;
+ global.fetch=async url=>{
+  const u=String(url);
+  const ok=data=>({ok:true,status:200,json:async()=>data});
+  if(u.includes('fapi.binance.com'))return {ok:false,status:451,json:async()=>({})};
+  if(u.includes('api.bybit.com')||u.includes('api.bytick.com'))return {ok:false,status:403,json:async()=>({})};
+  if(u.includes('futures.kraken.com/derivatives/api/v3/tickers'))return ok({tickers:[{tag:'perpetual',pair:'XBT:USD',symbol:'pf_xbtusd',markPrice:65010,indexPrice:65000,fundingRate:0.0001,lastTime:'2026-11-19T12:00:00.000Z'}]});
+  return {ok:false,status:404,json:async()=>({})};
+ };
+ try{
+  const result=await getDerivatives('BTCUSDT','Binance');
+  assert.equal(result.exchange,'Kraken Futures');
+  assert.equal(result.markPrice,65010);
+  assert.equal(result.indexPrice,65000);
+  assert.equal(result.fundingRate,0.0001);
+  assert.equal(result.sourceTime,'2026-11-19T12:00:00.000Z');
+  assert.equal(result.openInterest,null,'do not invent or mislabel Kraken contract OI units');
+ }finally{global.fetch=original;}
+});
