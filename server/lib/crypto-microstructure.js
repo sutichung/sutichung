@@ -82,7 +82,7 @@ async function fetchMicrostructure({ exchange = 'Binance', symbol, marketType = 
   const levels = Math.min(50, Math.max(5, Number(depth) || 10));
   const base = safeSymbol.replace(/(USDT|USDC|USD|BTC|ETH)$/, '');
   const quoteCurrency = safeSymbol.includes('-') ? safeSymbol.split('-')[1] : (base ? safeSymbol.slice(base.length) : '');
-  const whaleClassificationAvailable = ['USD','USDT','USDC','BUSD','FDUSD','TUSD'].includes(quoteCurrency) && !(exchange === 'OKX' && marketType === 'perpetual');
+  const whaleClassificationAvailable = ['USD','USDT','USDC','BUSD','FDUSD','TUSD'].includes(quoteCurrency) && !(['OKX','Kraken Futures'].includes(exchange) && marketType === 'perpetual');
   let book, trades, source, endpointBase = null;
   if (exchange === 'Binance') {
     const host = marketType === 'perpetual' ? 'https://fapi.binance.com' : 'https://data-api.binance.vision';
@@ -120,6 +120,30 @@ async function fetchMicrostructure({ exchange = 'Binance', symbol, marketType = 
     book = normalizeBook(exchange, row?.bids || [], row?.asks || [], row?.ts, levels, { notionalAvailable: !(marketType === 'perpetual') });
     trades = normalizeTrades(exchange, (t.data || []).map(x => ({ id: x.tradeId, timestamp: Number(x.ts), side: x.side, price: x.px, amount: x.sz, quoteCurrency, whaleClassificationAvailable })), whaleThresholdUsd);
     source = 'OKX public order book + recent trades';
+  } else if (exchange === 'Kraken Futures') {
+    if (marketType !== 'perpetual') throw new Error('Kraken Futures 僅支援永續合約微結構資料');
+    const targetBase = safeSymbol.replace(/(USDT|USDC|USD)$/, '').replace(/^BTC$/, 'XBT');
+    const tickerPayload = await getJson('https://futures.kraken.com/derivatives/api/v3/tickers');
+    const tickers = Array.isArray(tickerPayload.tickers) ? tickerPayload.tickers : [];
+    const ticker = tickers.find(x => {
+      if (!x || x.tag !== 'perpetual') return false;
+      const pair = String(x.pair || '').toUpperCase().split(/[:/]/);
+      return (pair[0] || '').replace(/^XBT$/, 'BTC') === targetBase.replace(/^XBT$/, 'BTC') && pair[1] === 'USD';
+    });
+    const product = String(ticker?.symbol || '').toUpperCase();
+    if (!product) throw new Error('Kraken Futures 找不到對應的官方永續商品代碼');
+    const [bookPayload, tapePayload] = await Promise.all([
+      getJson('https://futures.kraken.com/derivatives/api/v3/orderbook?symbol=' + encodeURIComponent(product)),
+      getJson('https://futures.kraken.com/derivatives/api/v3/history?symbol=' + encodeURIComponent(product))
+    ]);
+    if (bookPayload.result !== 'success' || tapePayload.result !== 'success') throw new Error('Kraken Futures orderbook/history API 回應非 success');
+    const orderBook = bookPayload.orderBook || {};
+    const executions = Array.isArray(tapePayload.history) ? tapePayload.history : [];
+    if (!executions.length) throw new Error('Kraken Futures 最近成交資料為空');
+    endpointBase = 'https://futures.kraken.com';
+    book = normalizeBook(exchange, orderBook.bids || [], orderBook.asks || [], Date.parse(bookPayload.serverTime || tapePayload.serverTime || '') || null, levels, { notionalAvailable: false });
+    trades = normalizeTrades(exchange, executions.map(x => ({ id: x.trade_id, timestamp: Date.parse(x.time || '') || null, side: String(x.side || '').toLowerCase(), price: x.price, amount: x.size, quoteCurrency, whaleClassificationAvailable: false })), whaleThresholdUsd);
+    source = 'Kraken Futures official public order book + recent executions (' + product + ')';
   } else {
     throw new Error('unsupported_exchange');
   }
@@ -128,7 +152,7 @@ async function fetchMicrostructure({ exchange = 'Binance', symbol, marketType = 
   const sellValue = trades.filter(x => x.side === 'sell').reduce((s, x) => s + (x.quoteValue || 0), 0);
   const knownSideTrades = trades.filter(x => x.side === 'buy' || x.side === 'sell');
   const knownSideValue = buyValue + sellValue;
-  const notionalAvailable = !(exchange === 'OKX' && marketType === 'perpetual');
+  const notionalAvailable = !(['OKX','Kraken Futures'].includes(exchange) && marketType === 'perpetual');
   return {
     exchange, symbol: safeSymbol, marketType, source, endpointBase, timestamp: book.timestamp,
     receivedAt: now(), book,
