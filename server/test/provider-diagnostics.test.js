@@ -1,4 +1,5 @@
 'use strict';
+const MARKET_DATA_TEST_LICENSES={BINANCE_MARKET_DATA_LICENSE_CONFIRMED:'true',BYBIT_MARKET_DATA_LICENSE_CONFIRMED:'true',OKX_MARKET_DATA_LICENSE_CONFIRMED:'true',COINBASE_MARKET_DATA_LICENSE_CONFIRMED:'true',KRAKEN_MARKET_DATA_LICENSE_CONFIRMED:'true',KRAKEN_FUTURES_MARKET_DATA_LICENSE_CONFIRMED:'true'};
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { statusForHttp, safeError, diagnoseProviders } = require('../lib/provider-diagnostics');
@@ -41,7 +42,7 @@ test('provider diagnostics verify actual public crypto ticker responses and expo
     return { ok: true, status: 200, text: async () => body };
   };
   try {
-    const result = await diagnoseProviders({OKX_MARKET_DATA_LICENSE_CONFIRMED:'true'});
+    const result = await diagnoseProviders(MARKET_DATA_TEST_LICENSES);
     for (const id of ['binance', 'binance-futures', 'bybit', 'okx', 'okx-swap', 'coinbase', 'kraken', 'kraken-futures']) {
       const check = result.checks.find(x => x.id === id);
       assert.equal(check.status, 'connected', id + ' should validate a real quote-shaped response');
