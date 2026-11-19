@@ -4,7 +4,9 @@ const CHECK_TIMEOUT_MS = 12000;
 
 function statusForHttp(status) {
   if (status >= 200 && status < 300) return 'connected';
-  if (status === 401 || status === 403) return 'auth_error';
+  if (status === 401) return 'auth_error';
+  if (status === 403) return 'permission_error';
+  if (status === 451) return 'region_restricted';
   if (status === 404) return 'endpoint_error';
   if (status === 429) return 'rate_limited';
   if (status >= 500) return 'upstream_error';
@@ -18,9 +20,10 @@ function safeError(error) {
   if (match) {
     const status = Number(match[1]);
     if (status === 401) return 'API 金鑰驗證失敗（HTTP 401）';
-    if (status === 403) return '服務拒絕存取或方案權限不足（HTTP 403）';
+    if (status === 403) return '服務拒絕存取；請檢查 API Key、方案權限及來源 IP 白名單（HTTP 403）';
     if (status === 404) return 'API 路徑不存在（HTTP 404）';
     if (status === 429) return '呼叫頻率或額度受限（HTTP 429）';
+    if (status === 451) return '上游服務因地區或法規限制拒絕此請求（HTTP 451）；不可用代理或偽裝地區繞過';
     return '上游服務回應 HTTP ' + status;
   }
   return raw.replace(/Bearer\s+\S+/gi, 'Bearer [REDACTED]')
@@ -60,9 +63,8 @@ async function probe(id, label, run) {
     return {
       id, label,
       status: /逾時/.test(message) ? 'timeout' :
-        /401/.test(message) ? 'auth_error' :
-        /403/.test(message) ? 'permission_error' :
-        /429/.test(message) ? 'rate_limited' : 'error',
+        http ? statusForHttp(Number(http[1])) :
+        'error',
       httpStatus: http ? Number(http[1]) : null,
       latencyMs: Date.now() - started,
       checkedAt,
@@ -180,6 +182,7 @@ async function diagnoseProviders(env = process.env) {
     ['binance-futures', 'Binance 官方 USDⓈ-M 永續 API', 'https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT', payload => payload.symbol === 'BTCUSDT' && Number(payload.markPrice) > 0, 'BTCUSDT 永續標記價格端點成功'],
     ['bybit', 'Bybit 官方 V5 BTC/USDT 現貨 API（api.bytick.com）', 'https://api.bytick.com/v5/market/tickers?category=spot&symbol=BTCUSDT', payload => payload.retCode === 0 && Number(payload.result?.list?.[0]?.lastPrice) > 0, 'Bybit 官方 alternate mainnet host 回應成功；美國 IP 仍受地區限制'],
     ['okx', 'OKX 官方 BTC-USDT 現貨報價', 'https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT', payload => payload.code === '0' && Number(payload.data?.[0]?.last) > 0, 'BTC-USDT 公開現貨報價端點成功；僅驗證單一商品連線'],
+    ['okx-swap', 'OKX 官方 BTC-USDT 永續合約報價', 'https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT-SWAP', payload => payload.code === '0' && Number(payload.data?.[0]?.last) > 0, 'BTC-USDT-SWAP 公開永續合約報價端點成功；可作為其他衍生品來源受限時的獨立資料源'],
     ['coinbase', 'Coinbase Exchange 官方 BTC-USD 報價', 'https://api.exchange.coinbase.com/products/BTC-USD/ticker', payload => Number(payload.price) > 0, 'BTC-USD 公開現貨報價端點成功；僅驗證單一商品連線'],
     ['kraken', 'Kraken 官方 XBT/USD 報價', 'https://api.kraken.com/0/public/Ticker?pair=XBTUSD', payload => !payload.error?.length && Number(Object.values(payload.result || {})[0]?.c?.[0]) > 0, 'XBT/USD 公開現貨報價端點成功；僅驗證單一商品連線']
   ];
@@ -200,11 +203,12 @@ async function diagnoseProviders(env = process.env) {
 
   const results = await Promise.all(checks);
   const connected = results.filter(x => x.status === 'connected').length;
-  const failed = results.filter(x => ['error','timeout','auth_error','permission_error','rate_limited'].includes(x.status)).length;
+  const failed = results.filter(x => ['error','timeout','auth_error','permission_error','region_restricted','rate_limited','upstream_error','http_error','endpoint_error'].includes(x.status)).length;
+  const regionRestricted = results.filter(x => x.status === 'region_restricted').length;
   const notSet = results.filter(x => x.status === 'not_configured').length;
   return {
     generatedAt: new Date().toISOString(),
-    summary: { total: results.length, connected, failed, notConfigured: notSet },
+    summary: { total: results.length, connected, failed, regionRestricted, notConfigured: notSet },
     checks: results,
     policy: 'Connected means an actual non-billable GET request succeeded. Key presence alone is never reported as connected.'
   };
