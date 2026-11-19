@@ -34,6 +34,17 @@ jobs:
             echo "Skipping stale commit $EXPECTED_COMMIT; main is now $CURRENT_MAIN"
             exit 0
           fi
+          git fetch --no-tags --depth=30 origin main
+          DEPLOY_COMMIT="$EXPECTED_COMMIT"
+          for history_step in $(seq 1 20); do
+            CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r "$DEPLOY_COMMIT")
+            if [ -z "$CHANGED_FILES" ] || echo "$CHANGED_FILES" | grep -Evq '^(\.github/workflows/|server/test/|docs/)'; then
+              break
+            fi
+            PARENT_COMMIT=$(git rev-parse "$DEPLOY_COMMIT^" 2>/dev/null || true)
+            [ -n "$PARENT_COMMIT" ] || break
+            DEPLOY_COMMIT="$PARENT_COMMIT"
+          done
           for attempt in $(seq 1 36); do
             CURRENT_MAIN=$(git ls-remote "https://github.com/$GITHUB_REPOSITORY.git" refs/heads/main | cut -f1)
             if [ "$CURRENT_MAIN" != "$EXPECTED_COMMIT" ]; then
@@ -43,23 +54,24 @@ jobs:
             fi
             if curl --fail --silent --show-error --max-time 10 "$MARKET_APP_URL/api/health" -o /tmp/health.json; then
               ACTUAL_COMMIT=$(node -e "const h=require('/tmp/health.json');process.stdout.write(h.commit||'')")
-              if [ "$ACTUAL_COMMIT" = "$EXPECTED_COMMIT" ]; then
+              if [ "$ACTUAL_COMMIT" = "$EXPECTED_COMMIT" ] || [ "$ACTUAL_COMMIT" = "$DEPLOY_COMMIT" ]; then
                 node -e "const h=require('/tmp/health.json');if(!h.ok||h.branch!=='main')process.exit(1)"
+                echo "deploy_commit=$ACTUAL_COMMIT" >> "$GITHUB_OUTPUT"
                 echo "skip=false" >> "$GITHUB_OUTPUT"
-                echo "Render is serving expected commit $ACTUAL_COMMIT"
+                echo "Render is serving verified commit $ACTUAL_COMMIT (source commit $EXPECTED_COMMIT)"
                 exit 0
               fi
-              echo "Render still serves $ACTUAL_COMMIT; waiting for $EXPECTED_COMMIT"
+              echo "Render still serves $ACTUAL_COMMIT; waiting for $EXPECTED_COMMIT or runtime commit $DEPLOY_COMMIT"
             fi
             sleep 10
           done
-          echo "Render did not activate expected commit $EXPECTED_COMMIT within six minutes" >&2
+          echo "Render did not activate expected/runtime commit within six minutes" >&2
           exit 1
       - name: Verify official Taiwan and multi-exchange crypto data from Render
         if: steps.wait-live.outputs.skip != 'true'
         env:
           MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
-          EXPECTED_COMMIT: ${{ github.event.workflow_run.head_sha }}
+          EXPECTED_COMMIT: ${{ steps.wait-live.outputs.deploy_commit }}
           CI_RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
           set -euo pipefail
