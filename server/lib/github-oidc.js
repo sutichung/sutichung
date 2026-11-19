@@ -5,6 +5,7 @@ const ISSUER='https://token.actions.githubusercontent.com';
 const JWKS_URL=ISSUER+'/.well-known/jwks';
 const EXPECTED={aud:'taiwan-stock-hunter-automation',repository:'sutichung/sutichung',ref:'refs/heads/main'};
 const MARKET_WORKFLOW='sutichung/sutichung/.github/workflows/market-automation.yml@refs/heads/main';
+const REFRESH_WORKFLOW='sutichung/sutichung/.github/workflows/market-data-refresh.yml@refs/heads/main';
 const SMOKE_WORKFLOW='sutichung/sutichung/.github/workflows/production-smoke.yml@refs/heads/main';
 let cachedKeys=null,keysExpiresAt=0;
 
@@ -31,7 +32,7 @@ async function verifyGitHubActionsToken(token,{fetchImpl=fetch,now=Date.now(),al
     const seconds=Math.floor(now/1000);
     if(claims.iss!==ISSUER||claims.aud!==EXPECTED.aud)return false;
     if(claims.repository!==EXPECTED.repository||claims.ref!==EXPECTED.ref)return false;
-    const allowedWorkflowEvent=(claims.workflow_ref===MARKET_WORKFLOW&&['schedule','workflow_dispatch'].includes(claims.event_name))||
+    const allowedWorkflowEvent=([MARKET_WORKFLOW,REFRESH_WORKFLOW].includes(claims.workflow_ref)&&['schedule','workflow_dispatch'].includes(claims.event_name))||
       (allowProductionSmoke&&claims.workflow_ref===SMOKE_WORKFLOW&&['push','workflow_run'].includes(claims.event_name));
     if(!allowedWorkflowEvent)return false;
     if(!Number.isFinite(claims.exp)||claims.exp<seconds-30||!Number.isFinite(claims.iat)||claims.iat>seconds+30)return false;
