@@ -106,12 +106,10 @@ test('all exchange diagnostics remain blocked without provider-specific redistri
 });
 
 
-test('Fugle HTTP 403 is identified as a subscription feature restriction', () => {
-  const message = providerErrorMessage('fugle', new Error('upstream_http_403'));
-  assert.match(message, /訂閱方案不支援此功能/);
-  assert.match(message, /snapshot/);
-  assert.doesNotMatch(message, /來源 IP 白名單/);
-  assert.match(providerErrorMessage('other', new Error('upstream_http_403')), /HTTP 403/);
+test('generic HTTP 403 remains a permission error without vendor-specific advice', () => {
+  const message = providerErrorMessage('other', new Error('upstream_http_403'));
+  assert.match(message, /HTTP 403/);
+  assert.doesNotMatch(message, /Fugle|snapshot/);
 });
 
 test('Shioaji is explicitly shown as not configured until its licensed adapter exists', async () => {
