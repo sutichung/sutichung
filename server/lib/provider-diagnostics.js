@@ -91,7 +91,7 @@ function notConfigured(id, label, message) {
 
 function providerErrorMessage(id, error) {
   const raw = String(error && error.message || error || 'unknown_error');
-  const match = raw.match(/upstream_http_(\\d{3})/i);
+  const match = raw.match(/upstream_http_(\d{3})/i);
   if (id === 'fugle' && match && Number(match[1]) === 403) {
     return 'Fugle HTTP 403：官方錯誤碼定義為目前訂閱方案不支援此功能。請核對方案是否包含 snapshot／即時行情權限；這不等同 API Key 錯誤，也不要反覆重試。';
   }
