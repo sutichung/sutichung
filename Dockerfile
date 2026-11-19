@@ -16,6 +16,7 @@ COPY --from=build /app/server ./server
 COPY --from=build /app/package-lock.json ./package-lock.json
 COPY --from=build /app/dependency-audit.json ./dependency-audit.json
 COPY --from=build /app/package.json ./package.json
+RUN npm ci --omit=dev --no-audit --no-fund
 COPY --from=build /app/build ./build
 EXPOSE 8787
 USER node
