@@ -41,7 +41,7 @@ test('provider diagnostics verify actual public crypto ticker responses and expo
     return { ok: true, status: 200, text: async () => body };
   };
   try {
-    const result = await diagnoseProviders({});
+    const result = await diagnoseProviders({OKX_MARKET_DATA_LICENSE_CONFIRMED:'true'});
     for (const id of ['binance', 'binance-futures', 'bybit', 'okx', 'okx-swap', 'coinbase', 'kraken', 'kraken-futures']) {
       const check = result.checks.find(x => x.id === id);
       assert.equal(check.status, 'connected', id + ' should validate a real quote-shaped response');
@@ -77,7 +77,7 @@ test('ECB provider falls back to the official daily XML feed when the primary AP
     throw new Error('unexpected_test_url');
   };
   try {
-    const result = await diagnoseProviders({});
+    const result = await diagnoseProviders({OKX_MARKET_DATA_LICENSE_CONFIRMED:'true'});
     const ecb = result.checks.find(x => x.id === 'ecb');
     assert.equal(ecb.status, 'connected');
     assert.equal(ecb.sourceTime, '2026-11-19');
@@ -89,4 +89,10 @@ test('provider diagnostics classify regional restrictions and permission denials
   assert.equal(statusForHttp(403), 'permission_error');
   assert.equal(statusForHttp(451), 'region_restricted');
   assert.match(safeError(new Error('upstream_http_451')), /不可用代理或偽裝地區繞過/);
+});
+
+test('OKX public endpoints are not probed or marked connected without written redistribution license',async()=>{
+ const original=global.fetch;let okxCalls=0;
+ global.fetch=async url=>{if(String(url).includes('okx.com'))okxCalls++;throw new Error('unexpected_test_url');};
+ try{const result=await diagnoseProviders({});for(const id of ['okx','okx-swap']){const check=result.checks.find(x=>x.id===id);assert.equal(check.status,'not_configured');assert.match(check.message,/書面同意/);}assert.equal(okxCalls,0);}finally{global.fetch=original;}
 });
