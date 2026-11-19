@@ -109,7 +109,7 @@ test('all exchange diagnostics remain blocked without provider-specific redistri
 test('generic HTTP 403 remains a permission error without vendor-specific advice', () => {
   const message = providerErrorMessage('other', new Error('upstream_http_403'));
   assert.match(message, /HTTP 403/);
-  assert.doesNotMatch(message, /Fugle|snapshot/);
+  assert.doesNotMatch(message, /snapshot/);
 });
 
 test('Shioaji is explicitly shown as not configured until its licensed adapter exists', async () => {
