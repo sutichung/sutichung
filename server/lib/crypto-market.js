@@ -93,6 +93,7 @@ function normalizeKlines(rows,exchange,interval='1d',asOf=Date.now(),includeCurr
  if(exchange==='OKX')candles=rows.map(x=>({time:timestampIso(x[0]),open:n(x[1]),high:n(x[2]),low:n(x[3]),close:n(x[4]),volume:n(x[5])}));
  if(exchange==='Coinbase')candles=rows.map(x=>({time:timestampIso(x[0],1000),low:n(x[1]),high:n(x[2]),open:n(x[3]),close:n(x[4]),volume:n(x[5])}));
  if(exchange==='Kraken')candles=rows.map(x=>({time:timestampIso(x[0],1000),open:n(x[1]),high:n(x[2]),low:n(x[3]),close:n(x[4]),volume:n(x[6])}));
+ if(exchange==='Kraken Futures')candles=rows.map(x=>({time:timestampIso(x.time),open:n(x.open),high:n(x.high),low:n(x.low),close:n(x.close),volume:n(x.volume)}));
  if(exchange==='Binance')candles=rows.map(x=>({time:timestampIso(x[0]),open:n(x[1]),high:n(x[2]),low:n(x[3]),close:n(x[4]),volume:n(x[5])}));
  const duration=({'1m':60000,'5m':300000,'15m':900000,'30m':1800000,'1h':3600000,'4h':14400000,'1d':86400000}[interval]||86400000);
  const valid=candles.filter(x=>{
@@ -117,6 +118,7 @@ async function getHistory(symbol,marketType='spot',interval='1d',exchange='Binan
   else if(exchange==='OKX'){const inst=clean.includes('-')?clean:clean.replace(/(USDT|USDC|USD)$/,'-$1')+(marketType==='perpetual'?'-SWAP':'');const x=await getJson('https://www.okx.com/api/v5/market/candles?'+new URLSearchParams({instId:inst,bar:iv==='1d'?'1D':iv,limit:String(Math.min(limit,300))}));if(x.code!=='0')throw new Error(x.msg);rows=x.data;}
   else if(exchange==='Coinbase'){const product=clean.includes('-')?clean:clean.replace(/(USDT|USDC|USD)$/,'-$1');const granularity=({'1m':60,'5m':300,'15m':900,'1h':3600,'1d':86400}[iv]||86400);rows=await getJson('https://api.exchange.coinbase.com/products/'+encodeURIComponent(product)+'/candles?granularity='+granularity);}
   else if(exchange==='Kraken'){const x=await getJson('https://api.kraken.com/0/public/OHLC?'+new URLSearchParams({pair:clean,interval:iv==='4h'?'240':iv==='1h'?'60':iv==='30m'?'30':iv==='15m'?'15':iv==='5m'?'5':iv==='1m'?'1':'1440'}));if(x.error?.length)throw new Error(x.error.join(','));const key=Object.keys(x.result||{}).find(k=>k!=='last');rows=x.result?.[key]||[];}
+  else if(exchange==='Kraken Futures'){const base=clean.replace(/(USDT|USDC|USD)$/,'').replace(/^BTC$/,'XBT');const product='PF_'+base+'USD';const resolution=({'1m':'1m','5m':'5m','15m':'15m','30m':'30m','1h':'1h','4h':'4h','1d':'1d'}[iv]||'1d');const x=await getJson('https://futures.kraken.com/api/charts/v1/trade/'+encodeURIComponent(product)+'/'+resolution+'?count='+String(limit));rows=Array.isArray(x.candles)?x.candles:[];source='Kraken Futures official public '+product+' candles';}
   const candles=normalizeKlines(rows,exchange,iv,Date.now(),true);
   if(!candles.length)throw new Error(exchange+' 此市場沒有可用 K 線');
   return {symbol,marketType,exchange,interval,data:candles,indicators:indicators(candles),asOf:candles.at(-1).time,source,timestamp:now()};
@@ -133,21 +135,23 @@ async function ratioFor(exchange,base){
 async function getDerivatives(symbol,exchange='Binance',nativeSymbol=''){
  const base=String(symbol).toUpperCase().replace(/(USDT|USDC|USD)$/,'');
  const okxInst=base+'-USDT-SWAP';
- const [battle,binance,binanceOi,bybit,okxFunding,okxOi,okxMark]=await Promise.all([
+ const [battle,binance,binanceOi,bybit,okxFunding,okxOi,okxMark,krakenFutures]=await Promise.all([
   Promise.all(['Binance','Bybit','OKX'].map(x=>ratioFor(x,base))),
   getJson('https://fapi.binance.com/fapi/v1/premiumIndex?symbol='+base+'USDT').catch(()=>null),
   getJson('https://fapi.binance.com/fapi/v1/openInterest?symbol='+base+'USDT').catch(()=>null),
   getJsonFallback(['https://api.bybit.com','https://api.bytick.com'].map(host=>host+'/v5/market/tickers?category=linear&symbol='+base+'USDT')).then(x=>x.data).catch(()=>null),
   getJson('https://www.okx.com/api/v5/public/funding-rate?instId='+okxInst).catch(()=>null),
   getJson('https://www.okx.com/api/v5/public/open-interest?instType=SWAP&instId='+okxInst).catch(()=>null),
-  getJson('https://www.okx.com/api/v5/public/mark-price?instType=SWAP&instId='+okxInst).catch(()=>null)
+  getJson('https://www.okx.com/api/v5/public/mark-price?instType=SWAP&instId='+okxInst).catch(()=>null),
+  getJson('https://futures.kraken.com/derivatives/api/v3/tickers').catch(()=>null)
  ]);
  const bq=bybit?.result?.list?.[0],of=okxFunding?.data?.[0],oi=okxOi?.data?.[0],om=okxMark?.data?.[0];
  const toIso=value=>{const ms=Number(value);return value!==null&&value!==undefined&&Number.isFinite(ms)&&ms>0?new Date(ms).toISOString():null;};
  const rows=[
   {exchange:'Binance',fundingRate:n(binance?.lastFundingRate),markPrice:n(binance?.markPrice),indexPrice:n(binance?.indexPrice),openInterest:n(binanceOi?.openInterest),sourceTime:toIso(binance?.time)},
   {exchange:'Bybit',fundingRate:n(bq?.fundingRate),markPrice:n(bq?.markPrice),indexPrice:n(bq?.indexPrice),openInterest:n(bq?.openInterest),sourceTime:toIso(bybit?.time)},
-  {exchange:'OKX',fundingRate:n(of?.fundingRate),markPrice:n(om?.markPx),indexPrice:n(om?.idxPx),openInterest:n(oi?.oiCcy),sourceTime:toIso(om?.ts)||toIso(of?.fundingTime)}
+  {exchange:'OKX',fundingRate:n(of?.fundingRate),markPrice:n(om?.markPx),indexPrice:n(om?.idxPx),openInterest:n(oi?.oiCcy),sourceTime:toIso(om?.ts)||toIso(of?.fundingTime)},
+  ...((Array.isArray(krakenFutures?.tickers)?krakenFutures.tickers:Array.isArray(krakenFutures?.result)?krakenFutures.result:[]).filter(x=>x&&x.tag==='perpetual'&&String(x.pair||'').replace(':','').replace(/^XBT/,'BTC').startsWith(base+'USD')).slice(0,1).map(x=>({exchange:'Kraken Futures',fundingRate:n(x.funding_rate),markPrice:n(x.markPrice),indexPrice:n(x.index),openInterest:n(x.openInterest),sourceTime:toIso(x.time)})))
  ];
  const ratios=battle.filter(x=>x&&Number.isFinite(x.longPct)&&Number.isFinite(x.shortPct));
  const longPct=ratios.length?ratios.reduce((sum,x)=>sum+x.longPct,0)/ratios.length:null;
@@ -155,7 +159,7 @@ async function getDerivatives(symbol,exchange='Binance',nativeSymbol=''){
  const usable=x=>x&&Number.isFinite(x.markPrice)&&x.markPrice>0&&Number.isFinite(x.openInterest)&&x.openInterest>0;
  const selected=usable(requested)?requested:(rows.find(usable)||requested||rows[0]);
  const fallbackUsed=!!(selected&&selected.exchange!==exchange);
- const sourceByExchange={Binance:'Binance official USD-M Futures premiumIndex/openInterest',Bybit:'Bybit official V5 linear tickers',OKX:'OKX official public funding-rate/mark-price/open-interest'};
+ const sourceByExchange={Binance:'Binance official USD-M Futures premiumIndex/openInterest',Bybit:'Bybit official V5 linear tickers',OKX:'OKX official public funding-rate/mark-price/open-interest','Kraken Futures':'Kraken official Futures public tickers'};
  const receivedAt=now();
  return {exchange:selected?.exchange||exchange,requestedExchange:exchange,fallbackUsed,openInterest:selected?.openInterest??null,openInterestAsset:base,fundingRate:selected?.fundingRate??null,markPrice:selected?.markPrice??null,indexPrice:selected?.indexPrice??null,source:sourceByExchange[selected?.exchange]||'官方衍生品 API',timestamp:receivedAt,receivedAt,sourceTime:selected?.sourceTime??null,battle:{exchanges:battle,validExchanges:ratios.length,longPct,shortPct:longPct===null?null:100-longPct,stance:longPct===null?'資料不足':longPct>55?'多方佔優':longPct<45?'空方佔優':'多空拉鋸'},liquidationMap:liquidationMap(selected?.markPrice,selected?.openInterest,base)};
 }
