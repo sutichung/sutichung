@@ -65,7 +65,7 @@ function createSignalJournal({env=process.env,fetchImpl=fetch}={}){
  }
  async function dailyReview(date){
   if(!/^\d{4}-\d{2}-\d{2}$/.test(String(date||'')))throw error('invalid_review_date');
-  const start=new Date(date+'T00:00:00.000+08:00');if(!Number.isFinite(start.getTime())||start.toISOString().slice(0,10)!==date)throw error('invalid_review_date');
+  const calendarDate=new Date(date+'T00:00:00.000Z');if(!Number.isFinite(calendarDate.getTime())||calendarDate.toISOString().slice(0,10)!==date)throw error('invalid_review_date');const start=new Date(date+'T00:00:00+08:00');
   const end=new Date(start.getTime()+86400000).toISOString();
   const rows=await request('market_signal_events?select=*&created_at=gte.'+start.toISOString()+'&created_at=lt.'+end+'&order=created_at.asc');
   const review=buildDailyReview(Array.isArray(rows)?rows:[],date);
