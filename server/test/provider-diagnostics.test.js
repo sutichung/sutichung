@@ -67,9 +67,9 @@ test('ECB provider falls back to the official daily XML feed when the primary AP
     if (target.includes('www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml')) return { ok:true,status:200,text:async()=>'<gesmes:Envelope><Cube time="2026-11-19"><Cube currency="USD" rate="1.15"/></Cube></gesmes:Envelope>' };
     if (target.includes('openapi.twse.com.tw')) return { ok:true,status:200,text:async()=>JSON.stringify([{Code:'2330'}]) };
     if (target.includes('bankofcanada.ca')) return { ok:true,status:200,text:async()=>JSON.stringify({observations:[{d:'2026-11-18',FXCADUSD:{v:'0.7'}}]}) };
-    if (target.includes('data-api.binance.vision')) return { ok:true,status:200,text:async()=>JSON.stringify({symbol:'BTCUSDT',price:'65000'}) };
+    if (target.includes('data-api.binance.vision') || target.includes('api.binance.com')) return { ok:true,status:200,text:async()=>JSON.stringify({symbol:'BTCUSDT',price:'65000'}) };
     if (target.includes('fapi.binance.com')) return { ok:true,status:200,text:async()=>JSON.stringify({symbol:'BTCUSDT',markPrice:'65000'}) };
-    if (target.includes('api.bytick.com')) return { ok:true,status:200,text:async()=>JSON.stringify({retCode:0,result:{list:[{lastPrice:'65000'}]}}) };
+    if (target.includes('api.bybit.com') || target.includes('api.bytick.com')) return { ok:true,status:200,text:async()=>JSON.stringify({retCode:0,result:{list:[{lastPrice:'65000'}]}}) };
     if (target.includes('www.okx.com')) return { ok:true,status:200,text:async()=>JSON.stringify({code:'0',data:[{last:'65000'}]}) };
     if (target.includes('api.exchange.coinbase.com')) return { ok:true,status:200,text:async()=>JSON.stringify({price:'65000'}) };
     if (target.includes('api.kraken.com')) return { ok:true,status:200,text:async()=>JSON.stringify({error:[],result:{X:{c:['65000']}}}) };
