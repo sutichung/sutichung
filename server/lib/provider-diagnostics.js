@@ -16,7 +16,11 @@ function statusForHttp(status) {
 
 function safeError(error) {
   const raw = String(error && error.message || error || 'unknown_error');
-  if (/abort|timeout/i.test(raw)) return '連線逾時（12 秒）';
+  if (/abort|timeout/i.test(raw)) {
+    const timeoutMs = Number(error && error.timeoutMs);
+    const seconds = Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.ceil(timeoutMs / 1000) : 12;
+    return '連線逾時（' + seconds + ' 秒）';
+  }
   const match = raw.match(/upstream_http_(\d{3})/i);
   if (match) {
     const status = Number(match[1]);
@@ -39,6 +43,13 @@ async function request(url, options = {}, timeoutMs = CHECK_TIMEOUT_MS) {
     const response = await fetch(url, { ...options, signal: controller.signal });
     const body = await response.text();
     return { response, body };
+  } catch (error) {
+    if (controller.signal.aborted) {
+      const timeoutError = new Error('request timeout');
+      timeoutError.timeoutMs = timeoutMs;
+      throw timeoutError;
+    }
+    throw error;
   } finally {
     clearTimeout(timer);
   }
