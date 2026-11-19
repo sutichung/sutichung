@@ -35,3 +35,10 @@ A flag applies only to its named provider. It does not authorize another exchang
 - Risk analysis reports `license_required` rather than inventing data or silently switching to an unlicensed source.
 - The production smoke test accepts this explicit compliance state as degraded service, not as successful market-data availability.
 - Other official market sources (for example TWSE) remain subject to their own data terms and entitlements.
+
+
+## Taiwan equity provider fallback
+
+- **Fugle HTTP 403** means the current subscription plan does not support the requested feature according to Fugle's official error-code documentation. Check the subscribed plan and whether the selected endpoint (for example, snapshot quotes) is included. Do not treat every 403 as a bad API key or blindly retry. See https://developer.fugle.tw/docs/data/error_codes/ and https://developer.fugle.tw/docs/pricing/.
+- **Shioaji** is a separate SinoPac API route, not a drop-in key-only REST provider. The official integration requires a SinoPac API account and certificate/configuration; streaming subscriptions should be used for intraday realtime data, not repeated polling of snapshots or historical K-bars. Subscription and connection limits apply. See https://sinotrade.github.io/zh/tutor/market_data/streaming/stocks/ and https://sinotrade.github.io/tutor/limit/.
+- The Shioaji adapter is not deployed or connected yet. Do not show it as connected until an authenticated, authorized adapter reports live source timestamps and passes quote-quality checks.
