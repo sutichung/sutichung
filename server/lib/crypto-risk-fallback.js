@@ -4,7 +4,7 @@ const SUPPORTED_EXCHANGES=['Binance','Bybit','OKX','Kraken Futures'];
 const HISTORY_EXCHANGES=['Binance','Bybit','OKX','Coinbase','Kraken','Kraken Futures'];
 function okxLicensed(){return process.env.OKX_MARKET_DATA_LICENSE_CONFIRMED==='true';}
 function candidates(primary,preferred){
-  const microstructureExchanges=['Binance','Bybit',...(okxLicensed()?['OKX']:[])];
+  const microstructureExchanges=['Binance','Bybit',...(okxLicensed()?['OKX']:[]),'Kraken Futures'];
   return [...new Set([preferred,primary,...microstructureExchanges].filter(x=>microstructureExchanges.includes(x)))];
 }
 async function loadRiskHistory({getHistory,symbol,marketType,interval='15m',exchange='Binance',nativeSymbol=symbol,limit=240}){
