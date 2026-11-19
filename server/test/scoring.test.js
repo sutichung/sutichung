@@ -18,6 +18,25 @@ test('score is deterministic and distinguishes bullish and bearish inputs',()=>{
  assert.equal(bull.direction,'偏向買進');
  assert.equal(bear.direction,'偏向賣出／避險');
 });
+test('intraday Taiwan scores fail closed when the technical candle is from a prior session',()=>{
+ const quoteTime=new Date().toISOString();
+ const yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10);
+ const x=scoreStock({trend:'bullish',macd:2,signal:1,rsi:60,volumeRatio:2,institutionalNet:100,fearGreed:15,advanceDecline:1.5,futuresChangePct:1,asOf:quoteTime,maxAgeMs:3600000,technicalAsOf:yesterday,quoteIsLive:true,marketSessionOpen:true});
+ assert.equal(x.fresh,false);assert.equal(x.status,'insufficient-data');assert.equal(x.direction,'觀望');
+ assert.ok(x.reasons.some(reason=>reason.includes('前一交易日')));
+});
+test('intraday Taiwan scores accept same-session technical data with a fresh live quote',()=>{
+ const quoteTime=new Date().toISOString();
+ const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date());
+ const x=scoreStock({trend:'bullish',macd:2,signal:1,rsi:60,volumeRatio:2,institutionalNet:100,fearGreed:15,advanceDecline:1.5,futuresChangePct:1,asOf:quoteTime,maxAgeMs:3600000,technicalAsOf:today,quoteIsLive:true,marketSessionOpen:true});
+ assert.equal(x.fresh,true);assert.equal(x.status,'research-ready');
+});
+test('outside the Taiwan cash session, the latest completed daily technical candle remains usable',()=>{
+ const quoteTime=new Date().toISOString();
+ const yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10);
+ const x=scoreStock({trend:'bullish',macd:2,signal:1,rsi:60,volumeRatio:2,institutionalNet:100,fearGreed:15,advanceDecline:1.5,futuresChangePct:1,asOf:quoteTime,maxAgeMs:3600000,technicalAsOf:yesterday,quoteIsLive:false,marketSessionOpen:false});
+ assert.equal(x.fresh,true);
+});
 test('missing timestamps fail closed',()=>{
  const x=scoreStock({trend:'bullish',macd:2,signal:1,rsi:60,volumeRatio:2,institutionalNet:100,fearGreed:15,advanceDecline:1.5,futuresChangePct:1});
  assert.equal(x.fresh,false);
