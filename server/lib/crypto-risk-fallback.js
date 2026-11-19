@@ -1,15 +1,16 @@
 'use strict';
+const { isMarketDataLicensed } = require('./market-data-license');
 
 const SUPPORTED_EXCHANGES=['Binance','Bybit','OKX','Kraken Futures'];
 const HISTORY_EXCHANGES=['Binance','Bybit','OKX','Coinbase','Kraken','Kraken Futures'];
-function okxLicensed(){return process.env.OKX_MARKET_DATA_LICENSE_CONFIRMED==='true';}
+function okxLicensed(){return isMarketDataLicensed('OKX');}
 function candidates(primary,preferred,marketType='perpetual'){
-  const microstructureExchanges=['Binance','Bybit',...(okxLicensed()?['OKX']:[]),...(marketType==='perpetual'?['Kraken Futures']:[])];
+  const microstructureExchanges=['Binance','Bybit','OKX',...(marketType==='perpetual'?['Kraken Futures']:[])].filter(isMarketDataLicensed);
   return [...new Set([preferred,primary,...microstructureExchanges].filter(x=>microstructureExchanges.includes(x)))];
 }
 async function loadRiskHistory({getHistory,symbol,marketType,interval='15m',exchange='Binance',nativeSymbol=symbol,limit=240}){
   const errors=[];
-  const eligible=(marketType==='perpetual'?SUPPORTED_EXCHANGES:HISTORY_EXCHANGES).filter(x=>x!=='OKX'||okxLicensed());
+  const eligible=(marketType==='perpetual'?SUPPORTED_EXCHANGES:HISTORY_EXCHANGES).filter(isMarketDataLicensed);
   const order=[...new Set([exchange,...eligible])].filter(x=>eligible.includes(x));
   for(const candidate of order){
     try{
