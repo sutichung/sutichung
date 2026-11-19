@@ -93,7 +93,7 @@ jobs:
           const cryptoRisk = JSON.parse(fs.readFileSync('/tmp/crypto-risk.json', 'utf8'));
           const providers = JSON.parse(fs.readFileSync('/tmp/providers.json', 'utf8'));
           const vulnerabilities = JSON.parse(fs.readFileSync('/tmp/vulnerabilities.json', 'utf8'));
-          const exchangeChecks = (providers.checks || []).filter(x => ['binance','binance-futures','bybit','okx','okx-swap','coinbase','kraken'].includes(x.id));
+          const exchangeChecks = (providers.checks || []).filter(x => ['binance','binance-futures','bybit','okx','okx-swap','coinbase','kraken','kraken-futures'].includes(x.id));
           const providerFailures = (providers.checks || []).filter(x => ['auth_error','permission_error','region_restricted','rate_limited','timeout','error','upstream_error','http_error','endpoint_error'].includes(x.status));
           const requiredProviderIds = new Set(['twse','ecb','supabase']);
           const optionalProviderRestrictions = providerFailures.filter(x => !requiredProviderIds.has(x.id)).map(x => ({ id:x.id, label:x.label, status:x.status, httpStatus:x.httpStatus, reason:x.httpStatus===451?'region_restricted':x.id==='fugle'?'api_entitlement_or_key_permission':'optional_provider_unavailable' }));
