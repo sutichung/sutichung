@@ -18,6 +18,7 @@ const { runStrategyLab } = require('./lib/strategy-lab');
 const globalFinance = require('./lib/global-finance');
 const globalIntelligence = require('./lib/intelligence');
 const { diagnoseProviders } = require('./lib/provider-diagnostics');
+const { epochMilliseconds, isStaleTimestamp } = require('./lib/market-timestamps');
 const { createDependencyVulnerabilityScanner } = require('./lib/dependency-vulnerabilities');
 const { verifyGitHubActionsToken } = require('./lib/github-oidc');
 const { buildRuntimeHealth } = require('./lib/health');
@@ -832,7 +833,7 @@ async function route(req,res){
           const rows=Array.isArray(payload.data)?payload.data:[];
           const validRows=rows.filter(x=>x&&x.symbol&&!x.isTrial&&Number.isFinite(Number(x.lastPrice))&&Number(x.lastPrice)>0);
           if(!validRows.length)throw new Error('Fugle TSE 快照沒有有效報價');
-          const sample=validRows.slice(0,5).map(x=>({symbol:String(x.symbol),name:x.name||String(x.symbol),price:Number(x.lastPrice),timestamp:Number(x.lastUpdated)>0?new Date(Number(x.lastUpdated)/1000).toISOString():null,delayed:!Number.isFinite(Number(x.lastUpdated))||Date.now()-Number(x.lastUpdated)>300000,quoteType:'fugle-snapshot'}));
+          const sample=validRows.slice(0,5).map(x=>({symbol:String(x.symbol),name:x.name||String(x.symbol),price:Number(x.lastPrice),timestamp:epochMilliseconds(x.lastUpdated)?new Date(epochMilliseconds(x.lastUpdated)).toISOString():null,delayed:isStaleTimestamp(epochMilliseconds(x.lastUpdated)),quoteType:'fugle-snapshot'}));
           return json(res,200,{ok:true,connection:'connected',source:'Fugle TSE 官方行情快照',provider:'fugle',fallbackUsed:false,listedCount:null,requestedCount:5,scannedCount:rows.length,quoteCount:validRows.length,coveragePct:null,delayedCount:sample.filter(x=>x.delayed).length,serverTime:now(),sample});
         }catch(error){primaryProviderWarning='Fugle：'+String(error.message||error).slice(0,200);}
       }
@@ -855,10 +856,10 @@ async function route(req,res){
           const settled=await Promise.allSettled(markets.map(async market=>{const u=new URL(FUGLE_BASE+'/snapshot/quotes/'+market);const payload=await fetchJson(u.toString(),10000,{'X-API-KEY':FUGLE_API_KEY});return {...payload,market:payload.market||market};}));
           const payloads=settled.filter(x=>x.status==='fulfilled').map(x=>x.value);
           if(!payloads.length)throw new Error('Fugle 上市、上櫃、興櫃與創新板快照均無法取得：'+settled.map(x=>x.reason?.message||'unknown').join('；'));
-          const data={};for(const payload of payloads){for(const row of (payload.data||[])){if(!row.symbol)continue;const stamp=Number(row.lastUpdated);const quoteTime=Number.isFinite(stamp)&&stamp>0?new Date(stamp/1000).toISOString():null;
+          const data={};for(const payload of payloads){for(const row of (payload.data||[])){if(!row.symbol)continue;const quoteTimeMs=epochMilliseconds(row.lastUpdated);const quoteTime=quoteTimeMs?new Date(quoteTimeMs).toISOString():null;
           const isIndex=String(row.type||'').toUpperCase()==='INDEX',lastPrice=Number(row.lastPrice),closePrice=Number(row.closePrice);
           const price=isIndex?(Number.isFinite(closePrice)&&closePrice>0?closePrice:null):(!row.isTrial&&Number.isFinite(lastPrice)&&lastPrice>0?lastPrice:null);
-          const hasPrice=price!==null,delayed=!hasPrice||!quoteTime||!Number.isFinite(Date.parse(quoteTime))||Date.now()-Date.parse(quoteTime)>5*60*1000||Date.parse(quoteTime)-Date.now()>60000;
+          const hasPrice=price!==null,delayed=!hasPrice||isStaleTimestamp(quoteTimeMs);
           const rawChange=row.changePercent,rawVolume=row.tradeVolume,change=rawChange!==null&&rawChange!==undefined&&rawChange!==''?Number(rawChange):NaN,volume=rawVolume!==null&&rawVolume!==undefined&&rawVolume!==''?Number(rawVolume):NaN;
           data[String(row.symbol)]={symbol:String(row.symbol),name:row.name||String(row.symbol),type:row.type||'EQUITY',price,changePct:Number.isFinite(change)?change:null,volume:Number.isFinite(volume)&&volume>=0?volume:null,timestamp:quoteTime,sourceTimestamp:quoteTime,market:payload.market,source:'Fugle snapshot quotes',delayed,quoteType:isIndex?'index-snapshot':row.isTrial?'trial':!hasPrice?'no-trade':delayed?'stale-snapshot':'realtime'};}}
           const quoteRows=Object.values(data);
