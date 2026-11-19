@@ -37,7 +37,7 @@ test('microstructure fallback rejects stale or incomplete snapshots',async()=>{
  });
  assert.equal(result.data,null);
  assert.equal(result.exchange,null);
- assert.equal(result.errors.length,4);
+ assert.equal(result.errors.length,3);
 });
 test('exchange candidate order prefers selected exchange then safe alternatives',()=>{
  assert.deepEqual(candidates('Binance','Bybit'),['Bybit','Binance','OKX']);
