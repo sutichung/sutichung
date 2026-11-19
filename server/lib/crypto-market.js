@@ -2,8 +2,6 @@
 const { indicators } = require('./indicators');
 const { createAsyncCache } = require('./market-cache');
 const { isMarketDataLicensed, requireMarketDataLicense } = require('./market-data-license');
-const { CryptoLiveScorer } = require('./crypto-live-scorer');
-const liveScorer = new CryptoLiveScorer();
 const marketCache=createAsyncCache({maxEntries:500});
 const now=()=>new Date().toISOString();
 async function getJson(url,timeout=14000){
@@ -77,29 +75,18 @@ async function krakenMarkets(){
  return shortlist.map(([key,x])=>{const base=(x.wsname.split('/')[0]||'').replace(/^XBT$/,'BTC'),quote=(x.wsname.split('/')[1]||'').replace(/^XBT$/,'BTC'),native=x.altname||key,q=tmap[native]||tmap[key]||{},last=n(q.c?.[0]),baseVolume=n(q.v?.[1]),quoteVolume=last!==null&&baseVolume!==null?last*baseVolume:null;return row('Kraken','spot',(base+quote).replace(/[^A-Z0-9]/g,''),base,quote,last,q.o&&Number(q.o)>0?(last/Number(q.o)-1)*100:null,quoteVolume,{high24h:q.h?.[1],low24h:q.l?.[1],volume:baseVolume,nativeSymbol:native,nativeType:'spot'});}).filter(Boolean);
 }
 async function loadMarket(){
- return cached('market-multi',15000,async()=>{
+ const snapshot=await cached('market-multi',15000,async()=>{
   const jobs=[['Binance',binanceMarkets],['Bybit',bybitMarkets],['OKX',okxMarkets],['Coinbase',coinbaseMarkets],['Kraken',krakenMarkets]];
   const settled=await Promise.allSettled(jobs.map(async([name,loader])=>{const started=Date.now();const data=await loader();return {data,updatedAt:now(),latencyMs:Date.now()-started};}));
   const markets=settled.flatMap(x=>x.status==='fulfilled'?x.value.data:[]).filter(x=>x&&Number.isFinite(x.price)&&x.price>0);
   
   const coverageNotes={Binance:'公開現貨與 USDT 永續商品清單；不含所有交易所衍生商品類型',Bybit:'商品清單最多讀取 8 頁、每頁最多 1,000 筆；若尚有 nextPageCursor，結果可能截斷',OKX:'讀取公開 SPOT 與 SWAP 商品清單',Coinbase:'目前僅掃描商品清單前 100 個可交易產品，非全商品覆蓋',Kraken:'目前僅掃描商品清單前 100 個可交易交易對，非全商品覆蓋'};
   const exchanges=jobs.map((j,i)=>{const result=settled[i].status==='fulfilled'?settled[i].value:null;const rows=result?.data||[];const count=rows.filter(x=>x&&x.price>0).length;return {name:j[0],status:count?'connected':String(settled[i].reason?.message||'').startsWith('market_data_license_required:')?'not_configured':'unavailable',markets:count,updatedAt:result?.updatedAt||null,latencyMs:result?.latencyMs??null,quoteMode:'REST snapshot polling',sourceTimestampCount:rows.filter(x=>x.sourceTimestamp).length,freshQuoteCount:rows.filter(x=>x.freshnessStatus==='fresh').length,staleQuoteCount:rows.filter(x=>x.freshnessStatus==='stale').length,unverifiedQuoteCount:rows.filter(x=>x.freshnessStatus==='unverified').length,coverageNote:coverageNotes[j[0]],error:count?null:settled[i].status==='rejected'?String(settled[i].reason?.message||'API error'):'上游未回傳有效價格'};});
-  // REST snapshots feed the same validated scorer interface used by a future WebSocket adapter.
-  // Only source-timestamp-verified updates can produce an eligible live score.
-  for (const market of markets) {
-   const sourceMs = market.sourceTimestamp ? Date.parse(market.sourceTimestamp) : NaN;
-   market.liveSignal = Number.isFinite(sourceMs) && market.freshnessStatus === 'fresh'
-    ? liveScorer.update({
-      exchange: market.exchange, marketType: market.marketType, symbol: market.symbol,
-      timestamp: sourceMs, last: market.price, bid: market.bid, ask: market.ask,
-      changePct: market.changePct, quoteVolume: market.quoteVolume
-     })
-    : { eligible: false, status: 'unverified_source_time', score: null, reasons: ['缺少可驗證的即時來源時間戳'] };
-  }
   markets.sort((a,b)=>b.quoteVolume-a.quoteVolume);
   const receivedAt=now(),sourceTimestampCount=markets.filter(x=>x.sourceTimestamp).length,freshQuoteCount=markets.filter(x=>x.freshnessStatus==='fresh').length,staleQuoteCount=markets.filter(x=>x.freshnessStatus==='stale').length,unverifiedQuoteCount=markets.filter(x=>x.freshnessStatus==='unverified').length;
   return {markets,status:markets.length?'ok':exchanges.every(x=>x.status==='not_configured')?'license_required':'degraded',licenseRequiredProviders:exchanges.filter(x=>x.status==='not_configured').map(x=>x.name),summary:{total:markets.length,spot:markets.filter(x=>x.marketType==='spot').length,perpetual:markets.filter(x=>x.marketType==='perpetual').length,exchanges:exchanges.filter(x=>x.status==='connected').map(x=>x.name),connectedExchangeCount:exchanges.filter(x=>x.status==='connected').length,sourceTimestampCount,sourceTimestampCoveragePct:markets.length?Math.round(sourceTimestampCount/markets.length*100):0,freshQuoteCount,staleQuoteCount,unverifiedQuoteCount},exchanges,coverage:{scope:'僅涵蓋下列五家交易所公開 API 可取得的商品；不代表全世界所有交易所或所有商品',partialProviders:exchanges.filter(x=>x.coverageNote).map(x=>x.name),timestampLimit:'來源時間戳依交易所欄位可能是最後成交或回應時間；超過 5 分鐘標示過期，缺少時間戳標示未驗證'},source:markets.length?'已授權交易所各自行情 API；價格不跨交易所混合':'未取得交易所會員展示／再分發書面授權，未啟用加密貨幣行情',quoteMode:'REST snapshot polling；非 WebSocket 逐筆推送',refreshIntervalMs:15000,receivedAt,timestamp:null};
  });
+ return require('./crypto-realtime').createDefaultCryptoRealtimeFeed().mergeMarket(snapshot);
 }
 function timestampIso(value,multiplier=1){
  if(value===null||value===undefined||value==='')return null;
