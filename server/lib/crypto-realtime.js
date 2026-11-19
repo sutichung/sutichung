@@ -23,6 +23,8 @@ function createCryptoRealtimeFeed(options = {}) {
   const now = options.now || Date.now;
   const setTimer = options.setTimeout || setTimeout;
   const clearTimer = options.clearTimeout || clearTimeout;
+  const setIntervalFn = options.setInterval || setInterval;
+  const clearIntervalFn = options.clearInterval || clearInterval;
   const symbols = normalizeSymbols(options.symbols || process.env.CRYPTO_WS_SYMBOLS || DEFAULT_SYMBOLS);
   const staleAfterMs = Math.max(5000, Number(options.staleAfterMs || process.env.CRYPTO_WS_STALE_MS) || 30000);
   const reconnectBaseMs = Math.max(250, Number(options.reconnectBaseMs) || 1000);
@@ -98,7 +100,20 @@ function createCryptoRealtimeFeed(options = {}) {
     try { socket = new WebSocketImpl(host + streams.join('/'), { handshakeTimeout: 10000 }); }
     catch (error) { f.state = 'disconnected'; f.lastError = String(error.message || error); scheduleReconnect(type); return; }
     f.socket = socket;
-    socket.on('open', () => { if (f.socket !== socket) return; f.state = 'connected'; f.attempt = 0; f.lastError = null; });
+    socket.on('open', () => {
+      if (f.socket !== socket) return;
+      f.state = 'connected'; f.attempt = 0; f.lastError = null; f.openedAt = now();
+      if (f.watchdog) clearIntervalFn(f.watchdog);
+      f.watchdog = setIntervalFn(() => {
+        if (f.socket !== socket || f.state !== 'connected') return;
+        const lastSeen = f.lastMessageAt || f.openedAt || now();
+        if (now() - lastSeen > staleAfterMs) {
+          f.lastError = 'websocket_heartbeat_timeout';
+          try { socket.terminate(); } catch (_) { try { socket.close(); } catch (_) {} }
+        }
+      }, Math.min(10000, Math.max(1000, Math.floor(staleAfterMs / 3))));
+      if (f.watchdog && typeof f.watchdog.unref === 'function') f.watchdog.unref();
+    });
     socket.on('message', message => {
       if (f.socket !== socket) return;
       f.lastMessageAt = now();
@@ -107,7 +122,8 @@ function createCryptoRealtimeFeed(options = {}) {
     socket.on('error', error => { if (f.socket === socket) f.lastError = String(error.message || error); });
     socket.on('close', () => {
       if (f.socket !== socket) return;
-      f.socket = null; f.state = 'disconnected'; scheduleReconnect(type);
+      if (f.watchdog) clearIntervalFn(f.watchdog);
+      f.watchdog = null; f.socket = null; f.state = 'disconnected'; scheduleReconnect(type);
     });
   }
   function start() {
@@ -127,6 +143,8 @@ function createCryptoRealtimeFeed(options = {}) {
     stopped = true;
     for (const f of feeds.values()) {
       if (f.timer) clearTimer(f.timer);
+      if (f.watchdog) clearIntervalFn(f.watchdog);
+      f.watchdog = null;
       f.timer = null;
       f.nextReconnectAt = null;
       const socket = f.socket;
