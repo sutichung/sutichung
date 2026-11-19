@@ -29,7 +29,7 @@ function classifyOutcome({side,signalPrice,observedPrice,feeBps=0,neutralBps=5}=
 function buildDailyReview(rows=[],date){
  const settled=rows.filter(x=>['WIN','LOSS','NEUTRAL'].includes(x.outcome));
  const directional=settled.filter(x=>x.side!=='FLAT'&&x.outcome!=='NEUTRAL');
- const wins=directional.filter(x=>x.outcome==='WIN').length,losses=directional.filter(x=>x.outcome==='LOSS').length,total=wins+losses,byRegime={};
+ const wins=directional.filter(x=>x.outcome==='WIN').length,losses=directional.filter(x=>x.outcome==='LOSS').length,total=wins+losses,byRegime=Object.create(null);
  for(const row of directional){const key=String(row.regime_tag||'UNKNOWN');byRegime[key] ||= {wins:0,losses:0,netReturnPct:0};if(row.outcome==='WIN')byRegime[key].wins++;else byRegime[key].losses++;byRegime[key].netReturnPct+=Number(row.net_return_pct||0);}
  for(const v of Object.values(byRegime)){const n=v.wins+v.losses;v.winRate=n?Number((v.wins/n).toFixed(4)):null;v.netReturnPct=Number(v.netReturnPct.toFixed(4));}
  return {reviewDate:date,totalSignals:rows.length,settledSignals:settled.length,directionalTrades:total,wins,losses,winRate:total?Number((wins/total).toFixed(4)):null,byRegime};
