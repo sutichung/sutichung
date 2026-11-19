@@ -31,9 +31,9 @@ function safeError(error) {
     .slice(0, 180);
 }
 
-async function request(url, options = {}) {
+async function request(url, options = {}, timeoutMs = CHECK_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, { ...options, signal: controller.signal });
     const body = await response.text();
@@ -188,11 +188,23 @@ async function diagnoseProviders(env = process.env) {
   ];
   for (const [id, label, endpoint, valid, message] of cryptoQuotes) {
     checks.push(probe(id, label, async () => {
-      const { response, body } = await request(endpoint, { headers: { accept: 'application/json' } });
-      if (!response.ok) throw new Error('upstream_http_' + response.status);
-      const payload = JSON.parse(body);
-      if (!valid(payload)) throw new Error(id + ' 報價回應格式錯誤或價格無效');
-      return { httpStatus: response.status, dataCount: 1, message };
+      const candidates = id === 'bybit'
+        ? ['https://api.bybit.com/v5/market/tickers?category=spot&symbol=BTCUSDT', 'https://api.bytick.com/v5/market/tickers?category=spot&symbol=BTCUSDT']
+        : id === 'binance'
+          ? ['https://data-api.binance.vision/api/v3/ticker/price?symbol=BTCUSDT', 'https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT', 'https://api1.binance.com/api/v3/ticker/price?symbol=BTCUSDT']
+          : [endpoint];
+      const errors = [];
+      for (const candidate of candidates) {
+        try {
+          const { response, body } = await request(candidate, { headers: { accept: 'application/json' } }, 5000);
+          if (!response.ok) throw new Error('upstream_http_' + response.status);
+          const payload = JSON.parse(body);
+          if (!valid(payload)) throw new Error(id + ' 報價回應格式錯誤或價格無效');
+          const host = new URL(candidate).host;
+          return { httpStatus: response.status, dataCount: 1, message: message + '（實際端點：' + host + '）' };
+        } catch (error) { errors.push(error); }
+      }
+      throw errors[errors.length - 1] || new Error(id + ' 所有官方端點均無回應');
     }));
   }
   checks.push(notConfigured(
