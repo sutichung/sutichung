@@ -80,9 +80,9 @@
 |---|---|
 | 原始碼盤點 | 已完成初步盤點 |
 | 上架規格文件 | 已建立 |
-| PWA 完整化 | 尚未開始 |
-| Capacitor iOS／Android 專案 | 尚未開始 |
-| 隱私／帳號刪除流程驗收 | 尚未驗收 |
+| PWA 基礎（manifest／離線頁／靜態資源快取） | 已在準備分支加入，待 CI 驗證 |
+| Capacitor 設定與雙平台 CI 原生專案生成 | 已在準備分支加入，待 CI 驗證；原生專案由 CI 生成 |
+| 隱私／帳號刪除流程驗收 | 未完成；現有會員介面尚未提供會員自行刪除帳號，且需先盤點所有關聯資料 |
 | 真機測試與簽署建置 | 尚未開始 |
 | TestFlight／Play 測試 | 尚未開始 |
 | 商店素材與表單 | 尚未完成 |
@@ -91,3 +91,15 @@
 ## 7. 不可跳過的發布原則
 
 任何一項關鍵測試未通過，不標示為可上架；不得將網站已部署等同 App 已發布。不得擅自啟用付費服務、改動交易執行、使用者資金權限、正式憑證或商店帳號。
+
+
+## 8. 本次工程準備分支變更
+
+- 新增 `capacitor.config.ts`，以既有 Vite build 輸出目錄 `build` 作為 Capacitor webDir。
+- 加入 Capacitor 8 runtime、CLI、iOS／Android 平台套件與 Splash Screen plugin。
+- 加入 PWA manifest、App icon SVG、service worker 及離線說明頁。
+- Service worker 僅快取 manifest／圖示；刻意不快取 `/api`、登入、行情、K 線或訊號，避免舊資料被誤認為即時行情。
+- 新增 GitHub Actions Android debug APK 與 iOS Simulator unsigned build 流程。Capacitor 8 CI 使用 Node 22 與 Xcode 26；建置產物仍不是可送商店的簽署版。
+- 此分支尚未完成會員自行刪除帳號。不可只刪除 Supabase Auth 身分而忽略關聯資料；需先盤點 Supabase 資料表、研究紀錄、訂閱／稽核保留義務，再設計確認、刪除與完成通知流程。
+- App Store 正式商店圖示需輸出各平台規格 PNG；目前提交的 SVG 是 PWA／開發階段素材，不視為完整商店圖示包。
+
