@@ -19,6 +19,7 @@ export default function SmartScreener({stocks=[],selected,onSelect}){
   return {...s,_m:{price,change,rsi,volumeRatio,ema20,ema60,macd,signal,flow,trend,momentum,chip,oversold,bullish,signalCount,valid}};
  }).filter(s=>{
   const m=s._m;
+  if(!m.valid)return false;
   if(horizon==='短線'&&!m.momentum&&!m.oversold&&!m.bullish)return false;
   if(horizon==='波段'&&!m.trend&&!m.bullish)return false;
   if(horizon==='長線'&&!(m.valid&&m.bullish)&&!(metric(s,'pe')!==null&&metric(s,'pb')!==null&&m.trend))return false;
