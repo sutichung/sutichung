@@ -19,7 +19,8 @@ async function loadRiskHistory({getHistory,symbol,marketType,interval='15m',exch
       return {history,exchange:candidate,requestedExchange:exchange,fallbackUsed:candidate!==exchange,errors};
     }catch(error){errors.push({exchange:candidate,error:String(error?.message||error).slice(0,180)});}
   }
-  const error=new Error('all_supported_exchanges_failed_to_supply_risk_candles');
+  const error=new Error(eligible.length?'all_supported_exchanges_failed_to_supply_risk_candles':'market_data_license_required');
+  error.code=eligible.length?'RISK_CANDLES_UNAVAILABLE':'MARKET_DATA_LICENSE_REQUIRED';
   error.attempts=errors;
   throw error;
 }
