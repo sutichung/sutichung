@@ -95,5 +95,5 @@ test('provider diagnostics classify regional restrictions and permission denials
 test('OKX public endpoints are not probed or marked connected without written redistribution license',async()=>{
  const original=global.fetch;let okxCalls=0;
  global.fetch=async url=>{if(String(url).includes('okx.com'))okxCalls++;throw new Error('unexpected_test_url');};
- try{const result=await diagnoseProviders({});for(const id of ['okx','okx-swap']){const check=result.checks.find(x=>x.id===id);assert.equal(check.status,'not_configured');assert.match(check.message,/書面同意/);}assert.equal(okxCalls,0);}finally{global.fetch=original;}
+ try{const result=await diagnoseProviders({});for(const id of ['okx','okx-swap','kraken-futures']){const check=result.checks.find(x=>x.id===id);assert.equal(check.status,'not_configured');assert.match(check.message,/書面授權/);}assert.equal(okxCalls,0);}finally{global.fetch=original;}
 });
