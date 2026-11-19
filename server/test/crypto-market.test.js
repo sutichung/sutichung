@@ -255,3 +255,14 @@ test('Kraken Futures REST ticker fallback preserves funding, index and source ti
   assert.equal(result.openInterest,null,'do not invent or mislabel Kraken contract OI units');
  }finally{global.fetch=original;}
 });
+
+test('market discovery reports license_required without calling exchange APIs when no redistribution licenses exist',async()=>{
+ const keys=Object.keys(MARKET_DATA_TEST_LICENSES),previous=Object.fromEntries(keys.map(k=>[k,process.env[k]));
+ for(const key of keys)delete process.env[key];
+ const original=global.fetch;let calls=0;global.fetch=async()=>{calls++;throw new Error('exchange_fetch_must_not_run');};
+ try{
+  const {loadMarket}=require('../lib/crypto-market');const result=await loadMarket();
+  assert.equal(result.status,'license_required');assert.equal(result.markets.length,0);
+  assert.ok(result.exchanges.every(x=>x.status==='not_configured'));assert.equal(calls,0);
+ }finally{global.fetch=original;for(const [key,value] of Object.entries(previous)){if(value===undefined)delete process.env[key];else process.env[key]=value;}}
+});
