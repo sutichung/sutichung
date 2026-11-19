@@ -482,6 +482,24 @@ async function route(req,res){
     const token=bearerToken(req);if(token)try{await supabaseRequest('/auth/v1/logout',{method:'POST',token});}catch(_){}
     return json(res,200,{ok:true});
   }
+  if(u.pathname==='/api/auth/delete-account'&&req.method==='POST'){
+    const user=await authenticatedUser(req);if(!user)return json(res,401,{error:'authentication_required'});
+    if(!SUPABASE_SERVICE_ROLE_KEY)return json(res,503,{error:'帳號刪除服務尚未完成設定，請聯絡客服；目前不會刪除帳號。'});
+    try{
+      const body=await readRequestJson(req);
+      const confirmEmail=String(body.confirmEmail||'').trim().toLowerCase();
+      const confirmation=String(body.confirmation||'');
+      if(confirmation!=='DELETE'||confirmEmail!==String(user.email||'').trim().toLowerCase())
+        return json(res,400,{error:'安全確認失敗：請輸入目前登入 Email 並輸入 DELETE。'});
+      // User-owned finance records cascade on auth.users deletion. Audit events retain no user link.
+      await supabaseRequest('/auth/v1/admin/users/'+encodeURIComponent(user.id),{method:'DELETE',admin:true});
+      try{await supabaseRequest('/auth/v1/logout',{method:'POST',token:bearerToken(req)});}catch(_){}
+      return json(res,200,{ok:true,deleted:true,message:'帳號刪除完成。依法需保留的稽核事件不保留帳號關聯。'});
+    }catch(e){
+      console.error('[account-deletion] failed',JSON.stringify({userId:user.id,error:String(e.message||e)}));
+      return json(res,e.status||502,{error:'帳號刪除未完成，請稍後重試或聯絡客服。'});
+    }
+  }
   if(u.pathname.startsWith('/api/admin/members')){
     const user=await authenticatedUser(req);if(!user)return json(res,401,{error:'authentication_required'});
     if(!isAdminUser(user))return json(res,403,{error:'administrator_required'});

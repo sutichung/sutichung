@@ -1,0 +1,16 @@
+{
+  "id": "/",
+  "name": "泰丞・台股 AI 智慧操盤中樞",
+  "short_name": "泰丞 AI",
+  "description": "台股、全球市場與加密貨幣行情研究及技術分析工具。行情時間與來源以畫面標示為準。",
+  "lang": "zh-TW",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#080d18",
+  "theme_color": "#080d18",
+  "icons": [
+    { "src": "/icons/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

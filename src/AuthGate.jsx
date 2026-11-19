@@ -23,6 +23,7 @@ export default function AuthGate({children}){
   const [busy,setBusy]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState('');
   const [adminOpen,setAdminOpen]=useState(false),[members,setMembers]=useState([]),[newEmail,setNewEmail]=useState('');
   const [memberBusy,setMemberBusy]=useState(false),[passwordOpen,setPasswordOpen]=useState(false),[nextPassword,setNextPassword]=useState('');
+  const [deleteOpen,setDeleteOpen]=useState(false),[deleteEmail,setDeleteEmail]=useState(''),[deleteWord,setDeleteWord]=useState('');
   const loadMe=useCallback(async()=>{
     const data=await request('/auth/me');setUser(data.user);setIsAdmin(!!data.isAdmin);
   },[]);
@@ -44,6 +45,7 @@ export default function AuthGate({children}){
     }catch(e){if(alive)setError(e.message);}finally{if(alive)setBusy(false);}})();
     return()=>{alive=false;};
   },[loadMe]);
+  useEffect(()=>{if(user&&window.location.pathname==='/account-deletion')setDeleteOpen(true);},[user]);
   useEffect(()=>{
     if(!user)return;
     const timer=setInterval(async()=>{const refresh=localStorage.getItem(REFRESH);if(!refresh)return;
@@ -68,6 +70,7 @@ export default function AuthGate({children}){
   const verifyPhoneCode=async()=>{setBusy(true);setError('');setNotice('');try{const data=await request('/auth/phone/verify',{method:'POST',body:JSON.stringify({phone,token:phoneOtp})});saveSession(data);await loadMe();setPhoneSent(false);}catch(err){setError(err.message);}finally{setBusy(false);}};
   const logout=async()=>{try{await request('/auth/logout',{method:'POST'});}catch(_){}clearSession();setUser(null);setIsAdmin(false);setAdminOpen(false);};
   const changePassword=async(e)=>{e.preventDefault();setMemberBusy(true);setError('');try{await request('/auth/password',{method:'POST',body:JSON.stringify({password:nextPassword})});setNextPassword('');setPasswordOpen(false);setNotice('密碼已更新。');}catch(err){setError(err.message);}finally{setMemberBusy(false);}};
+  const deleteAccount=async()=>{if(!user)return;setMemberBusy(true);setError('');setNotice('');try{const result=await request('/auth/delete-account',{method:'POST',body:JSON.stringify({confirmEmail:deleteEmail,confirmation:deleteWord})});if(!result.deleted)throw new Error('伺服器未確認帳號刪除完成');clearSession();setUser(null);setIsAdmin(false);setAdminOpen(false);setDeleteOpen(false);setDeleteEmail('');setDeleteWord('');window.history.replaceState({},document.title,'/');setNotice('帳號刪除程序已完成。');}catch(err){setError(err.message);}finally{setMemberBusy(false);}};
   const loadMembers=async()=>{setMemberBusy(true);try{const data=await request('/admin/members');setMembers(data.users||[]);}catch(e){setError(e.message);}finally{setMemberBusy(false);}};
   const createMember=async(e)=>{e.preventDefault();setMemberBusy(true);setError('');setNotice('');try{const result=await request('/admin/members/invite',{method:'POST',body:JSON.stringify({email:newEmail})});setNewEmail('');setNotice(result.message||'邀請信已寄出。');await loadMembers();}catch(err){setError(err.message);}finally{setMemberBusy(false);}};
   const rebuildMember=async()=>{const target=newEmail.trim().toLowerCase();if(!target)return;if(!window.confirm('確認重建／修復 '+target+'？若原帳號已被刪除，系統只能建立新身分，無法自動接回舊使用者 ID 的資料。'))return;setMemberBusy(true);setError('');setNotice('');try{const result=await request('/admin/members/rebuild',{method:'POST',body:JSON.stringify({email:target,confirmEmail:target})});setNewEmail('');setNotice(result.message||'帳號重建程序完成。');await loadMembers();}catch(err){setError(err.message);}finally{setMemberBusy(false);}};
@@ -94,19 +97,30 @@ export default function AuthGate({children}){
       {!phoneSent?<button type="button" style={{...styles.submit,width:'100%',marginTop:9}} disabled={busy||!/^\+[1-9]\d{7,14}$/.test(phone)} onClick={sendPhoneCode}>傳送簡訊驗證碼</button>:<><label style={{...styles.label,marginTop:9}}>簡訊驗證碼<input style={styles.input} inputMode="numeric" autoComplete="one-time-code" maxLength={8} value={phoneOtp} onChange={e=>setPhoneOtp(e.target.value.replace(/\D/g,''))} placeholder="輸入簡訊驗證碼"/></label><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:9}}><button type="button" style={styles.submit} disabled={busy||phoneOtp.length<4} onClick={verifyPhoneCode}>驗證並登入</button><button type="button" style={styles.smallBtn} disabled={busy} onClick={sendPhoneCode}>重新傳送</button></div></>}
     </div>
     {error&&<div style={styles.error}>{error}</div>}{notice&&<div style={styles.notice}>{notice}</div>}
-    <div style={styles.foot}>會員資料由 Supabase Auth 管理；未登入無法讀取市場 API。管理員可建立及停用會員。</div>
+    <div style={styles.foot}>會員資料由 Supabase Auth 管理；未登入無法讀取市場 API。管理員可建立及停用會員。<p><a href="/account-deletion" style={{color:'#93c5fd'}}>申請刪除會員帳號與相關個人資料</a></p></div>
   </div></div>;
   if(window.location.pathname.startsWith('/developer')) {
     if(!isAdmin) return <div style={styles.center}>此區域僅限授權開發者。<p><a href="/" style={{color:'#60a5fa'}}>返回客戶端</a></p></div>;
     return <><style>{responsiveCss}</style><div className="auth-userbar" style={styles.userbar}><b>🛠️ 開發者專用控制台</b><button style={styles.smallBtn} onClick={()=>{window.location.href='/';}}>返回客戶端</button><button style={styles.smallBtn} onClick={logout}>登出</button></div><SystemControlCenter/></>;
   }
-  return <><style>{responsiveCss}</style><div className="auth-userbar" style={styles.userbar}><span>{user.email}{isAdmin?' · 管理員':''}</span><button style={styles.smallBtn} onClick={()=>{setPasswordOpen(true);setError('');setNotice('');}}>修改密碼</button>{isAdmin&&<button style={styles.smallBtn} onClick={()=>{window.location.href='/developer';}}>開發者控制台</button>}{isAdmin&&<button style={styles.smallBtn} onClick={()=>{setAdminOpen(true);setError('');loadMembers();}}>會員管理</button>}<button style={styles.smallBtn} onClick={logout}>登出</button></div>{adminOpen&&<div style={styles.overlay}><div className="auth-modal" style={styles.modal}>
+  return <><style>{responsiveCss}</style><div className="auth-userbar" style={styles.userbar}><span>{user.email}{isAdmin?' · 管理員':''}</span><button style={styles.smallBtn} onClick={()=>{setPasswordOpen(true);setError('');setNotice('');}}>修改密碼</button><button style={styles.smallBtn} onClick={()=>{setDeleteOpen(true);setDeleteEmail('');setDeleteWord('');setError('');setNotice('');}}>刪除帳號</button>{isAdmin&&<button style={styles.smallBtn} onClick={()=>{window.location.href='/developer';}}>開發者控制台</button>}{isAdmin&&<button style={styles.smallBtn} onClick={()=>{setAdminOpen(true);setError('');loadMembers();}}>會員管理</button>}<button style={styles.smallBtn} onClick={logout}>登出</button></div>{adminOpen&&<div style={styles.overlay}><div className="auth-modal" style={styles.modal}>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}><h2 style={{margin:0}}>會員管理</h2><button style={styles.smallBtn} onClick={()=>setAdminOpen(false)}>關閉</button></div>
     <form className="auth-create-form" onSubmit={createMember} style={{...styles.createForm,gridTemplateColumns:'minmax(0,1fr) auto auto'}}><input style={styles.input} type="email" autoComplete="email" placeholder="會員 Email（邀請或重建帳號）" value={newEmail} onChange={e=>setNewEmail(e.target.value)} required/><button style={styles.submit} disabled={memberBusy||!config?.adminManagementConfigured}>寄送註冊邀請</button><button type="button" style={styles.smallBtn} disabled={memberBusy||!config?.adminManagementConfigured} onClick={rebuildMember}>重建／修復帳號</button></form>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'14px 0 8px'}}><b>會員清單</b><button style={styles.smallBtn} onClick={loadMembers}>重新整理</button></div>
     {members.map(m=><div key={m.id} className="auth-member" style={styles.member}><div><b>{m.email}</b><small style={{display:'block',color:'#94a3b8'}}>註冊：{m.created_at?new Date(m.created_at).toLocaleDateString('zh-TW'):'—'} · {m.banned_until?'已停用':'啟用中'}</small></div><div style={{display:'flex',gap:6,flexWrap:'wrap'}}><button style={styles.smallBtn} disabled={memberBusy} onClick={()=>resetMemberPassword(m)}>寄送重設密碼</button><button style={styles.smallBtn} disabled={memberBusy} onClick={()=>toggleMember(m)}>{m.banned_until?'恢復':'停用'}</button></div></div>)}
     {members.length===0&&<p style={{color:'#94a3b8'}}>尚無會員資料，或正在載入。</p>}{error&&<div style={styles.error}>{error}</div>}
     {!config?.adminManagementConfigured&&<div style={styles.notice}>管理功能尚未完整設定：請確認 Render 已設定 SUPABASE_ADMIN_EMAIL（必須與管理員登入 Email 完全一致）及 SUPABASE_SERVICE_ROLE_KEY。未設定前不會開放會員管理 API。</div>}
+  </div></div>}
+  {deleteOpen&&user&&<div style={styles.overlay}><div className="auth-modal" style={styles.modal}>
+    <h2 style={{marginTop:0,color:'#fecaca'}}>永久刪除帳號</h2>
+    <p style={{fontSize:13,lineHeight:1.7,color:'#cbd5e1'}}>此操作不可復原。系統將刪除登入身分及資料庫中依帳號外鍵關聯的個人金融帳戶、餘額、交易與同意紀錄。依法需保留的稽核事件會去除帳號關聯後保留。</p>
+    <label style={styles.label}>輸入目前登入 Email<input style={styles.input} type="email" autoComplete="email" value={deleteEmail} onChange={e=>setDeleteEmail(e.target.value)} placeholder={user.email}/></label>
+    <label style={{...styles.label,marginTop:12}}>輸入 DELETE 確認<input style={styles.input} value={deleteWord} onChange={e=>setDeleteWord(e.target.value)} autoCapitalize="characters" placeholder="DELETE"/></label>
+    {error&&<div style={styles.error}>{error}</div>}
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:16}}>
+      <button type="button" style={styles.smallBtn} disabled={memberBusy} onClick={()=>{setDeleteOpen(false);setDeleteEmail('');setDeleteWord('');}}>取消</button>
+      <button type="button" style={{...styles.submit,background:'#991b1b'}} disabled={memberBusy||deleteWord!=='DELETE'||deleteEmail.trim().toLowerCase()!==String(user.email||'').toLowerCase()} onClick={deleteAccount}>{memberBusy?'處理中…':'永久刪除帳號'}</button>
+    </div>
   </div></div>}
   {passwordOpen&&<div style={styles.overlay}><form onSubmit={changePassword} className="auth-modal" style={styles.modal}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><h2 style={{margin:0}}>修改密碼</h2><button type="button" style={styles.smallBtn} onClick={()=>setPasswordOpen(false)}>關閉</button></div><label style={{...styles.label,marginTop:16}}>新密碼<input style={styles.input} type="password" minLength={10} value={nextPassword} onChange={e=>setNextPassword(e.target.value)} required placeholder="至少 10 個字元"/></label><button style={{...styles.submit,marginTop:12}} disabled={memberBusy}>更新密碼</button>{error&&<div style={styles.error}>{error}</div>}</form></div>}
   {children}</>;
