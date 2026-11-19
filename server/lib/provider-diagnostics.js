@@ -1,4 +1,5 @@
 'use strict';
+const { isMarketDataLicensed, licenseEnvName } = require('./market-data-license');
 
 const CHECK_TIMEOUT_MS = 12000;
 
@@ -187,7 +188,8 @@ async function diagnoseProviders(env = process.env) {
     ['kraken', 'Kraken 官方 XBT/USD 報價', 'https://api.kraken.com/0/public/Ticker?pair=XBTUSD', payload => !payload.error?.length && Number(Object.values(payload.result || {})[0]?.c?.[0]) > 0, 'XBT/USD 公開現貨報價端點成功；僅驗證單一商品連線']
   ];
   for (const [id, label, endpoint, valid, message] of cryptoQuotes) {
-    if (id.startsWith('okx') && env.OKX_MARKET_DATA_LICENSE_CONFIRMED !== 'true') { checks.push(notConfigured(id, label, '未設定 OKX_MARKET_DATA_LICENSE_CONFIRMED=true；OKX API 協議限制未經書面同意向第三方展示或再分發市場數據')); continue; }
+    const provider = id.startsWith('binance') ? 'Binance' : id === 'bybit' ? 'Bybit' : id.startsWith('okx') ? 'OKX' : id === 'coinbase' ? 'Coinbase' : id === 'kraken' ? 'Kraken' : id === 'kraken-futures' ? 'Kraken Futures' : null;
+    if (provider && !isMarketDataLicensed(provider, env)) { checks.push(notConfigured(id, label, '未取得或未設定此來源的會員展示／再分發書面授權；請先確認條款並設定 ' + licenseEnvName(provider) + '=true')); continue; }
     checks.push(probe(id, label, async () => {
       const candidates = id === 'bybit'
         ? ['https://api.bybit.com/v5/market/tickers?category=spot&symbol=BTCUSDT', 'https://api.bytick.com/v5/market/tickers?category=spot&symbol=BTCUSDT']
