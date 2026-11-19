@@ -154,7 +154,7 @@ async function getDerivatives(symbol,exchange='Binance',nativeSymbol=''){
   {exchange:'Binance',fundingRate:n(binance?.lastFundingRate),markPrice:n(binance?.markPrice),indexPrice:n(binance?.indexPrice),openInterest:n(binanceOi?.openInterest),sourceTime:toIso(binance?.time)},
   {exchange:'Bybit',fundingRate:n(bq?.fundingRate),markPrice:n(bq?.markPrice),indexPrice:n(bq?.indexPrice),openInterest:n(bq?.openInterest),sourceTime:toIso(bybit?.time)},
   {exchange:'OKX',fundingRate:n(of?.fundingRate),markPrice:n(om?.markPx),indexPrice:n(om?.idxPx),openInterest:n(oi?.oiCcy),sourceTime:toIso(om?.ts)||toIso(of?.fundingTime)},
-  ...((Array.isArray(krakenFutures?.tickers)?krakenFutures.tickers:Array.isArray(krakenFutures?.result)?krakenFutures.result:[]).filter(x=>x&&x.tag==='perpetual'&&String(x.pair||'').replace(':','').replace(/^XBT/,'BTC').startsWith(base+'USD')).slice(0,1).map(x=>({exchange:'Kraken Futures',fundingRate:n(x.funding_rate),markPrice:n(x.markPrice),indexPrice:n(x.index),openInterest:null,sourceTime:toIso(x.time)})))
+  ...((Array.isArray(krakenFutures?.tickers)?krakenFutures.tickers:Array.isArray(krakenFutures?.result)?krakenFutures.result:[]).filter(x=>x&&x.tag==='perpetual'&&String(x.pair||'').replace(':','').replace(/^XBT/,'BTC').startsWith(base+'USD')).slice(0,1).map(x=>({exchange:'Kraken Futures',fundingRate:n(x.fundingRate??x.funding_rate),markPrice:n(x.markPrice),indexPrice:n(x.indexPrice??x.index),openInterest:null,sourceTime:toIso(x.time)||toIso(x.lastTime)})))
  ];
  const ratios=battle.filter(x=>x&&Number.isFinite(x.longPct)&&Number.isFinite(x.shortPct));
  const longPct=ratios.length?ratios.reduce((sum,x)=>sum+x.longPct,0)/ratios.length:null;
