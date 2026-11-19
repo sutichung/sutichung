@@ -1,4 +1,5 @@
 'use strict';
+const { requireMarketDataLicense } = require('./market-data-license');
 
 const now = () => new Date().toISOString();
 const number = value => {
@@ -77,6 +78,7 @@ function normalizeTrades(exchange, rows, thresholdUsd = 50000) {
     .slice(0, 100);
 }
 async function fetchMicrostructure({ exchange = 'Binance', symbol, marketType = 'perpetual', depth = 10, whaleThresholdUsd = 50000 }) {
+  requireMarketDataLicense(exchange);
   const safeSymbol = String(symbol || '').toUpperCase();
   if (!/^[A-Z0-9-]{2,30}$/.test(safeSymbol)) throw new Error('invalid_symbol');
   const levels = Math.min(50, Math.max(5, Number(depth) || 10));
