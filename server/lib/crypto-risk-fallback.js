@@ -3,8 +3,8 @@
 const SUPPORTED_EXCHANGES=['Binance','Bybit','OKX','Kraken Futures'];
 const HISTORY_EXCHANGES=['Binance','Bybit','OKX','Coinbase','Kraken','Kraken Futures'];
 function candidates(primary,preferred){
-  const allowed=[...SUPPORTED_EXCHANGES,'Coinbase','Kraken'];
-  return [...new Set([preferred,primary,...SUPPORTED_EXCHANGES].filter(x=>allowed.includes(x)))];
+  const microstructureExchanges=['Binance','Bybit','OKX'];
+  return [...new Set([preferred,primary,...microstructureExchanges].filter(x=>microstructureExchanges.includes(x)))];
 }
 async function loadRiskHistory({getHistory,symbol,marketType,interval='15m',exchange='Binance',nativeSymbol=symbol,limit=240}){
   const errors=[];
