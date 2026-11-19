@@ -31,7 +31,8 @@ test('provider diagnostics verify actual public crypto ticker responses and expo
     ['api.bytick.com', { retCode: 0, result: { list: [{ symbol: 'BTCUSDT', lastPrice: '65000' }] } }],
     ['www.okx.com', { code: '0', data: [{ instId: 'BTC-USDT', last: '65000' }] }],
     ['api.exchange.coinbase.com', { price: '65000', time: '2026-11-18T15:00:00Z' }],
-    ['api.kraken.com', { error: [], result: { XXBTZUSD: { c: ['65000', '1'] } } }]
+    ['api.kraken.com', { error: [], result: { XXBTZUSD: { c: ['65000', '1'] } } }],
+    ['futures.kraken.com', { tickers: [{ tag: 'perpetual', pair: 'XBT:USD', last: 65000, markPrice: 65010, time: 1790000000000 }] }]
   ];
   global.fetch = async url => {
     const entry = payloads.find(([host]) => String(url).includes(host));
@@ -41,7 +42,7 @@ test('provider diagnostics verify actual public crypto ticker responses and expo
   };
   try {
     const result = await diagnoseProviders({});
-    for (const id of ['binance', 'binance-futures', 'bybit', 'okx', 'okx-swap', 'coinbase', 'kraken']) {
+    for (const id of ['binance', 'binance-futures', 'bybit', 'okx', 'okx-swap', 'coinbase', 'kraken', 'kraken-futures']) {
       const check = result.checks.find(x => x.id === id);
       assert.equal(check.status, 'connected', id + ' should validate a real quote-shaped response');
       assert.equal(check.dataCount, 1);
