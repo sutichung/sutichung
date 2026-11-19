@@ -30,8 +30,8 @@ function normalizeRow(row, market, sourceId, sourceUrl) {
   const open = numberValue(textValue(row, [/^(OpeningPrice|Open|開盤價|開盤)$/i, /開盤價/]));
   const high = numberValue(textValue(row, [/^(HighestPrice|High|最高價|最高)$/i, /最高價/]));
   const low = numberValue(textValue(row, [/^(LowestPrice|Low|最低價|最低)$/i, /最低價/]));
-  const volume = numberValue(textValue(row, [/^(TradeVolume|Volume|成交股數|成交量)$/i, /成交股數|成交量/]));
-  const turnover = numberValue(textValue(row, [/^(TradeValue|Turnover|成交金額)$/i, /成交金額/]));
+  const volume = numberValue(textValue(row, [/^(TradingVolume|TradeVolume|Volume|成交股數|成交量)$/i, /TradingVolume|成交股數|成交量/]));
+  const turnover = numberValue(textValue(row, [/^(TradingValue|TradeValue|Turnover|成交金額)$/i, /TradingValue|成交金額/]));
   const trades = numberValue(textValue(row, [/^(Transaction|Trades|成交筆數)$/i, /成交筆數/]));
   const rawChange = numberValue(textValue(row, [/^(Change|漲跌價差|漲跌)$/i, /漲跌價差/]));
   const explicitPct = numberValue(textValue(row, [/^(ChangePercent|漲跌幅)$/i, /漲跌幅/]));
@@ -39,7 +39,7 @@ function normalizeRow(row, market, sourceId, sourceUrl) {
   const changePct = explicitPct !== null ? explicitPct : previousClose > 0 && rawChange !== null ? rawChange / previousClose * 100 : null;
   const date = textValue(row, [/^(Date|日期|資料日期)$/i]);
   return {
-    symbol, name: String(textValue(row, [/^(Name|公司簡稱|名稱|證券名稱)$/i, /公司簡稱|證券名稱/]) || symbol),
+    symbol, name: String(textValue(row, [/^(Name|CompanyName|CompanyAbbreviation|公司簡稱|名稱|證券名稱)$/i, /CompanyName|CompanyAbbreviation|公司簡稱|證券名稱/]) || symbol),
     market, exchange: market, price: close, close, open, high, low, volume, turnover, trades,
     change: rawChange, changePct, previousClose,
     timestamp: null, sourceTimestamp: null, receivedAt: new Date().toISOString(),
