@@ -823,15 +823,27 @@ async function route(req,res){
     return json(res,200,result);
   }
   if(u.pathname==='/api/diagnostics/market'){
+    let primaryProviderWarning=null;
     try{
+      if(FUGLE_API_KEY){
+        try{
+          const endpoint=new URL(FUGLE_BASE+'/snapshot/quotes/TSE');
+          const payload=await fetchJson(endpoint.toString(),10000,{'X-API-KEY':FUGLE_API_KEY});
+          const rows=Array.isArray(payload.data)?payload.data:[];
+          const validRows=rows.filter(x=>x&&x.symbol&&!x.isTrial&&Number.isFinite(Number(x.lastPrice))&&Number(x.lastPrice)>0);
+          if(!validRows.length)throw new Error('Fugle TSE 快照沒有有效報價');
+          const sample=validRows.slice(0,5).map(x=>({symbol:String(x.symbol),name:x.name||String(x.symbol),price:Number(x.lastPrice),timestamp:Number(x.lastUpdated)>0?new Date(Number(x.lastUpdated)/1000).toISOString():null,delayed:!Number.isFinite(Number(x.lastUpdated))||Date.now()-Number(x.lastUpdated)>300000,quoteType:'fugle-snapshot'}));
+          return json(res,200,{ok:true,connection:'connected',source:'Fugle TSE 官方行情快照',provider:'fugle',fallbackUsed:false,listedCount:null,requestedCount:5,scannedCount:rows.length,quoteCount:validRows.length,coveragePct:null,delayedCount:sample.filter(x=>x.delayed).length,serverTime:now(),sample});
+        }catch(error){primaryProviderWarning='Fugle：'+String(error.message||error).slice(0,200);}
+      }
       const live=await twseMisSnapshot(5);
       const allRows=Object.values(live.data||{});
       const validRows=allRows.filter(x=>Number.isFinite(Number(x.price))&&Number(x.price)>0);
       const sample=validRows.slice(0,5).map(x=>({symbol:x.symbol,name:x.name,price:x.price,timestamp:x.timestamp,delayed:x.delayed,quoteType:x.quoteType}));
-      return json(res,200,{ok:validRows.length>0,connection:validRows.length?'connected':'no_valid_quotes',source:live.source,listedCount:live.listedCount,requestedCount:live.requestedCount,scannedCount:live.scannedCount,quoteCount:validRows.length,coveragePct:live.requestedCount?Math.round(validRows.length/live.requestedCount*100):0,delayedCount:validRows.filter(x=>x.delayed).length,serverTime:now(),error:validRows.length?null:'TWSE MIS 有回應但抽樣商品沒有有效價格',sample});
+      return json(res,200,{ok:validRows.length>0,connection:validRows.length?'connected':'no_valid_quotes',source:live.source,provider:'twse-mis',fallbackUsed:!!primaryProviderWarning,providerWarning:primaryProviderWarning,listedCount:live.listedCount,requestedCount:live.requestedCount,scannedCount:live.scannedCount,quoteCount:validRows.length,coveragePct:live.requestedCount?Math.round(validRows.length/live.requestedCount*100):0,delayedCount:validRows.filter(x=>x.delayed).length,serverTime:now(),error:validRows.length?null:'TWSE MIS 有回應但抽樣商品沒有有效價格',sample});
     }catch(e){
       console.error('[market-diagnostics] '+(e.stack||e.message));
-      return json(res,200,{ok:false,connection:'disconnected',error:e.message,serverTime:now()});
+      return json(res,200,{ok:false,connection:'disconnected',providerWarning:primaryProviderWarning,error:e.message,serverTime:now()});
     }
   }
   if(u.pathname==='/api/market/snapshot'){
