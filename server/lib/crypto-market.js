@@ -149,7 +149,7 @@ async function getDerivatives(symbol,exchange='Binance',nativeSymbol=''){
   getJson('https://futures.kraken.com/derivatives/api/v3/tickers').catch(()=>null)
  ]);
  const bq=bybit?.result?.list?.[0],of=okxFunding?.data?.[0],oi=okxOi?.data?.[0],om=okxMark?.data?.[0];
- const toIso=value=>{const ms=Number(value);return value!==null&&value!==undefined&&Number.isFinite(ms)&&ms>0?new Date(ms).toISOString():null;};
+ const toIso=value=>{if(value===null||value===undefined||value==='')return null;const numeric=Number(value);const ms=Number.isFinite(numeric)&&numeric>0?numeric:Date.parse(String(value));return Number.isFinite(ms)&&ms>0?new Date(ms).toISOString():null;};
  const rows=[
   {exchange:'Binance',fundingRate:n(binance?.lastFundingRate),markPrice:n(binance?.markPrice),indexPrice:n(binance?.indexPrice),openInterest:n(binanceOi?.openInterest),sourceTime:toIso(binance?.time)},
   {exchange:'Bybit',fundingRate:n(bq?.fundingRate),markPrice:n(bq?.markPrice),indexPrice:n(bq?.indexPrice),openInterest:n(bq?.openInterest),sourceTime:toIso(bybit?.time)},
