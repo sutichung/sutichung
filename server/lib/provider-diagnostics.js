@@ -151,16 +151,6 @@ async function diagnoseProviders(env = process.env) {
       return { httpStatus: response.status, dataCount: Array.isArray(payload.data) ? payload.data.length : 0, message: '金鑰驗證成功，資料端點有回應' };
     }));
   } else checks.push(notConfigured('finmind', 'FinMind 資料 API', 'Render 未設定 FINMIND_TOKEN；可使用公開資料備援'));
-  if (env.FUGLE_API_KEY) {
-    checks.push(probe('fugle', 'Fugle 股票行情 API', async () => {
-      const base = (env.FUGLE_BASE_URL || 'https://api.fugle.tw/marketdata/v1.0/stock').replace(/\/+$/, '');
-      const { response, body } = await request(base + '/snapshot/quotes/TSE', { headers: { accept: 'application/json', 'X-API-KEY': env.FUGLE_API_KEY } });
-      if (!response.ok) throw new Error('upstream_http_' + response.status);
-      const payload = JSON.parse(body);
-      if (!Array.isArray(payload.data)) throw new Error('Fugle 回應缺少 data 陣列');
-      return { httpStatus: response.status, dataCount: payload.data.length, message: '股票快照 API 有回應；請另看報價時間判斷即時性' };
-    }));
-  } else checks.push(notConfigured('fugle', 'Fugle 股票行情 API', 'Render 未設定 FUGLE_API_KEY；目前只能使用公開資料備援'));
   const supabaseUrl = String(env.SUPABASE_URL || '').replace(/\/+$/, '');
   if (supabaseUrl && env.SUPABASE_ANON_KEY) {
     checks.push(probe('supabase', 'Supabase Auth API', async () => {
