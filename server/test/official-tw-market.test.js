@@ -36,6 +36,6 @@ test('normalizes TPEx daily close and rejects invalid symbols or prices', () => 
   assert.equal(row.price, 455);
   assert.equal(row.change, 5);
   assert.equal(row.dataMode, 'END_OF_DAY');
-  assert.equal(normalizeRow({ Code: 'bad', ClosingPrice: 20 }, 'TWSE', 'x', 'x'), null);
+  assert.equal(normalizeRow({ Code: 'A!B', ClosingPrice: 20 }, 'TWSE', 'x', 'x'), null);
   assert.equal(normalizeRow({ Code: '2330', ClosingPrice: '--' }, 'TWSE', 'x', 'x'), null);
 });
