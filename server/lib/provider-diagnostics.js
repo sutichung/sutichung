@@ -92,9 +92,6 @@ function notConfigured(id, label, message) {
 function providerErrorMessage(id, error) {
   const raw = String(error && error.message || error || 'unknown_error');
   const match = raw.match(/upstream_http_(\d{3})/i);
-  if (id === 'fugle' && match && Number(match[1]) === 403) {
-    return 'Fugle HTTP 403：官方錯誤碼定義為目前訂閱方案不支援此功能。請核對方案是否包含 snapshot／即時行情權限；這不等同 API Key 錯誤，也不要反覆重試。';
-  }
   return safeError(error);
 }
 
@@ -106,6 +103,13 @@ async function diagnoseProviders(env = process.env) {
     const rows = JSON.parse(body);
     if (!Array.isArray(rows) || !rows.length) throw new Error('TWSE 回應格式錯誤或沒有資料');
     return { httpStatus: response.status, dataCount: rows.length, message: '官方資料端點有回應；此端點不是盤中逐筆報價' };
+  }));
+  checks.push(probe('tpex', '櫃買中心官方日行情 OpenAPI', async () => {
+    const { response, body } = await request('https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes', { headers: { accept: 'application/json' } });
+    if (!response.ok) throw new Error('upstream_http_' + response.status);
+    const rows = JSON.parse(body);
+    if (!Array.isArray(rows) || !rows.length) throw new Error('TPEx 回應格式錯誤或沒有資料');
+    return { httpStatus: response.status, dataCount: rows.length, message: 'TPEx 官方日收盤資料端點有回應；不是盤中逐筆報價' };
   }));
   checks.push(probe('ecb', '歐洲央行每日外匯參考 API', async () => {
     let primaryError = null;
