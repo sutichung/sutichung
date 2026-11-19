@@ -210,16 +210,20 @@ async function diagnoseProviders(env = process.env) {
       throw errors[errors.length - 1] || new Error(id + ' 所有官方端點均無回應');
     }));
   }
-  checks.push(probe('kraken-futures', 'Kraken Futures 官方永續行情 API', async () => {
-    const { response, body } = await request('https://futures.kraken.com/derivatives/api/v3/tickers', { headers: { accept: 'application/json' } });
-    if (!response.ok) throw new Error('upstream_http_' + response.status);
-    const payload = JSON.parse(body);
-    const tickers = Array.isArray(payload.tickers) ? payload.tickers : Array.isArray(payload.result) ? payload.result : [];
-    const perpetuals = tickers.filter(x => x && x.tag === 'perpetual' && Number(x.last) > 0 && Number(x.markPrice) > 0);
-    if (!perpetuals.length) throw new Error('Kraken Futures 回應缺少有效永續商品報價');
-    const btc = perpetuals.find(x => /XBT:USD|BTC:USD/i.test(String(x.pair || '')));
-    return { httpStatus: response.status, dataCount: perpetuals.length, sourceTime: btc && Number.isFinite(Number(btc.time)) ? new Date(Number(btc.time)).toISOString() : null, message: '官方公開永續商品報價有效；實際可用商品依帳戶與地區資格而異' };
-  }));
+  if (!isMarketDataLicensed('Kraken Futures', env)) {
+    checks.push(notConfigured('kraken-futures', 'Kraken Futures 官方永續行情 API', '未取得或未設定此來源的會員展示／再分發書面授權；請先確認條款並設定 ' + licenseEnvName('Kraken Futures') + '=true'));
+  } else {
+    checks.push(probe('kraken-futures', 'Kraken Futures 官方永續行情 API', async () => {
+      const { response, body } = await request('https://futures.kraken.com/derivatives/api/v3/tickers', { headers: { accept: 'application/json' } });
+      if (!response.ok) throw new Error('upstream_http_' + response.status);
+      const payload = JSON.parse(body);
+      const tickers = Array.isArray(payload.tickers) ? payload.tickers : Array.isArray(payload.result) ? payload.result : [];
+      const perpetuals = tickers.filter(x => x && x.tag === 'perpetual' && Number(x.last) > 0 && Number(x.markPrice) > 0);
+      if (!perpetuals.length) throw new Error('Kraken Futures 回應缺少有效永續商品報價');
+      const btc = perpetuals.find(x => /XBT:USD|BTC:USD/i.test(String(x.pair || '')));
+      return { httpStatus: response.status, dataCount: perpetuals.length, sourceTime: btc && Number.isFinite(Number(btc.time)) ? new Date(Number(btc.time)).toISOString() : null, message: '官方公開永續商品報價有效；實際可用商品依帳戶與地區資格而異' };
+    }));
+  }
   checks.push(notConfigured(
     'us-equities-official',
     '美股官方行情授權來源',
