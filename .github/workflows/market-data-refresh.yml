@@ -26,6 +26,7 @@ jobs:
         run: |
           set -u
           for cycle in 1 2 3 4 5; do
+            CYCLE_START=$(date +%s)
             echo "=== market refresh cycle ${cycle}/5 at $(date -u +%FT%TZ) ==="
             OIDC_TOKEN=$(curl --fail --silent --show-error --get \
               --data-urlencode "audience=taiwan-stock-hunter-automation" \
@@ -39,7 +40,7 @@ jobs:
             AUTH_HEADER="Authorization: Bearer $OIDC_TOKEN"
 
             # Refresh independently so one unavailable provider does not hide the others.
-            curl --silent --show-error --max-time 45 -H "$AUTH_HEADER" \
+            curl --fail --silent --show-error --max-time 45 -H "$AUTH_HEADER" \
               "$MARKET_APP_URL/api/market/snapshot" -o /tmp/tw-market.json &
             TW_PID=$!
             curl --silent --show-error --max-time 45 -H "$AUTH_HEADER" \
@@ -71,6 +72,8 @@ jobs:
           NODE
 
             if [ "$cycle" -lt 5 ]; then
-              sleep 60
+              ELAPSED=$(( $(date +%s) - CYCLE_START ))
+              REMAINING=$(( 60 - ELAPSED ))
+              if [ "$REMAINING" -gt 0 ]; then sleep "$REMAINING"; fi
             fi
           done
