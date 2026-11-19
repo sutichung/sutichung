@@ -11,7 +11,7 @@
 ## 資料來源與密鑰
 API Key 只放 Render Environment，不可放前端、GitHub 程式碼或聊天內容。
 - `FINMIND_TOKEN`：若已有可用權限，供日 K、法人、融資融券及估值資料使用。
-- 可選 `MARKET_REALTIME_URL`、`MARKET_SCAN_URL`、`MARKET_FLOWS_URL`、`MARKET_FUTURES_URL`、`MARKET_SENTIMENT_URL`、`MARKET_NEWS_URL`，只可接入合法授權且符合後端 JSON 契約的資料來源。
+- 可選 `MARKET_SCAN_URL`、`MARKET_FLOWS_URL`、`MARKET_FUTURES_URL`、`MARKET_SENTIMENT_URL`、`MARKET_NEWS_URL`，只可接入合法授權且符合後端 JSON 契約的資料來源。
 - 沒有設定或授權不足時，系統應顯示缺資料；不得用假價格、固定值或過期快取冒充即時行情。
 
 ## GitHub Actions
