@@ -43,10 +43,10 @@ jobs:
             curl --fail --silent --show-error --max-time 45 -H "$AUTH_HEADER" \
               "$MARKET_APP_URL/api/market/snapshot" -o /tmp/tw-market.json &
             TW_PID=$!
-            curl --silent --show-error --max-time 45 -H "$AUTH_HEADER" \
+            curl --fail --silent --show-error --max-time 45 -H "$AUTH_HEADER" \
               "$MARKET_APP_URL/api/crypto/market" -o /tmp/crypto-market.json &
             CRYPTO_PID=$!
-            curl --silent --show-error --max-time 45 -H "$AUTH_HEADER" \
+            curl --fail --silent --show-error --max-time 45 -H "$AUTH_HEADER" \
               "$MARKET_APP_URL/api/us/market" -o /tmp/us-market.json &
             US_PID=$!
 
