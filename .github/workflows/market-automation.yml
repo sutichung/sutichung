@@ -12,6 +12,10 @@ on:
     - cron: "10 13 * * 1-5"
     # Daily system and provider health review at 06:00 Taiwan time (22:00 UTC).
     - cron: "0 22 * * *"
+    # Persist due prediction outcomes every 15 minutes, including 24/7 crypto horizons.
+    - cron: "*/15 * * * *"
+    # Recompute probability calibration after daily health and market reviews.
+    - cron: "15 22 * * *"
   workflow_dispatch:
 permissions:
   contents: read
@@ -188,3 +192,31 @@ jobs:
           name: taiwan-market-outcome-review-${{ github.run_id }}
           path: reports/
           retention-days: 90
+
+  persistent-prediction-settlement:
+    if: github.event_name == 'schedule' && github.event.schedule == '*/15 * * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Settle due prediction horizons from authorized provider adapter
+        env:
+          MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
+        run: |
+          OIDC_TOKEN=$(curl --fail --silent --show-error --get --data-urlencode "audience=taiwan-stock-hunter-automation" "$ACTIONS_ID_TOKEN_REQUEST_URL" -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r '.value')
+          test -n "$OIDC_TOKEN" && test "$OIDC_TOKEN" != "null" || { echo "Unable to obtain GitHub Actions OIDC token"; exit 1; }
+          echo "::add-mask::$OIDC_TOKEN"
+          curl --fail --silent --show-error --max-time 180 -X POST -H "Authorization: Bearer $OIDC_TOKEN" "$MARKET_APP_URL/api/automation/research/settle" -o /tmp/prediction-settlement.json
+          cat /tmp/prediction-settlement.json
+          node -e "const x=require('/tmp/prediction-settlement.json'); console.log('Settled:',x.settled,'checked:',x.checked,'errors:',x.errors?.length||0); if(x.errors?.length) process.exit(1)"
+  persistent-model-calibration:
+    if: github.event_name == 'schedule' && github.event.schedule == '15 22 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Recompute calibration from settled, explicitly probabilistic forecasts
+        env:
+          MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
+        run: |
+          OIDC_TOKEN=$(curl --fail --silent --show-error --get --data-urlencode "audience=taiwan-stock-hunter-automation" "$ACTIONS_ID_TOKEN_REQUEST_URL" -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r '.value')
+          test -n "$OIDC_TOKEN" && test "$OIDC_TOKEN" != "null" || { echo "Unable to obtain GitHub Actions OIDC token"; exit 1; }
+          echo "::add-mask::$OIDC_TOKEN"
+          curl --fail --silent --show-error --max-time 180 -X POST -H "Authorization: Bearer $OIDC_TOKEN" "$MARKET_APP_URL/api/automation/research/calibrate" -o /tmp/prediction-calibration.json
+          cat /tmp/prediction-calibration.json
