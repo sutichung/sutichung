@@ -44,3 +44,12 @@ test('conditional order submission rejects a lost race instead of claiming succe
     error => error.status === 409
   );
 });
+
+test('finance access accepts only an assigned finance role or exact configured admin email', () => {
+  const { hasFinanceAccess } = require('../lib/ant-api');
+  assert.equal(hasFinanceAccess({email:'OWNER@example.com'}, [], 'owner@example.com'), true);
+  assert.equal(hasFinanceAccess({email:'owner@example.com'}, [], 'other@example.com'), false);
+  assert.equal(hasFinanceAccess({email:'member@example.com'}, [{role:'FINANCE_VIEWER'}], ''), true);
+  assert.equal(hasFinanceAccess({email:'member@example.com'}, [{role:'SUPPORT'}], ''), false);
+  assert.equal(hasFinanceAccess({}, [], 'owner@example.com'), false);
+});
