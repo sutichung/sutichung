@@ -438,7 +438,26 @@ function createCryptoStreamEngine(options = {}) {
     if (statusTimer) clearInterval(statusTimer);
     for (const timer of timers) clearInterval(timer), clearTimeout(timer);
     timers.clear();
-    for (const state of sockets.values()) { state.state='stopped'; if(state.ws) { try { state.ws.close(1000,'shutdown'); } catch (_) {} } }
+    const closing = [];
+    for (const state of sockets.values()) {
+      state.state='stopped';
+      if (state.ws) {
+        const ws = state.ws;
+        closing.push(new Promise(resolve => {
+          let settled = false;
+          const finish = () => { if (settled) return; settled = true; resolve(); };
+          try {
+            if (typeof ws.once === 'function') ws.once('close', finish);
+            if (ws.readyState === WebSocketImpl.OPEN) ws.close(1000,'shutdown');
+            else if (typeof ws.terminate === 'function') ws.terminate();
+            else ws.close();
+          } catch (_) { finish(); }
+          const deadline = setTimeout(finish, 3000);
+          if (deadline && typeof deadline.unref === 'function') deadline.unref();
+        }));
+      }
+    }
+    await Promise.all(closing);
     await flush();
     started = false;
     return status();
