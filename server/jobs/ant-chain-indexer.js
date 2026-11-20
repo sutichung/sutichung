@@ -5,8 +5,10 @@ const { calculateUsdtSplit, validateSaleEvent } = require('../lib/ant-payment');
 
 const CHAIN_ID = 97;
 const WORKER_KEY = 'ant-bsc-testnet';
-const POLL_MS = Math.max(5000, Number(process.env.ANT_INDEXER_POLL_MS || 15000));
-const RANGE = Math.max(1, Math.min(2000, Number(process.env.ANT_INDEXER_BLOCK_RANGE || 500)));
+const POLL_MS = Number(process.env.ANT_INDEXER_POLL_MS || 15000);
+const RANGE = Number(process.env.ANT_INDEXER_BLOCK_RANGE || 500);
+if (!Number.isSafeInteger(POLL_MS) || POLL_MS < 5000 || POLL_MS > 300000) throw new Error('ANT_INDEXER_POLL_MS must be between 5000 and 300000');
+if (!Number.isSafeInteger(RANGE) || RANGE < 1 || RANGE > 2000) throw new Error('ANT_INDEXER_BLOCK_RANGE must be between 1 and 2000');
 const CONFIRMATIONS = Number(process.env.ANT_INDEXER_CONFIRMATIONS || 12);
 const REORG_LOOKBACK = Number(process.env.ANT_INDEXER_REORG_LOOKBACK || 64);
 if (!Number.isSafeInteger(CONFIRMATIONS) || CONFIRMATIONS < 12) throw new Error('ANT_INDEXER_CONFIRMATIONS must be an integer of at least 12');
