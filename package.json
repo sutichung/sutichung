@@ -8,7 +8,7 @@
     "react-dom": "^18.2.0",
     "lightweight-charts": "^5.0.0",
     "hls.js": "^1.6.15",
-    "ws": "^8.18.3",
+    "ws": "^8.21.0",
     "@openzeppelin/contracts": "^5.2.0",
     "dotenv": "^16.4.7",
     "ethers": "^6.14.4"
