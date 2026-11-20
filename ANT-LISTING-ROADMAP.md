@@ -93,14 +93,14 @@ Never fabricate volume, holders, users, partnerships, audits, exchange interest,
 | Workstream | Current verified state |
 |---|---|
 | Fixed-supply ANT contract | Implemented in repository; CI previously passed token compile/tests |
-| 5% USDT sale contract | Implemented; CI coverage includes 18-decimal path; additional 6-decimal and zero-output tests added and awaiting CI |
+| 5% USDT sale contract | Implemented; 6/18-decimal, zero-output and atomic rollback tests added; token CI passed on commit 9aae7ff; latest backend CI pending |
 | Production oracle | Not implemented/approved |
 | Testnet deployment | Not yet performed |
 | Safe addresses | Not yet supplied/verified |
 | Member auth | Existing Supabase Auth integration present; runtime configuration and end-to-end tests still required |
 | ANT wallet and purchase UI | Not yet implemented |
 | Persistent on-chain ledger schema | Migration committed; not yet applied to Supabase |
-| On-chain event indexer | Not yet implemented |
+| On-chain event indexer | Testnet-only indexer and scheduled workflow committed; disabled pending deployment/configuration and end-to-end verification |
 | Finance/admin dashboard for ANT | Not yet implemented |
 | Independent audit | Not performed |
 | Mainnet sale | Disabled / not deployed |
