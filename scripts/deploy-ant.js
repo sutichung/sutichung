@@ -8,6 +8,14 @@ async function main() {
   if (!recipient || !ethers.isAddress(recipient) || recipient === ethers.ZeroAddress) {
     throw new Error("Set ANT_MULTISIG_ADDRESS to the verified BSC testnet Safe/multisig address.");
   }
+  const safeCode = await ethers.provider.getCode(recipient);
+  if (safeCode === "0x") throw new Error("ANT_MULTISIG_ADDRESS has no deployed contract code; verify the BSC testnet Safe address.");
+  const safe = new ethers.Contract(recipient, [
+    "function getThreshold() view returns(uint256)",
+    "function getOwners() view returns(address[])"
+  ], ethers.provider);
+  const [threshold, owners] = await Promise.all([safe.getThreshold(), safe.getOwners()]);
+  if (threshold < 2n || owners.length < 3) throw new Error("ANT initial holder must be a Safe with at least a 2-of-3 signer threshold.");
   const [deployer] = await ethers.getSigners();
   if (!deployer) throw new Error("DEPLOYER_PRIVATE_KEY is not configured.");
 
