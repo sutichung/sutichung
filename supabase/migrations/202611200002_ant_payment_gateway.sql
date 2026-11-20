@@ -35,7 +35,36 @@ create table if not exists public.ant_financial_ledger (
  log_index integer not null check(log_index>=0), entry_type text not null check(entry_type in ('usdt_gross','usdt_fee','usdt_net','ant_delivery','reversal')),
  asset_symbol text not null check(asset_symbol in ('USDT','ANT')), asset_contract text not null check(asset_contract~'^0x[a-fA-F0-9]{40}$'),
  asset_decimals smallint not null check(asset_decimals between 0 and 36), amount_raw numeric(78,0) not null check(amount_raw>0),
- direction text not null check(direction in ('in','out')), wallet text not null check(wallet~'^0x[a-fA-F0-9]{40}$'),
+ direction text not null check(direction in ('in','out')), wallet text not null check(wallet~'^0x[a-fA-F0-9]{40}
+ created_at timestamptz not null default now(), unique(chain_id,tx_hash,log_index,entry_type)
+);
+create index if not exists ant_financial_ledger_order_idx on public.ant_financial_ledger(order_id,created_at);
+create table if not exists public.ant_payment_audit_log (
+ id uuid primary key default gen_random_uuid(), actor_user_id uuid references auth.users(id) on delete set null,
+ actor_type text not null check(actor_type in ('member','admin','system','worker')), action text not null,
+ order_id uuid references public.ant_payment_orders(id) on delete restrict, correlation_id uuid,
+ outcome text not null check(outcome in ('success','denied','error','warning')), metadata jsonb not null default '{}'::jsonb,
+ created_at timestamptz not null default now()
+);
+alter table public.ant_payment_orders enable row level security;
+alter table public.ant_payment_chain_events enable row level security;
+alter table public.ant_financial_ledger enable row level security;
+alter table public.ant_payment_audit_log enable row level security;
+drop policy if exists ant_payment_orders_owner_read on public.ant_payment_orders;
+create policy ant_payment_orders_owner_read on public.ant_payment_orders for select to authenticated using(auth.uid()=user_id);
+drop policy if exists ant_payment_events_owner_read on public.ant_payment_chain_events;
+create policy ant_payment_events_owner_read on public.ant_payment_chain_events for select to authenticated using(exists(select 1 from public.ant_payment_orders o where o.id=order_id and o.user_id=auth.uid()));
+drop policy if exists ant_payment_ledger_owner_read on public.ant_financial_ledger;
+create policy ant_payment_ledger_owner_read on public.ant_financial_ledger for select to authenticated using(exists(select 1 from public.ant_payment_orders o where o.id=order_id and o.user_id=auth.uid()));
+drop policy if exists ant_payment_audit_owner_read on public.ant_payment_audit_log;
+create policy ant_payment_audit_owner_read on public.ant_payment_audit_log for select to authenticated using(actor_user_id=auth.uid() and actor_type='member');
+revoke all on public.ant_payment_orders,public.ant_payment_chain_events,public.ant_financial_ledger,public.ant_payment_audit_log from anon;
+revoke insert,update,delete on public.ant_payment_orders,public.ant_payment_chain_events,public.ant_financial_ledger,public.ant_payment_audit_log from anon,authenticated;
+grant select on public.ant_payment_orders,public.ant_payment_chain_events,public.ant_financial_ledger,public.ant_payment_audit_log to authenticated;
+grant select,insert,update on public.ant_payment_orders to service_role;
+grant select,insert,update on public.ant_payment_chain_events to service_role;
+grant select,insert on public.ant_financial_ledger,public.ant_payment_audit_log to service_role;
+), canonical boolean not null default true,
  created_at timestamptz not null default now(), unique(chain_id,tx_hash,log_index,entry_type)
 );
 create index if not exists ant_financial_ledger_order_idx on public.ant_financial_ledger(order_id,created_at);
