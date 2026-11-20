@@ -2,6 +2,8 @@
 const { indicators } = require('./indicators');
 const { createAsyncCache } = require('./market-cache');
 const { isMarketDataLicensed, requireMarketDataLicense } = require('./market-data-license');
+const { CryptoLiveScorer } = require('./crypto-live-scorer');
+const liveScorer = new CryptoLiveScorer();
 const marketCache=createAsyncCache({maxEntries:500});
 const now=()=>new Date().toISOString();
 async function getJson(url,timeout=14000){
@@ -86,7 +88,25 @@ async function loadMarket(){
   const receivedAt=now(),sourceTimestampCount=markets.filter(x=>x.sourceTimestamp).length,freshQuoteCount=markets.filter(x=>x.freshnessStatus==='fresh').length,staleQuoteCount=markets.filter(x=>x.freshnessStatus==='stale').length,unverifiedQuoteCount=markets.filter(x=>x.freshnessStatus==='unverified').length;
   return {markets,status:markets.length?'ok':exchanges.every(x=>x.status==='not_configured')?'license_required':'degraded',licenseRequiredProviders:exchanges.filter(x=>x.status==='not_configured').map(x=>x.name),summary:{total:markets.length,spot:markets.filter(x=>x.marketType==='spot').length,perpetual:markets.filter(x=>x.marketType==='perpetual').length,exchanges:exchanges.filter(x=>x.status==='connected').map(x=>x.name),connectedExchangeCount:exchanges.filter(x=>x.status==='connected').length,sourceTimestampCount,sourceTimestampCoveragePct:markets.length?Math.round(sourceTimestampCount/markets.length*100):0,freshQuoteCount,staleQuoteCount,unverifiedQuoteCount},exchanges,coverage:{scope:'僅涵蓋下列五家交易所公開 API 可取得的商品；不代表全世界所有交易所或所有商品',partialProviders:exchanges.filter(x=>x.coverageNote).map(x=>x.name),timestampLimit:'來源時間戳依交易所欄位可能是最後成交或回應時間；超過 5 分鐘標示過期，缺少時間戳標示未驗證'},source:markets.length?'已授權交易所各自行情 API；價格不跨交易所混合':'未取得交易所會員展示／再分發書面授權，未啟用加密貨幣行情',quoteMode:'REST snapshot polling；非 WebSocket 逐筆推送',refreshIntervalMs:15000,receivedAt,timestamp:null};
  });
- return require('./crypto-realtime').createDefaultCryptoRealtimeFeed().mergeMarket(snapshot);
+ const merged = require('./crypto-realtime').createDefaultCryptoRealtimeFeed().mergeMarket(snapshot);
+ merged.markets = (merged.markets || []).map(market => {
+  const sourceMs = market.sourceTimestamp ? Date.parse(market.sourceTimestamp) : NaN;
+  if (!Number.isFinite(sourceMs) || market.freshnessStatus !== 'fresh') {
+   return { ...market, liveSignal: { eligible: false, status: 'unverified_or_stale_source', score: null, reasons: ['來源時間戳未驗證或行情已過期'] } };
+  }
+  try {
+   const liveSignal = liveScorer.update({
+    exchange: market.exchange, marketType: market.marketType, symbol: market.nativeSymbol || market.symbol,
+    timestamp: sourceMs, last: market.price, bid: market.bid, ask: market.ask,
+    changePct: market.changePct
+    // Deliberately omit 24h quoteVolume: volume anomaly scoring requires completed interval volume.
+   });
+   return { ...market, liveSignal };
+  } catch (_) {
+   return { ...market, liveSignal: { eligible: false, status: 'scoring_error', score: null, reasons: ['評分資料驗證失敗'] } };
+  }
+ });
+ return merged;
 }
 function timestampIso(value,multiplier=1){
  if(value===null||value===undefined||value==='')return null;
