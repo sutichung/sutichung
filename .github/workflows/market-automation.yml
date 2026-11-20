@@ -194,7 +194,7 @@ jobs:
           retention-days: 90
 
   persistent-prediction-settlement:
-    if: github.event_name == 'schedule' && github.event.schedule == '*/15 * * * *'
+    if: github.event_name == 'schedule' && github.event.schedule == '*/15 * * * *' && vars.PREDICTION_AUTOMATION_ENABLED == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Settle due prediction horizons from authorized provider adapter
@@ -208,7 +208,7 @@ jobs:
           cat /tmp/prediction-settlement.json
           node -e "const x=require('/tmp/prediction-settlement.json'); console.log('Settled:',x.settled,'checked:',x.checked,'errors:',x.errors?.length||0); if(x.errors?.length) process.exit(1)"
   persistent-model-calibration:
-    if: github.event_name == 'schedule' && github.event.schedule == '15 22 * * *'
+    if: github.event_name == 'schedule' && github.event.schedule == '15 22 * * *' && vars.PREDICTION_AUTOMATION_ENABLED == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Recompute calibration from settled, explicitly probabilistic forecasts
