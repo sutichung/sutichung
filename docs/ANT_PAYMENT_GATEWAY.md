@@ -17,7 +17,7 @@ The gateway is deliberately restricted to BNB Smart Chain Testnet (chain ID 97).
 7. The indexer checks two independent RPCs, chain ID, matching logs, successful receipts, canonical block hashes, exact 5% fee split, and all three ERC-20 Transfer logs (USDT fee, USDT proceeds, ANT delivery). It waits for 12 confirmations by default.
 8. The worker writes idempotent chain events and four ledger entries (gross USDT, fee, net proceeds, ANT delivery), then marks the order delivered. If an event arrives before its order, the worker retains it unlinked and retries reconciliation. Any amount mismatch enters manual review.
 
-The React gateway is `src/AntPayments.jsx`, mounted from the main app navigation. The admin finance endpoint is `GET /api/ant/admin/finance`; it is restricted to `SUPER_ADMIN` or `FINANCE_VIEWER` rows in `ant_admin_roles`. No browser-side role assignment is exposed.
+The React gateway is `src/AntPayments.jsx`, mounted from the main app navigation. It supports wallet verification, quote/order creation, exact USDT approval, purchase submission, order polling and member purchase history. The admin finance endpoint is `GET /api/ant/admin/finance`; it is restricted to `SUPER_ADMIN` or `FINANCE_VIEWER` rows in `ant_admin_roles` and requires a Supabase MFA `aal2` access token. No browser-side role assignment is exposed.
 
 ## Supabase migrations
 
@@ -68,8 +68,8 @@ The E2E suite requires a funded testnet deployer plus distinct `ANT_FEE_WALLET` 
 - No ANT token or sale contract has been deployed from this branch yet.
 - No verified testnet USDT, sale address, oracle address, recipient wallets, deployer signer or Supabase project credentials were supplied/configured in the connected deployment.
 - Supabase migrations and RLS role tests remain unapplied.
-- The GitHub Actions scheduled worker has no secrets configured yet.
-- The Render worker plan is blocked by billing information; no paid service was created.
+- The gated GitHub Actions indexer workflow is committed but its repository variables and secrets are not configured, and it has not completed an end-to-end run.
+- No paid Render worker was created.
 - The existing Render web service still runs `main`; ANT changes are on PR #39 and have not been merged or deployed.
 - The included mock oracle and freely mintable mock USDT are test-only. A public mock setter is not a production price feed.
 - The current sale contract has no owner pause switch, no owner withdrawal and immutable recipients. A wrong address cannot be repaired by an admin.
