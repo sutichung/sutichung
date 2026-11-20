@@ -24,7 +24,9 @@
     "test:token": "hardhat test",
     "deploy:token:testnet": "hardhat run scripts/deploy-ant.js --network bscTestnet",
     "ant:indexer": "node server/jobs/ant-sale-indexer.js",
-    "ant:event-topic": "hardhat run scripts/print-ant-sale-event-topic.js"
+    "ant:event-topic": "hardhat run scripts/print-ant-sale-event-topic.js",
+    "deploy:sale:testnet": "hardhat run scripts/deploy-ant-sale-testnet.js --network bscTestnet",
+    "deploy:ant:e2e:testnet": "hardhat run scripts/deploy-ant-testnet-suite.js --network bscTestnet"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "5.2.0",
