@@ -94,7 +94,7 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
       return json(res, 200, {
         enabled: true, network: 'BSC Testnet', chainId: CHAIN_ID, feeBps: 500,
         walletLinkConfigured: !!(base && anonKey && serviceKey && process.env.ANT_WALLET_DOMAIN),
-        saleConfigured: !!(process.env.ANT_SALE_CONTRACT && process.env.ANT_USDT_CONTRACT && process.env.ANT_TOKEN_CONTRACT),
+        saleConfigured: !!(process.env.ANT_SALE_CONTRACT && process.env.ANT_USDT_CONTRACT && process.env.ANT_TOKEN_CONTRACT && process.env.ANT_FEE_WALLET && process.env.ANT_TREASURY_WALLET),
         usdtDecimals: Number(process.env.ANT_USDT_DECIMALS || 18), mainnetEnabled: false
       }), true;
     }
@@ -176,6 +176,7 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
         });
         if (!linked.length) { json(res, 403, { error: 'wallet_not_verified' }); return true; }
         const gross = parseRaw(body.grossUsdtRaw, 'gross_usdt');
+        if (BigInt(gross) * 500n / 10000n === 0n) { json(res, 400, { error: 'payment_below_minimum_fee_unit' }); return true; }
         const contracts = saleConfig();
         const provider = await providerForTestnet();
         try {
