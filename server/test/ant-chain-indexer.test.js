@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { ethers } = require('ethers');
-const { decodeEvent, ledgerRows, verifyPurchaseReceipt } = require('../jobs/ant-chain-indexer');
+const { decodeEvent, ledgerRows, verifyPurchaseReceipt, validateRpcEndpoints } = require('../jobs/ant-chain-indexer');
 
 const cfg = {
   sale: '0x1111111111111111111111111111111111111111',
@@ -103,4 +103,11 @@ test('accepts the contract zero-fee transfer path only when both USDT transfers 
   assert.equal(verifyPurchaseReceipt(receipt, source, event, cfg), true);
   receipt.logs.splice(1, 1);
   assert.throws(() => verifyPurchaseReceipt(receipt, source, event, cfg), /receipt_usdt_transfer_reconciliation_failed/);
+});
+
+test('requires two distinct HTTPS RPC providers', () => {
+  assert.equal(validateRpcEndpoints('https://rpc-a.example/rpc', 'https://rpc-b.example/rpc'), true);
+  assert.throws(() => validateRpcEndpoints('https://same.example/a', 'https://same.example/b'), /rpc_providers_must_be_independent/);
+  assert.throws(() => validateRpcEndpoints('http://rpc-a.example', 'https://rpc-b.example'), /insecure_or_invalid_rpc_url/);
+  assert.throws(() => validateRpcEndpoints('https://user:pass@rpc-a.example', 'https://rpc-b.example'), /insecure_or_invalid_rpc_url/);
 });
