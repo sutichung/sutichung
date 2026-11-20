@@ -1,6 +1,6 @@
-# 泰丞・台股 AI 智慧操盤中樞
+# ZENTRAX — Next-Gen Financial Technology
 
-此 repository 包含 React 前端與 Node.js 後端 API 骨架。系統採「資料不足就不判斷」原則；沒有授權即時行情、全市場指標掃描、法人籌碼或台指期來源時，相關欄位會明確顯示缺資料，不會用假數字補齊。
+**ZENTRAX** 是整合 AI 市場情報、量化研究、全球市場監控與區塊鏈生態的金融科技平台。平台品牌採黑金視覺；ANT 仍是原有代幣名稱與代號，不因品牌改版而變更合約或代幣經濟。\n\n此 repository 包含 React 前端與 Node.js 後端 API 骨架。系統採「資料不足就不判斷」原則；沒有授權即時行情、全市場指標掃描、法人籌碼或台指期來源時，相關欄位會明確顯示缺資料，不會用假數字補齊。
 
 ## 專案技術
 - 前端：Create React App / React 18（不是 Vite）。
@@ -139,10 +139,10 @@ API Key 僅放後端環境變數；不要提交 .env、Token、券商帳密或�
 `.github/workflows/production-smoke.yml` 會在 main 分支每次推送後，等待 Render 啟用對應 commit，並透過 GitHub Actions OIDC 驗證台股官方行情與多交易所加密貨幣資料；美股官方行情授權未設定時會明確列為警告，不冒充官方報價。
 
 
-## ANT Ant Colony 全球推廣計畫
+## ZENTRAX 品牌與 ANT 生態
 
 ANT 專案的全球自然流量推廣執行計畫已整理於 [ANT Global Growth Plan](./docs/ANT_GLOBAL_GROWTH_PLAN.md)。計畫目標為 10,000 名真實社群會員，採零成本自然流量、科技型品牌定位，包含 90 天執行節奏、內容日曆、社群治理、反詐騙規範、成效指標與公開銷售前置門檻。此文件是執行計畫，不代表社群帳號已建立、活動已發布或會員目標已達成。
 
-- [ANT Creator Revenue & Fair-Launch Policy](./docs/ANT_CREATOR_REVENUE_POLICY.md)：5% 平台佣金、創造者收入、財庫分流、反狙擊公平發行規範與公開銷售前驗收門檻。此為規格文件，不代表銷售已上線。
+- [ZENTRAX Brand System](./docs/ZENTRAX_BRAND_SYSTEM.md)：平台品牌架構、黑金視覺、ANT 代幣連續性及商標／網域檢查清單。\n- [ANT Creator Revenue & Fair-Launch Policy](./docs/ANT_CREATOR_REVENUE_POLICY.md)：5% 平台佣金、創造者收入、財庫分流、反狙擊公平發行規範與公開銷售前驗收門檻。此為規格文件，不代表銷售已上線。
 
 - [ANT Security Operations & Incident Response](./docs/ANT_SECURITY_OPERATIONS.md)：管理員分權、多簽與金鑰保護、Oracle／USDT 驗證、監控告警及事故處理流程。
