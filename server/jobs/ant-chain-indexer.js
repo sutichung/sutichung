@@ -38,6 +38,7 @@ function config() {
     sale: address('ANT_SALE_CONTRACT'),
     usdt: address('ANT_USDT_CONTRACT'),
     ant: address('ANT_TOKEN_CONTRACT'),
+    oracle: address('ANT_ORACLE_CONTRACT'),
     feeWallet: address('ANT_FEE_WALLET'),
     treasuryWallet: address('ANT_TREASURY_WALLET'),
     maxOracleAge: Math.max(60, Number(process.env.ANT_MAX_ORACLE_AGE || 3600)),
@@ -45,6 +46,7 @@ function config() {
     antDecimals: 18
   };
   if (!Number.isInteger(cfg.usdtDecimals) || cfg.usdtDecimals < 0 || cfg.usdtDecimals > 18) throw new Error('invalid_ANT_USDT_DECIMALS');
+  if (!Number.isSafeInteger(cfg.maxOracleAge) || cfg.maxOracleAge < 60) throw new Error('invalid_ANT_MAX_ORACLE_AGE');
   return cfg;
 }
 async function db(cfg, table, { method = 'GET', query = '', body, prefer } = {}) {
