@@ -99,7 +99,7 @@ Never fabricate volume, holders, users, partnerships, audits, exchange interest,
 | Safe addresses | Not yet supplied/verified |
 | Member auth | Existing Supabase Auth integration present; runtime configuration and end-to-end tests still required |
 | ANT wallet and purchase UI | Not yet implemented |
-| Persistent on-chain ledger/indexer | Not yet implemented |
+| Persistent on-chain ledger schema | Migration committed; not yet applied to Supabase |\n| On-chain event indexer | Not yet implemented |
 | Finance/admin dashboard for ANT | Not yet implemented |
 | Independent audit | Not performed |
 | Mainnet sale | Disabled / not deployed |
