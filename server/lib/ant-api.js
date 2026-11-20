@@ -5,7 +5,7 @@ const CHAIN_ID = 97;
 const SALE_ABI = [
   'function quote(uint256 grossUsdt) view returns (uint256 antOut,uint256 feeUsdt,uint256 netUsdt,uint256 price)',
   'function usdt() view returns (address)', 'function ant() view returns (address)',
-  'function feeRecipient() view returns (address)', 'function proceedsRecipient() view returns (address)', 'function usdtDecimals() view returns (uint8)', 'function oracle() view returns (address)', 'function maxOracleAge() view returns (uint256)',
+  'function oracle() view returns (address)', 'function feeRecipient() view returns (address)', 'function proceedsRecipient() view returns (address)', 'function usdtDecimals() view returns (uint8)', 'function maxOracleAge() view returns (uint256)', 'function oracle() view returns (address)', 'function maxOracleAge() view returns (uint256)',
   'function buy(uint256 grossUsdt,uint256 minAntOut) returns (uint256 antOut)'
 ];
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
@@ -208,8 +208,9 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
           ]);
           if (onchainUsdt.toLowerCase() !== contracts.usdt.toLowerCase() ||
               onchainAnt.toLowerCase() !== contracts.ant.toLowerCase() ||
+              onchainOracle.toLowerCase() !== contracts.oracle.toLowerCase() ||
               onchainFee.toLowerCase() !== contracts.fee.toLowerCase() ||
-              onchainTreasury.toLowerCase() !== contracts.treasury.toLowerCase() || Number(onchainDecimals) !== Number(process.env.ANT_USDT_DECIMALS || 18) || onchainOracle.toLowerCase() !== contracts.oracle.toLowerCase() || Number(onchainMaxAge) !== Number(process.env.ANT_MAX_ORACLE_AGE || 3600)) {
+              onchainTreasury.toLowerCase() !== contracts.treasury.toLowerCase() || Number(onchainDecimals) !== Number(process.env.ANT_USDT_DECIMALS) || Number(onchainMaxAge) !== contracts.maxAge || onchainOracle.toLowerCase() !== contracts.oracle.toLowerCase() || Number(onchainMaxAge) !== Number(process.env.ANT_MAX_ORACLE_AGE || 3600)) {
             json(res, 503, { error: 'sale_contract_configuration_mismatch' }); return true;
           }
           const quote = await sale.quote(gross);
