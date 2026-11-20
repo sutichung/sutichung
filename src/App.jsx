@@ -35,7 +35,7 @@ function DeferredSection({ children, minHeight = 180 }) {
 const API = (import.meta.env.VITE_MARKET_API || '/api/market').replace(/\/$/, '');
 const APP_VERSION = '2026.11.18.56';
 
-const C = { bg:'#080d18', panel:'#111a2b', panel2:'#172338', border:'#293951', text:'#e8eef8', muted:'#91a1b8', blue:'#60a5fa', green:'#34d399', red:'#fb7185', yellow:'#fbbf24' };
+const C = { bg:'#080808', panel:'#12100c', panel2:'#1b1710', border:'#594728', text:'#f5f1e8', muted:'#b8b1a2', blue:'#D6B56D', green:'#34d399', red:'#fb7185', yellow:'#f2d99a' };
 const fmt = (v,d=2) => v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v)) ? Number(v).toLocaleString('zh-TW',{minimumFractionDigits:d,maximumFractionDigits:d}) : '—';
 const signed = v => `${Number(v)>0?'+':''}${fmt(v)}%`;
 async function getJSON(path, signal) { const token=localStorage.getItem('ts_access_token')||''; const headers={Accept:'application/json'}; if(token)headers.Authorization='Bearer '+token; const r=await fetch(`${API}${path}`,{signal,headers}); if(!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.json(); }
