@@ -30,3 +30,17 @@ test('finance assurance requires an MFA aal2 token claim', () => {
   assert.equal(assuranceLevel({headers:{authorization:'Bearer '+token({aal:'aal1'})}}),'aal1');
   assert.equal(assuranceLevel({headers:{authorization:'Bearer not-a-jwt'}}),'aal1');
 });
+
+test('conditional order submission rejects a lost race instead of claiming success', () => {
+  const { requireConditionalUpdate } = require('../lib/ant-api');
+  const row = { id: 'order-1', status: 'submitted' };
+  assert.equal(requireConditionalUpdate([row], 'order_already_submitted'), row);
+  assert.throws(
+    () => requireConditionalUpdate([], 'order_already_submitted'),
+    error => error.status === 409 && error.message === 'order_already_submitted'
+  );
+  assert.throws(
+    () => requireConditionalUpdate(null, 'order_already_submitted'),
+    error => error.status === 409
+  );
+});
