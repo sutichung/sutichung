@@ -90,6 +90,17 @@ function verifyPurchaseReceipt(receipt, event, config) {
   if (!receipt || String(receipt.status).toLowerCase() !== '0x1') throw new Error('purchase_receipt_not_successful');
   if (String(receipt.to || '').toLowerCase() !== config.saleContract) throw new Error('purchase_receipt_wrong_target');
   if (String(receipt.blockHash || '').toLowerCase() !== event.blockHash) throw new Error('purchase_receipt_block_hash_mismatch');
+  if (String(receipt.transactionHash || '').toLowerCase() !== event.transactionHash) throw new Error('purchase_receipt_transaction_hash_mismatch');
+  if (hexNumber(receipt.blockNumber, 'receipt_block_number') !== event.blockNumber) throw new Error('purchase_receipt_block_number_mismatch');
+  const purchaseLogs = (receipt.logs || []).filter(log =>
+    String(log.address || '').toLowerCase() === config.saleContract &&
+    Array.isArray(log.topics) && String(log.topics[0] || '').toLowerCase() === config.topic0
+  );
+  if (purchaseLogs.length !== 1) throw new Error('purchase_event_missing_or_duplicated_in_receipt');
+  const receiptEvent = decodePurchaseLog(purchaseLogs[0], config);
+  for (const key of ['buyer','transactionHash','logIndex','blockNumber','grossUsdt','feeUsdt','netUsdt','antOut','priceUsdtPerAnt','blockHash']) {
+    if (receiptEvent[key] !== event[key]) throw new Error('purchase_event_receipt_mismatch_' + key);
+  }
   const transfers = (receipt.logs || []).map(decodeTransfer).filter(Boolean);
   const usdt = transfers.filter(x => x.token === config.usdtContract && x.from === event.buyer);
   const ant = transfers.filter(x => x.token === config.antContract && x.from === config.saleContract && x.to === event.buyer);
