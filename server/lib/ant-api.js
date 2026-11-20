@@ -32,7 +32,7 @@ Expiration Time: ${expiresAt}`;
 function assuranceLevel(req) {
   try {
     const header = String(req && req.headers && req.headers.authorization || '');
-    const match = header.match(/^Bearer\\s+(\\S+)$/i);
+    const match = header.match(/^Bearer\s+(\S+)$/i);
     const token = match ? match[1] : '';
     const payload = token.split('.')[1];
     if (!payload) return 'aal1';
