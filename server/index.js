@@ -27,6 +27,7 @@ const { verifyGitHubActionsToken } = require('./lib/github-oidc');
 const { buildRuntimeHealth, buildDependencyReadiness } = require('./lib/health');
 const { getHistoricalCoverage, validateHistoryRange } = require('./lib/historical-coverage');
 const researchStorage = require('./lib/research-storage').createResearchStorage();
+const cryptoEventStorage = require('./lib/crypto-event-storage').createCryptoEventStorage();
 const dependencyVulnerabilityScanner = createDependencyVulnerabilityScanner({ lockPath: path.join(__dirname, '..', 'package-lock.json'), manifestPath: path.join(__dirname, '..', 'package.json'), auditPath: path.join(__dirname, '..', 'dependency-audit.json') });
 
 const PORT = Number(process.env.PORT || 8787);
@@ -609,7 +610,16 @@ async function route(req,res){
     }catch(e){return json(res,400,{error:e.message});}
   }
   if(u.pathname==='/api/crypto/realtime/status'){
-    return json(res,200,cryptoRealtimeFeed.status());
+    const local=cryptoRealtimeFeed.status();
+    if(process.env.CRYPTO_STREAM_EMBEDDED==='false'){
+      try{return json(res,200,await cryptoEventStorage.readStatus());}
+      catch(e){return json(res,503,{configured:cryptoEventStorage.configured,status:'unavailable',error:e.message});}
+    }
+    return json(res,200,local);
+  }
+  if(u.pathname==='/api/crypto/worker/status'){
+    try{return json(res,200,await cryptoEventStorage.readStatus());}
+    catch(e){return json(res,503,{configured:cryptoEventStorage.configured,status:'unavailable',error:e.message});}
   }
   if(u.pathname==='/api/crypto/realtime/quotes'){
     return json(res,200,{quotes:cryptoRealtimeFeed.getQuotes(),status:cryptoRealtimeFeed.status(),timestamp:now()});
@@ -1146,7 +1156,7 @@ const server=http.createServer(async(req,res)=>{
   try{await route(req,res);}catch(e){json(res,500,{error:'internal_error',message:process.env.NODE_ENV==='production'?'服務暫時無法處理請求':e.message});}
 });
 server.listen(PORT,()=>{
-  cryptoRealtimeFeed.start();
+  if(process.env.CRYPTO_STREAM_EMBEDDED!=='false') cryptoRealtimeFeed.start();
   process.stdout.write('Taiwan stock API listening on '+PORT+'\\n');
 });
 process.once('SIGTERM',()=>{cryptoRealtimeFeed.stop().finally(()=>server.close(()=>process.exit(0)));});
