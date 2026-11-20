@@ -19,6 +19,7 @@ const { loadRiskHistory, loadFreshMicrostructure } = require('./lib/crypto-risk-
 const { runStrategyLab } = require('./lib/strategy-lab');
 const globalFinance = require('./lib/global-finance');
 const globalIntelligence = require('./lib/intelligence');
+const marketIntelligence = require('./lib/market-intelligence');
 const { diagnoseProviders } = require('./lib/provider-diagnostics');
 const { loadOfficialDailyQuotes, diagnoseOfficialDailyQuotes } = require('./lib/official-tw-market');
 const { epochMilliseconds, isStaleTimestamp } = require('./lib/market-timestamps');
@@ -1119,6 +1120,11 @@ async function route(req,res){
   if(u.pathname==='/api/finance/macro'){
     const result=await safeLoad('global-finance-macro',6*60*60*1000,globalFinance.loadMacro,e=>({data:[],source:'unavailable',fetchedAt:now(),status:'unavailable',summary:{requested:0,received:0,failed:0},error:e.message}));
     return json(res,result.status==='unavailable'?503:200,result);
+  }
+  if(u.pathname==='/api/intelligence/market-signals'){
+    const symbols=String(u.searchParams.get('symbols')||'BTCUSDT,ETHUSDT').split(',').slice(0,5);
+    const result=await safeLoad('global-market-intelligence:'+symbols.join(','),60*1000,()=>marketIntelligence.loadAll({symbols}),e=>({generatedAt:now(),error:e.message,policy:{items:[],sources:[]},social:{items:[],sources:[]},orderbooks:{books:[],sources:[]},whales:{status:'unavailable',items:[]},macro:{data:[],sources:[]}}));
+    return json(res,200,result);
   }
   if(u.pathname==='/api/intelligence/overview'){
     const results=await Promise.allSettled([
