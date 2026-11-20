@@ -101,6 +101,10 @@ export default function AntPayments() {
   },[order?.id,order?.txHash]);
   const loadFinance = async()=>{setFinanceError('');try{setFinance(await api('/api/ant/admin/finance'));}catch(e){setFinanceError(e.message);}};
   return <section id="ant-payments" aria-label="ANT Testnet payment gateway" style={{...card,margin:'12px 0',scrollMarginTop:80}}>
+    <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(150px,220px)',gap:16,alignItems:'center',background:'radial-gradient(circle at 78% 45%,rgba(214,181,109,.16),transparent 52%),linear-gradient(135deg,#17140f,#090807)',border:'1px solid rgba(214,181,109,.32)',borderRadius:14,padding:14,marginBottom:16}}>
+      <div><div style={{fontSize:11,letterSpacing:'.2em',color:'#D6B56D',fontWeight:900}}>THE CREATOR TOKEN</div><div style={{fontSize:28,fontWeight:1000,letterSpacing:'.08em',marginTop:5}}>ZENTRAX <span style={{color:'#D6B56D'}}>ANT</span></div><div style={{...muted,marginTop:6}}>黑金螞蟻幣｜固定初始供應量 200,000 ANT｜BSC Testnet 預覽</div><div style={{...muted,marginTop:8}}>視覺識別已整合；目前是測試網開發版本，並非主網上市或公開市場報價。</div></div>
+      <img src="/zentrax-ant-coin.svg" alt="ZENTRAX ANT 黑金代幣圖樣" loading="lazy" style={{width:'100%',maxWidth:190,justifySelf:'center',filter:'drop-shadow(0 8px 20px rgba(214,181,109,.22))'}}/>
+    </div>
     <div style={{display:'flex',justifyContent:'space-between',gap:12,alignItems:'center',flexWrap:'wrap'}}>
       <div><div style={{fontSize:19,fontWeight:950,letterSpacing:'.04em',color:'#D6B56D'}}>ZENTRAX · ANT GATEWAY</div><div style={{...muted,marginTop:4}}>BSC Testnet｜固定 5% 佣金｜鏈上驗證交付｜不接收助記詞或私鑰</div></div>
       <span style={{fontSize:11,color:status?.saleConfigured?'#34d399':'#fbbf24'}}>{status?.saleConfigured?'合約設定已填入':'尚未設定測試網合約'}</span>
@@ -157,6 +161,16 @@ export default function AntPayments() {
         </div>
         <div style={muted}>最近訂單 {finance.orders.length} 筆；帳本紀錄 {finance.ledger.length} 筆。所有金額均以測試網原始單位記錄。</div>
       </div>}
+    </div>
+    <div style={{marginTop:14,padding:12,background:'#17140f',border:'1px solid rgba(214,181,109,.28)',borderRadius:10}}>
+      <b style={{color:'#D6B56D',fontSize:13}}>創作者權益與反砸盤規則</b>
+      <div style={{...muted,marginTop:7}}>ANT 固定初始供應 200,000 枚，部署時全數鑄造至初始持有人；創作者應使用自己控制的安全錢包作為初始持有人，並公開鏈上持倉與資金流。</div>
+      <ul style={{...muted,paddingLeft:18,margin:'7px 0 0'}}>
+        <li>創作者可透過公開治理／多簽管理平台參數與金庫，不可暗中改寫持幣者餘額。</li>
+        <li>大額轉帳與集中賣壓只做即時告警、公開揭露及風險提示。</li>
+        <li>不設秘密黑名單、任意凍結、沒收代幣或針對個別交易者的報復功能。</li>
+        <li>若要設交易冷卻或熔斷，必須事前公開規則、適用所有人並經獨立審查；目前合約沒有這些限制。</li>
+      </ul>
     </div>
     <div style={{...muted,marginTop:12}}>測試網功能。正式收款仍須完成獨立合約審計、TWAP 預言機、法遵審查及主網重新部署；目前不會收取真實 USDT。</div>
   </section>;
