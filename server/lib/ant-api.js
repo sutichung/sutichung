@@ -55,6 +55,15 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
     const header = String(req.headers.authorization || '');
     return /^Bearer\s+\S+$/i.test(header) ? header.replace(/^Bearer\s+/i, '') : '';
   }
+  function assuranceLevel(req) {
+    try {
+      const token = bearer(req);
+      const payload = token.split('.')[1];
+      if (!payload) return 'aal1';
+      const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+      return claims.aal === 'aal2' ? 'aal2' : 'aal1';
+    } catch (_) { return 'aal1'; }
+  }
   async function userFor(req) {
     const token = bearer(req);
     if (!token || !base || !anonKey) return null;
@@ -168,6 +177,15 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
       } catch (error) { json(res, error.status || 400, { error: error.message }); }
       return true;
     }
+    if (pathname === '/api/ant/orders' && req.method === 'GET') {
+      try {
+        const rows = await db('ant_payment_orders', {
+          query: 'select=id,buyer_wallet,gross_usdt_raw,fee_usdt_raw,net_usdt_raw,quoted_ant_raw,min_ant_raw,status,tx_hash,block_number,confirmations,created_at,updated_at&user_id=eq.' + encodeURIComponent(user.id) + '&order=created_at.desc&limit=100'
+        });
+        json(res, 200, { orders: rows });
+      } catch (error) { json(res, error.status || 503, { error: error.message }); }
+      return true;
+    }
     if (pathname === '/api/ant/orders' && req.method === 'POST') {
       try {
         const body = await readJson(req, 4096);
@@ -236,7 +254,7 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
         if (!order || order.status !== 'created' || Date.parse(order.quote_expires_at) <= Date.now()) { json(res, 409, { error: 'order_not_submittable' }); return true; }
         provider = await providerForTestnet();
         const tx = await provider.getTransaction(txHash);
-        if (!tx || tx.from.toLowerCase() !== order.buyer_wallet.toLowerCase() || !tx.to || tx.to.toLowerCase() !== order.sale_contract.toLowerCase()) {
+        if (!tx || Number(tx.chainId) !== CHAIN_ID || tx.value !== 0n || tx.from.toLowerCase() !== order.buyer_wallet.toLowerCase() || !tx.to || tx.to.toLowerCase() !== order.sale_contract.toLowerCase()) {
           json(res, 400, { error: 'transaction_sender_or_target_mismatch' }); return true;
         }
         const iface = new ethers.Interface(SALE_ABI);
@@ -272,10 +290,10 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
         const roles = await db('ant_admin_roles', {
           query: 'select=role&user_id=eq.' + encodeURIComponent(user.id)
         });
-        if (!roles.some(row => ['SUPER_ADMIN', 'FINANCE_VIEWER'].includes(row.role))) { json(res, 403, { error: 'finance_role_required' }); return true; }
+        if (!roles.some(row => ['SUPER_ADMIN', 'FINANCE_VIEWER'].includes(row.role))) { json(res, 403, { error: 'finance_role_required' }); return true; }\n        if (assuranceLevel(req) !== 'aal2') { json(res, 403, { error: 'mfa_required', requiredAssuranceLevel: 'aal2' }); return true; }
         const [orders, ledger, totalsRows] = await Promise.all([
           db('ant_payment_orders', { query: 'select=id,buyer_wallet,gross_usdt_raw,fee_usdt_raw,net_usdt_raw,quoted_ant_raw,status,tx_hash,created_at&order=created_at.desc&limit=200' }),
-          db('ant_financial_ledger', { query: 'select=entry_type,asset_symbol,amount_raw,direction,wallet,tx_hash,created_at&order=created_at.desc&limit=500' }),
+          db('ant_financial_ledger', { query: 'select=entry_type,asset_symbol,amount_raw,direction,wallet,tx_hash,created_at&canonical=eq.true&order=created_at.desc&limit=500' }),
           db('ant_financial_ledger_totals', { query: 'select=entry_type,amount_raw,entry_count' })
         ]);
         const sum = (type) => String(totalsRows.find(row => row.entry_type === type)?.amount_raw || '0');
@@ -291,4 +309,4 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
   }
   return false;
 }
-module.exports = { createAntApi, buildWalletMessage, parseRaw };
+module.exports = { createAntApi, buildWalletMessage, parseRaw, assuranceLevel };
