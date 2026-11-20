@@ -7,7 +7,7 @@ const CHAIN_ID = 97;
 const WORKER_KEY = 'ant-bsc-testnet';
 const POLL_MS = Math.max(5000, Number(process.env.ANT_INDEXER_POLL_MS || 15000));
 const RANGE = Math.max(1, Math.min(2000, Number(process.env.ANT_INDEXER_BLOCK_RANGE || 500)));
-const CONFIRMATIONS = Math.max(12, Number(process.env.ANT_INDEXER_CONFIRMATIONS || 12));
+const CONFIRMATIONS = Number(process.env.ANT_INDEXER_CONFIRMATIONS || 12);\nconst REORG_LOOKBACK = Number(process.env.ANT_INDEXER_REORG_LOOKBACK || 64);\nif (!Number.isSafeInteger(CONFIRMATIONS) || CONFIRMATIONS < 12) throw new Error('ANT_INDEXER_CONFIRMATIONS must be an integer of at least 12');\nif (!Number.isSafeInteger(REORG_LOOKBACK) || REORG_LOOKBACK < CONFIRMATIONS || REORG_LOOKBACK > 500) throw new Error('ANT_INDEXER_REORG_LOOKBACK must be between confirmations and 500');
 const EVENT_ABI = ['event AntPurchased(address indexed buyer,uint256 grossUsdt,uint256 feeUsdt,uint256 netUsdt,uint256 antOut,uint256 priceUsdtPerAnt)'];
 const iface = new ethers.Interface(EVENT_ABI);
 const transferIface = new ethers.Interface(['event Transfer(address indexed from,address indexed to,uint256 value)']);
@@ -271,6 +271,46 @@ async function reconcileUnlinked(cfg, providers, head) {
     }
   }
 }
+async function reconcileRecentCanonical(cfg, providers, head) {
+  const fromBlock = Math.max(Number(required('ANT_INDEXER_START_BLOCK')), head - REORG_LOOKBACK);
+  const rows = await db(cfg, 'ant_payment_chain_events', {
+    query: 'select=id,order_id,tx_hash,log_index,block_number,block_hash&canonical=eq.true&block_number=gte.' + fromBlock + '&limit=500'
+  });
+  const cache = new Map();
+  let orphaned = 0;
+  for (const row of rows) {
+    const blockNumber = Number(row.block_number);
+    if (!cache.has(blockNumber)) {
+      cache.set(blockNumber, await Promise.all([
+        providers[0].getBlock(blockNumber), providers[1].getBlock(blockNumber)
+      ]));
+    }
+    const [a,b] = cache.get(blockNumber);
+    if (a && b && a.hash === b.hash && a.hash === row.block_hash) continue;
+    await db(cfg, 'ant_payment_chain_events', {
+      method: 'PATCH', query: 'id=eq.' + row.id,
+      body: { canonical: false }, prefer: 'return=minimal'
+    });
+    await db(cfg, 'ant_financial_ledger', {
+      method: 'PATCH', query: 'chain_id=eq.97&tx_hash=eq.' + row.tx_hash + '&log_index=eq.' + row.log_index,
+      body: { canonical: false }, prefer: 'return=minimal'
+    });
+    if (row.order_id) {
+      await db(cfg, 'ant_payment_orders', {
+        method: 'PATCH', query: 'id=eq.' + row.order_id,
+        body: { status: 'reorged', failure_code: 'chain_reorg', confirmations: 0, updated_at: new Date().toISOString() },
+        prefer: 'return=minimal'
+      });
+      await db(cfg, 'ant_payment_audit_log', {
+        method: 'POST',
+        body: { actor_type: 'worker', action: 'ant_chain_event_reorged', order_id: row.order_id, outcome: 'warning', metadata: { chain_id: CHAIN_ID, tx_hash: row.tx_hash, log_index: Number(row.log_index), block_number: blockNumber } },
+        prefer: 'return=minimal'
+      });
+    }
+    orphaned++;
+  }
+  return { checked: rows.length, orphaned, fromBlock };
+}
 async function cycle(cfg, providers, cursor) {
   const [networkA, networkB, headA, headB] = await Promise.all([
     providers[0].getNetwork(), providers[1].getNetwork(), providers[0].getBlockNumber(), providers[1].getBlockNumber()
@@ -286,7 +326,7 @@ async function cycle(cfg, providers, cursor) {
   const fingerprint = logs => logs.map(x => [x.transactionHash, x.index, x.blockHash].join(':')).sort().join('|');
   if (fingerprint(logsA) !== fingerprint(logsB)) throw new Error('rpc_log_disagreement');
   for (const log of logsA) await recordFinalEvent(cfg, providers, log, Math.min(headA, headB));
-  await setCheckpoint(cfg, toBlock);
+  const [checkpointA, checkpointB] = await Promise.all([providers[0].getBlock(toBlock), providers[1].getBlock(toBlock)]);\n  if (!checkpointA || !checkpointB || checkpointA.hash !== checkpointB.hash) throw new Error('rpc_checkpoint_block_disagreement');\n  await setCheckpoint(cfg, toBlock, checkpointA.hash);
   process.stdout.write('ANT indexer checkpoint ' + toBlock + ', logs ' + logsA.length + '\n');
   return toBlock;
 }
@@ -298,7 +338,7 @@ async function main() {
   ];
   await verifyContractConfiguration(providers[0], cfg);
   await verifyContractConfiguration(providers[1], cfg);
-  let cursor = await getCheckpoint(cfg);
+  let cursor = await getCheckpoint(cfg, providers);
   process.stdout.write('ANT BSC testnet indexer starting at ' + (cursor + 1) + '\n');
   let stopping = false;
   const stop = () => { stopping = true; };
@@ -307,7 +347,7 @@ async function main() {
     try {
       cursor = await cycle(cfg, providers, cursor);
       const head = Math.min(await providers[0].getBlockNumber(), await providers[1].getBlockNumber());
-      await reconcileUnlinked(cfg, providers, head);
+      await reconcileRecentCanonical(cfg, providers, head);\n      await reconcileRecentCanonical(cfg, providers, head); await reconcileUnlinked(cfg, providers, head);
     } finally { await Promise.all(providers.map(provider => provider.destroy())); }
     return;
   }
@@ -319,4 +359,4 @@ async function main() {
   await Promise.all(providers.map(provider => provider.destroy()));
 }
 if (require.main === module) main().catch(error => { process.stderr.write(error.stack || String(error)); process.exitCode = 1; });
-module.exports = { config, decodeEvent, ledgerRows, verifyPurchaseReceipt, cycle, recordFinalEvent, reconcileUnlinked };
+module.exports = { config, decodeEvent, ledgerRows, verifyPurchaseReceipt, cycle, recordFinalEvent, reconcileRecentCanonical, reconcileUnlinked, getCheckpoint, setCheckpoint };
