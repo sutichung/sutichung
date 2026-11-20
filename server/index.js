@@ -712,7 +712,7 @@ async function route(req,res){
       }else if(market==='tw-stock') history=await loadStockHistory(symbol);
       else return json(res,400,{status:'invalid_market',error:'market must be tw-stock, us-stock or crypto',scenarios:[]});
       const intervalMs=interval==='1m'?60000:interval==='5m'?300000:interval==='15m'?900000:interval==='30m'?1800000:interval==='1h'?3600000:interval==='4h'?14400000:86400000;
-      const result=analyzeDirectionalScenarios(history.data,{market,symbol,interval,intervalMs,source:history.source});
+      const result=analyzeDirectionalScenarios(history.data,{market,symbol,interval,intervalMs,maxAgeMs:market==='crypto'?intervalMs*2.5:intervalMs*4,source:history.source});
       return json(res,result.status==='insufficient_data'?422:200,{...result,market,exchange:market==='crypto'?exchange:null,asOf:history.asOf||result.asOf});
     }catch(e){return json(res,502,{status:'data_unavailable',market,symbol,error:String(e.message||e),scenarios:[]});}
   }
