@@ -19,7 +19,7 @@ function createCryptoStreamEngine(options = {}) {
   };
   const symbols = [...new Set(toList(options.symbols ?? process.env.CRYPTO_WS_SYMBOLS, DEFAULT_SYMBOLS.join(','))
     .map(x => x.toUpperCase()).filter(x => /^[A-Z0-9]{4,20}$/.test(x)))].slice(0, 30);
-  const requestedExchanges = toList(options.exchanges ?? process.env.CRYPTO_WS_EXCHANGES, 'Binance,Bybit,OKX')
+  const requestedExchanges = toList(options.exchanges ?? process.env.CRYPTO_WS_EXCHANGES, 'Binance,Bybit,OKX,Coinbase,Kraken')
     .filter(x => ['Binance','Bybit','OKX','Coinbase','Kraken'].includes(x));
   const exchanges = options.skipLicenseCheck ? requestedExchanges : requestedExchanges.filter(x => isMarketDataLicensed(x));
   const unlicensedProviders = requestedExchanges.filter(x => !exchanges.includes(x));
@@ -34,8 +34,9 @@ function createCryptoStreamEngine(options = {}) {
   const startedAt = new Date(now()).toISOString();
   const key = (exchange, marketType, symbol) => [exchange, marketType, symbol].join(':');
   const split = symbol => {
-    const suffix = ['USDT','USDC','USD','BTC','ETH'].find(x => symbol.endsWith(x));
-    return suffix ? { baseAsset: symbol.slice(0, -suffix.length), quoteAsset: suffix } : { baseAsset: symbol, quoteAsset: null };
+    const clean = String(symbol || '').toUpperCase().replace(/[-/:]/g, '');
+    const suffix = ['USDT','USDC','USD','BTC','ETH'].find(x => clean.endsWith(x));
+    return suffix ? { baseAsset: clean.slice(0, -suffix.length), quoteAsset: suffix } : { baseAsset: clean, quoteAsset: null };
   };
   function emit(exchange, marketType, symbol, eventType, payload, sourceTimestamp) {
     if (!storage.configured) return;
@@ -67,6 +68,7 @@ function createCryptoStreamEngine(options = {}) {
       old.liveSignal = score;
       if (score.eligible) maybeAlert(old, score);
     }
+    return true;
   }
   function maybeAlert(quote, score) {
     const sourceAge = quote?.sourceTimestamp ? now() - Date.parse(quote.sourceTimestamp) : Infinity;
@@ -304,7 +306,7 @@ function createCryptoStreamEngine(options = {}) {
     if (fundingInFlight || !enableFutures) return;
     fundingInFlight = true;
     const tasks = [];
-    for (const symbol of symbols) for (const exchange of exchanges) {
+    for (const symbol of symbols) for (const exchange of exchanges.filter(x => ['Binance','Bybit','OKX'].includes(x))) {
       if (!enableFutures) continue;
       tasks.push((async () => {
         try {
@@ -368,7 +370,7 @@ function createCryptoStreamEngine(options = {}) {
     if (restInFlight) return;
     restInFlight = true;
     const jobs = [];
-    for (const exchange of exchanges) for (const marketType of (enableFutures ? ['spot','perpetual'] : ['spot'])) for (const symbol of symbols) {
+    for (const exchange of exchanges.filter(x => ['Binance','Bybit','OKX'].includes(x))) for (const marketType of (enableFutures ? ['spot','perpetual'] : ['spot'])) for (const symbol of symbols) {
       jobs.push((async () => {
         let tickerUrl, bookUrl, candleUrl, instId, category;
         if (exchange === 'Binance') {
