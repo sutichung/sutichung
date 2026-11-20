@@ -16,6 +16,9 @@ function resolveQuoteObservation(quote,{horizon='1d'}={}){
   if(!['TWSE','TPEX'].includes(market))return {timestamp:null,mode:'END_OF_DAY',maxAgeMs:MAX_EOD_AGE_MS,reason:'unsupported_eod_market'};
   const date=String(quote.asOf||'');
   if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return {timestamp:null,mode:'END_OF_DAY',maxAgeMs:MAX_EOD_AGE_MS,reason:'invalid_eod_date'};
+  const [year,month,day]=date.split('-').map(Number);
+  const calendarDate=new Date(Date.UTC(year,month-1,day));
+  if(calendarDate.getUTCFullYear()!==year||calendarDate.getUTCMonth()!==month-1||calendarDate.getUTCDate()!==day)return {timestamp:null,mode:'END_OF_DAY',maxAgeMs:MAX_EOD_AGE_MS,reason:'invalid_eod_date'};
   const timestamp=Date.parse(date+'T13:30:00+08:00');
   if(!Number.isFinite(timestamp))return {timestamp:null,mode:'END_OF_DAY',maxAgeMs:MAX_EOD_AGE_MS,reason:'invalid_eod_date'};
   if(horizon==='1h')return {timestamp,mode:'END_OF_DAY',maxAgeMs:MAX_EOD_AGE_MS,reason:'intraday_quote_required'};
