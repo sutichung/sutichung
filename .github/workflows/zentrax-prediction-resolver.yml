@@ -1,0 +1,27 @@
+name: ZENTRAX prediction market resolver
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+concurrency:
+  group: zentrax-prediction-resolver
+  cancel-in-progress: false
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Resolve due virtual markets
+        env:
+          API_URL: ${{ vars.ZENTRAX_PREDICTION_API_URL }}
+          JOB_TOKEN: ${{ secrets.ZENTRAX_PREDICTION_JOB_TOKEN }}
+        run: |
+          if [ -z "$API_URL" ] || [ -z "$JOB_TOKEN" ]; then
+            echo "Resolver not enabled: configure ZENTRAX_PREDICTION_API_URL and ZENTRAX_PREDICTION_JOB_TOKEN."
+            exit 0
+          fi
+          API_URL="${API_URL%/}"
+          curl --fail-with-body --silent --show-error --max-time 45 \
+            -X POST "$API_URL/api/prediction/jobs/resolve-due" \
+            -H "x-prediction-job-token: $JOB_TOKEN" \
+            -H "accept: application/json"
