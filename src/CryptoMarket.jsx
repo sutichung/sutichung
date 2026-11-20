@@ -11,10 +11,10 @@ function Panel({title,children,right}){return <section style={{background:C.pane
 function Stat({label,value,note,color=C.text}){return <div style={{background:C.panel2,borderRadius:8,padding:10,minWidth:0}}><small style={{color:C.muted}}>{label}</small><div style={{fontSize:18,fontWeight:800,color,marginTop:4,overflowWrap:'anywhere'}}>{value}</div>{note&&<small style={{color:C.muted}}>{note}</small>}</div>}
 export default function CryptoMarket(){
  const [market,setMarket]=useState(null),[news,setNews]=useState([]),[rows,setRows]=useState([]),[query,setQuery]=useState(''),[type,setType]=useState('all'),[sort,setSort]=useState('volume'),[selected,setSelected]=useState('BTCUSDT'),[selectedType,setSelectedType]=useState('perpetual'),[selectedExchange,setSelectedExchange]=useState('Binance'),[selectedNativeSymbol,setSelectedNativeSymbol]=useState('BTCUSDT'),[selectedInterval,setSelectedInterval]=useState('1m'),[exchangeFilter,setExchangeFilter]=useState('all'),[history,setHistory]=useState(null),[derivatives,setDerivatives]=useState(null),[risk,setRisk]=useState(null),[riskError,setRiskError]=useState(''),[riskLoading,setRiskLoading]=useState(false),[ai,setAi]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(''),[scanBusy,setScanBusy]=useState(false),[scanProgress,setScanProgress]=useState({done:0,total:0}),[techMap,setTechMap]=useState({}),[realtimeStatus,setRealtimeStatus]=useState(null);
- const refresh=useCallback(async()=>{setLoading(true);try{const [m,n]=await Promise.all([api('/market'),api('/news')]);setMarket(m);setRows(m.markets||[]);setNews(n.data||[]);setError(m.status==='license_required'?'加密貨幣行情暫停：尚未設定各交易所的會員展示／再分發書面授權。':m.errors?.join('；')||'');}catch(e){setError(e.message);}finally{setLoading(false);}},[]);
- useEffect(()=>{refresh();const t=setInterval(refresh,15000);return()=>clearInterval(t);},[refresh]);
+ const refresh=useCallback(async()=>{setLoading(true);try{const [m,n]=await Promise.all([api('/market'),api('/news')]);setMarket(m);setRows(m.markets||[]);setNews(n.data||[]);setError(m.status==='license_required'?'加密貨幣行情暫停：尚未設定各交易所的會員展示／再分發書面授權。':m.errors?.join('；')||'');return m.status||'ok';}catch(e){setError(e.message);return 'unavailable';}finally{setLoading(false);}},[]);
+ useEffect(()=>{let blocked=false;const load=async()=>{if(blocked)return;const status=await refresh();if(status==='license_required')blocked=true;};load();const t=setInterval(load,15000);return()=>clearInterval(t);},[refresh]);
  useEffect(()=>{
-  let live=true,busy=false;
+  let live=true,busy=false,timer=null,intervalMs=15000;
   const syncLiveQuotes=async()=>{
    if(busy)return;
    busy=true;
@@ -33,15 +33,16 @@ export default function CryptoMarket(){
     setRows(prev=>apply(prev));
     setMarket(prev=>prev?{...prev,markets:apply(prev.markets),realtime:payload.status||null,summary:{...(prev.summary||{}),websocketQuoteCount:quotes.length}}:prev);
     setRealtimeStatus(payload.status||null);
-   }catch(e){if(live)setRealtimeStatus(prev=>prev?{...prev,lastError:e.message}:{lastError:e.message});}
+    intervalMs=Number(payload.status?.connectedFeedCount)>0?1000:15000;
+   }catch(e){if(live)setRealtimeStatus(prev=>prev?{...prev,lastError:e.message}:{lastError:e.message});intervalMs=15000;}
    finally{busy=false;}
   };
-  syncLiveQuotes();
-  const timer=setInterval(syncLiveQuotes,1000);
-  return()=>{live=false;clearInterval(timer);};
+  const schedule=()=>{timer=setTimeout(async()=>{await syncLiveQuotes();if(live)schedule();},intervalMs);};
+  syncLiveQuotes().finally(()=>{if(live)schedule();});
+  return()=>{live=false;if(timer)clearTimeout(timer);};
  },[]);
  useEffect(()=>{
-  let live=true;
+  let live=true,licenseBlocked=false,riskTimer=null;
   const query='?type='+selectedType+'&exchange='+encodeURIComponent(selectedExchange)+'&nativeSymbol='+encodeURIComponent(selectedNativeSymbol);
   setHistory(null);setDerivatives(null);setRisk(null);setRiskError('');setRiskLoading(true);
   if(selectedType==='perpetual'){
@@ -50,31 +51,31 @@ export default function CryptoMarket(){
     .catch(e=>{if(live)setError('衍生品資料：'+e.message);});
   }
   const riskQuery=query+'&interval=15m';
-  const loadRisk=()=>api('/risk/'+encodeURIComponent(selected)+riskQuery)
-   .then(data=>{if(live){setRisk(data);setRiskError(data.status==='ok'?'':data.status==='license_required'?'風險分析暫停：尚未取得可供會員使用的交易所行情授權。':data.error||data.freshnessWarning||data.label||'風險資料未達新鮮度門檻');}})
+  const loadRisk=()=>{if(licenseBlocked)return Promise.resolve();return api('/risk/'+encodeURIComponent(selected)+riskQuery)
+   .then(data=>{if(live){setRisk(data);setRiskError(data.status==='ok'?'':data.status==='license_required'?'風險分析暫停：尚未取得可供會員使用的交易所行情授權。':data.error||data.freshnessWarning||data.label||'風險資料未達新鮮度門檻');if(data.status==='license_required'){licenseBlocked=true;if(riskTimer)clearInterval(riskTimer);}}})
    .catch(e=>{if(live)setRiskError(e.message||'風險資料載入失敗');})
-   .finally(()=>{if(live)setRiskLoading(false);});
+   .finally(()=>{if(live)setRiskLoading(false);});};
   loadRisk();
-  const riskTimer=setInterval(loadRisk,15000);
-  return()=>{live=false;clearInterval(riskTimer);};
+  riskTimer=setInterval(loadRisk,15000);
+  return()=>{live=false;if(riskTimer)clearInterval(riskTimer);};
  },[selected,selectedType,selectedExchange,selectedNativeSymbol]);
  useEffect(()=>{
   if(!selected)return;
-  let live=true,busy=false;
+  let live=true,busy=false,licenseBlocked=false,timer=null;
   setHistory(null);
   const loadHistory=async()=>{
-   if(busy)return;
+   if(busy||licenseBlocked)return;
    busy=true;
    try{
     const params='?type='+selectedType+'&exchange='+encodeURIComponent(selectedExchange)+'&nativeSymbol='+encodeURIComponent(selectedNativeSymbol)+'&interval='+encodeURIComponent(selectedInterval)+'&limit=240';
     const data=await api('/history/'+encodeURIComponent(selected)+params);
-    if(live){setHistory(data);if(data.status==='license_required')setError('K 線資料暫停：此交易所尚未設定會員展示／再分發書面授權。');}
+    if(live){setHistory(data);if(data.status==='license_required'){licenseBlocked=true;setError('K 線資料暫停：此交易所尚未設定會員展示／再分發書面授權。');if(timer)clearInterval(timer);}}
    }catch(e){if(live)setError('K線資料：'+e.message);}
    finally{busy=false;}
   };
   loadHistory();
-  const timer=setInterval(loadHistory,15000);
-  return()=>{live=false;clearInterval(timer);};
+  timer=setInterval(loadHistory,15000);
+  return()=>{live=false;if(timer)clearInterval(timer);};
  },[selected,selectedType,selectedExchange,selectedNativeSymbol,selectedInterval]);
  const filtered=useMemo(()=>rows.map(x=>({...x,technical:techMap[x.id]||null})).filter(x=>(type==='all'||x.marketType===type)&&(exchangeFilter==='all'||x.exchange===exchangeFilter)&&((x.symbol+' '+x.baseAsset+' '+x.exchange).toLowerCase().includes(query.toLowerCase()))).sort((a,b)=>sort==='change'?(b.changePct??-Infinity)-(a.changePct??-Infinity):sort==='name'?a.symbol.localeCompare(b.symbol):b.quoteVolume-a.quoteVolume),[rows,type,query,sort,techMap,exchangeFilter]);
  const choose=x=>{setSelected(x.symbol);setSelectedType(x.marketType);setSelectedExchange(x.exchange);setSelectedNativeSymbol(x.nativeSymbol||x.symbol);setAi(null);};
