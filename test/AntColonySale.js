@@ -2,17 +2,17 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
 describe("AntColonySale", function () {
-  async function setup() {
+  async function setup(usdtDecimals = 18) {
     const [admin, buyer, proceeds, fee] = await ethers.getSigners();
     const Mock = await ethers.getContractFactory("MockERC20");
-    const usdt = await Mock.deploy("Mock USDT", "USDT", 18);
+    const usdt = await Mock.deploy("Mock USDT", "USDT", usdtDecimals);
     const ant = await Mock.deploy("Ant Colony", "ANT", 18);
     const Oracle = await ethers.getContractFactory("MockAntUsdtOracle");
     const oracle = await Oracle.deploy(10n ** 8n); // 1 USDT per ANT
     const Sale = await ethers.getContractFactory("AntColonySale");
     const sale = await Sale.deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), fee.address, proceeds.address, 3600);
     await ant.mint(await sale.getAddress(), ethers.parseUnits("100000", 18));
-    await usdt.mint(buyer.address, ethers.parseUnits("1000", 18));
+    await usdt.mint(buyer.address, ethers.parseUnits("1000", usdtDecimals));
     await usdt.connect(buyer).approve(await sale.getAddress(), ethers.MaxUint256);
     return { admin, buyer, proceeds, fee, usdt, ant, oracle, sale };
   }
@@ -23,6 +23,19 @@ describe("AntColonySale", function () {
     expect(await usdt.balanceOf(fee.address)).to.equal(ethers.parseUnits("5", 18));
     expect(await usdt.balanceOf(proceeds.address)).to.equal(ethers.parseUnits("95", 18));
     expect(await ant.balanceOf(buyer.address)).to.equal(ethers.parseUnits("95", 18));
+  });
+
+  it("supports six-decimal USDT without mispricing ANT output", async function () {
+    const { buyer, proceeds, fee, usdt, ant, sale } = await setup(6);
+    await expect(sale.connect(buyer).buy(ethers.parseUnits("100", 6), ethers.parseUnits("95", 18))).to.emit(sale, "AntPurchased");
+    expect(await usdt.balanceOf(fee.address)).to.equal(ethers.parseUnits("5", 6));
+    expect(await usdt.balanceOf(proceeds.address)).to.equal(ethers.parseUnits("95", 6));
+    expect(await ant.balanceOf(buyer.address)).to.equal(ethers.parseUnits("95", 18));
+  });
+
+  it("rejects a payment whose calculated ANT output rounds to zero", async function () {
+    const { sale } = await setup(6);
+    await expect(sale.quote(1n)).to.be.revertedWithCustomError(sale, "ZeroAntOutput");
   });
 
   it("quotes using updated market oracle price", async function () {
