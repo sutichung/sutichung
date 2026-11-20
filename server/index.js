@@ -25,6 +25,8 @@ const { loadOfficialDailyQuotes, diagnoseOfficialDailyQuotes } = require('./lib/
 const { epochMilliseconds, isStaleTimestamp } = require('./lib/market-timestamps');
 const { createDependencyVulnerabilityScanner } = require('./lib/dependency-vulnerabilities');
 const { verifyGitHubActionsToken } = require('./lib/github-oidc');
+const { createPredictionJournal } = require('./lib/prediction-journal');
+const predictionJournal = createPredictionJournal();
 const { buildRuntimeHealth, buildDependencyReadiness } = require('./lib/health');
 const { getHistoricalCoverage, validateHistoryRange } = require('./lib/historical-coverage');
 const researchStorage = require('./lib/research-storage').createResearchStorage();
@@ -372,6 +374,49 @@ function isAdminUser(user){return !!(user&&user.email&&SUPABASE_ADMIN_EMAIL&&Str
 
 async function route(req,res){
   const u=new URL(req.url,'http://localhost');
+  if(req.method==='POST'&&u.pathname==='/api/automation/research/predictions'){
+    if(!await verifyGitHubActionsToken(bearerToken(req)))return json(res,401,{error:'automation_authentication_required'});
+    try{
+      const prediction=await readRequestJson(req,256*1024);
+      const stored=await predictionJournal.record(prediction);
+      return json(res,201,{ok:true,...stored});
+    }catch(e){
+      const status=['invalid_market','invalid_symbol','invalid_horizon','invalid_direction','invalid_confidence','invalid_probability_semantics','invalid_reference_price','source_consensus_unverified','source_consensus_not_verified','at_least_two_source_observations_required','source_not_authorized','reference_price_not_in_consensus'].includes(e.code)?422:e.code==='journal_not_configured'?503:e.message==='invalid_json'?400:e.message==='request_body_too_large'?413:502;
+      return json(res,status,{error:e.code||'prediction_journal_error',message:e.message});
+    }
+  }
+  if(req.method==='POST'&&u.pathname==='/api/automation/research/settle'){
+    if(!await verifyGitHubActionsToken(bearerToken(req)))return json(res,401,{error:'automation_authentication_required'});
+    const adapter=String(process.env.PREDICTION_OBSERVATION_ADAPTER_URL||'').replace(/\/$/,'');
+    if(!adapter)return json(res,503,{error:'prediction_observation_adapter_not_configured'});
+    const adapterToken=String(process.env.PREDICTION_OBSERVATION_ADAPTER_TOKEN||'');
+    try{
+      const due=await predictionJournal.listDue();
+      const report={checked:due.length,settled:0,errors:[]};
+      for(const item of due){
+        const prediction=item.market_prediction_snapshots;
+        try{
+          const target=new URL(adapter);
+          target.searchParams.set('market',prediction.market);target.searchParams.set('symbol',prediction.symbol);
+          target.searchParams.set('horizon',item.horizon);target.searchParams.set('dueAt',item.due_at);
+          target.searchParams.set('referenceAsOf',prediction.reference_as_of);
+          const headers={accept:'application/json'};if(adapterToken)headers.authorization='Bearer '+adapterToken;
+          const response=await fetch(target,{headers,signal:AbortSignal.timeout(20000)});
+          if(!response.ok)throw new Error('observation_adapter_http_'+response.status);
+          const observation=await response.json();
+          if(observation.authorized!==true||!observation.source||!observation.observedAt||!Number.isFinite(Number(observation.price)))throw new Error('adapter_observation_not_verified');
+          await predictionJournal.settle(item.id,{price:observation.price,observedAt:observation.observedAt,source:observation.source,authorized:true,costPct:Number(process.env.PREDICTION_COST_PCT||0),neutralBandPct:Number(process.env.PREDICTION_NEUTRAL_BAND_PCT||0.1)});
+          report.settled++;
+        }catch(error){report.errors.push({id:item.id,market:prediction.market,symbol:prediction.symbol,horizon:item.horizon,error:error.code||error.message});}
+      }
+      return json(res,200,report);
+    }catch(error){return json(res,503,{error:error.code||'prediction_settlement_failed',message:error.message});}
+  }
+  if(req.method==='POST'&&u.pathname==='/api/automation/research/calibrate'){
+    if(!await verifyGitHubActionsToken(bearerToken(req)))return json(res,401,{error:'automation_authentication_required'});
+    try{return json(res,200,await predictionJournal.calibrateAll({minimumSamples:Number(process.env.MODEL_CALIBRATION_MIN_SAMPLES||30)}));}
+    catch(error){return json(res,503,{error:error.code||'prediction_calibration_failed',message:error.message});}
+  }
   if(req.method==='POST'&&u.pathname==='/api/automation/research/outcomes'){
     if(!await verifyGitHubActionsToken(bearerToken(req)))return json(res,401,{error:'automation_authentication_required'});
     try{
