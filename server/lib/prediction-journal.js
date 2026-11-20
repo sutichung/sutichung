@@ -63,7 +63,7 @@ function applyCalibration(rawProbability,calibration,{minimumBinSamples=5}={}){
  if(!calibration||calibration.eligible!==true||!Array.isArray(calibration.calibration_bins))return {probability:raw,applied:false,reason:'calibration_not_eligible'};
  const anchors=calibration.calibration_bins.filter(x=>Number(x.count)>=minimumBinSamples&&Number.isFinite(Number(x.meanProbability))&&Number.isFinite(Number(x.observedUpRate))).sort((a,b)=>Number(a.meanProbability)-Number(b.meanProbability));
  if(!anchors.length)return {probability:raw,applied:false,reason:'insufficient_populated_bins'};
- if(anchors.length===1)return {probability:Number(Math.max(0,Math.min(1,anchors[0].observedUpRate)).toFixed(6)),applied:true,reason:null};
+ if(anchors.length<2)return {probability:raw,applied:false,reason:'insufficient_populated_bins'};
  let left=anchors[0],right=anchors.at(-1);
  for(let i=1;i<anchors.length;i++)if(raw<=Number(anchors[i].meanProbability)){left=anchors[i-1];right=anchors[i];break;}
  const x1=Number(left.meanProbability),x2=Number(right.meanProbability),y1=Number(left.observedUpRate),y2=Number(right.observedUpRate);
