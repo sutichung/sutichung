@@ -49,7 +49,7 @@ The API verifies the sale contract's immutable USDT, ANT, fee and treasury addre
 ## Indexer options and hosting cost
 
 - `server/jobs/ant-chain-indexer.js` is a long-running dual-RPC worker. `deploy/render-ant-indexer.blueprint.yaml` defines a separate Render worker, but the Render plan could not be created because the workspace requires billing information for the Starter worker. No paid resource was approved or created.
-- `.github/workflows/ant-indexer.yml` provides a no-cost scheduled fallback every five minutes and can also be manually dispatched. It is **not real-time** and GitHub scheduled runs are best-effort. Add the required GitHub Actions secrets listed in the workflow before enabling it.
+- `.github/workflows/ant-indexer.yml` provides a no-cost scheduled fallback every five minutes and can also be manually dispatched. It is **not real-time** and GitHub scheduled runs are best-effort. Add the required GitHub Actions secrets listed in the workflow and set repository variable `ANT_INDEXER_ENABLED=true` before scheduled runs are enabled. Until then, scheduled runs remain gated; manual dispatch is available for configuration testing.
 - The worker checkpoint is stored in `ant_indexer_state`; first start requires the actual sale deployment block. Do not guess this block.
 
 ## Testnet deployment and validation
