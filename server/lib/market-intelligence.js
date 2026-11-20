@@ -4,11 +4,16 @@ const DEFAULT_SYMBOLS = ['BTCUSDT','ETHUSDT'];
 const SOURCES = {
   policy: [
     {id:'us-federal-register',label:'US Federal Register',url:'https://www.federalregister.gov/api/v1/documents.json?per_page=20&order=newest&conditions%5Btype%5D%5B%5D=RULE&conditions%5Btype%5D%5B%5D=PRORULE'},
-    {id:'eu-commission',label:'European Commission press releases',url:'https://ec.europa.eu/commission/presscorner/api/rss?language=en'}
+    {id:'us-fed-board',label:'US Federal Reserve Board',url:'https://www.federalreserve.gov/feeds/press_all.xml'},
+    {id:'eu-commission',label:'European Commission press releases',url:'https://ec.europa.eu/commission/presscorner/api/rss?language=en'},
+    {id:'taiwan-executive-yuan',label:'Taiwan Executive Yuan open data',url:'https://www.ey.gov.tw/NewOpenData/JSON/154'},
+    {id:'taiwan-president',label:'Taiwan Presidential Office news releases',url:'https://english.president.gov.tw/RSSNEWS.aspx'},
+    {id:'ecb',label:'European Central Bank RSS',url:'https://www.ecb.europa.eu/rss/press.html'}
   ],
   social: [
     {id:'reddit-cryptocurrency',label:'Reddit r/CryptoCurrency public feed',url:'https://www.reddit.com/r/CryptoCurrency/hot.json?limit=50'},
-    {id:'reddit-investing',label:'Reddit r/investing public feed',url:'https://www.reddit.com/r/investing/hot.json?limit=50'}
+    {id:'reddit-investing',label:'Reddit r/investing public feed',url:'https://www.reddit.com/r/investing/hot.json?limit=50'},
+    {id:'bluesky-markets',label:'Bluesky public market discussions',url:'https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=bitcoin%20OR%20stocks%20OR%20markets&limit=50&sort=latest'}
   ]
 };
 const POSITIVE = ['bullish','breakout','buy','adoption','growth','利多','看多','突破','買進','成長'];
@@ -32,20 +37,31 @@ async function loadPolicy() {
       const payload=await response.json();
       return (payload.results||[]).map(x=>({id:String(x.document_number||x.html_url),title:x.title||'',summary:x.abstract||'',url:validUrl(x.html_url),source:source.label,sourceId:source.id,publishedAt:x.publication_date||null,documentType:x.type||null,jurisdiction:'United States',evidenceType:'official_primary_document',verification:'official_source_not_independently_interpreted'}));
     }
+    if(source.id==='taiwan-executive-yuan') {
+      const payload=await response.json();
+      return (Array.isArray(payload)?payload:[]).map((x,i)=>({id:source.id+':'+String(x['上版日期']||'')+':'+i,title:String(x['標題']||''),summary:String(x['內容']||'').slice(0,1200),url:'https://www.ey.gov.tw/',source:source.label,sourceId:source.id,publishedAt:String(x['上版日期']||''),jurisdiction:'Taiwan',evidenceType:'official_primary_press_release',verification:'official_source_not_independently_interpreted'})).filter(x=>x.title);
+    }
     const xml=await response.text();
-    const items=[...xml.matchAll(/<item>([\s\S]*?)<\/item>/gi)].slice(0,20);
-    return items.map(m=>{const field=n=>m[1].match(new RegExp('<'+n+'[^>]*>([\\s\\S]*?)</'+n+'>','i'))?.[1]?.replace(/<!\[CDATA\[|\]\]>/g,'').trim()||'';return {id:field('guid')||field('link'),title:field('title'),summary:field('description').replace(/<[^>]+>/g,'').slice(0,1000),url:validUrl(field('link')),source:source.label,sourceId:source.id,publishedAt:field('pubDate')||null,jurisdiction:'European Union',evidenceType:'official_press_release',verification:'official_source_not_independently_interpreted'};}).filter(x=>x.title);
+    const blocks=[...xml.matchAll(/<(item|entry)\b[^>]*>([\s\S]*?)<\/\1>/gi)].slice(0,25);
+    const decode=s=>String(s||'').replace(/<!\[CDATA\[|\]\]>/g,'').replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").trim();
+    return blocks.map(m=>{
+      const body=m[2];
+      const field=n=>decode(body.match(new RegExp('<'+n+'[^>]*>([\\s\\S]*?)</'+n+'>','i'))?.[1]||'');
+      const link=body.match(/<link[^>]+href=['"]([^'"]+)['"]/i)?.[1]||field('link');
+      const title=field('title');
+      return {id:field('guid')||field('id')||link,title,summary:(field('description')||field('summary')||field('content')).slice(0,1200),url:validUrl(link),source:source.label,sourceId:source.id,publishedAt:field('pubDate')||field('published')||field('updated')||null,jurisdiction:source.id.startsWith('taiwan-')?'Taiwan':source.id==='ecb'?'Euro area':source.id==='us-fed-board'?'United States':'European Union',evidenceType:'official_press_release',verification:'official_source_not_independently_interpreted'};
+    }).filter(x=>x.title);
   }));
   const items=[],sources=[];
   results.forEach((r,i)=>{const source=SOURCES.policy[i];if(r.status==='fulfilled'){items.push(...r.value);sources.push({id:source.id,label:source.label,status:r.value.length?'connected':'empty',items:r.value.length});}else sources.push({id:source.id,label:source.label,status:'unavailable',items:0,error:String(r.reason?.message||r.reason)});});
-  return {items:items.sort((a,b)=>Date.parse(b.publishedAt||'')-Date.parse(a.publishedAt||'')).slice(0,40),sources,fetchedAt:new Date().toISOString(),note:'僅涵蓋已設定的官方司法管轄區來源；不是全球政府政策全集。'};
+  return {items:items.sort((a,b)=>Date.parse(b.publishedAt||'')-Date.parse(a.publishedAt||'')).slice(0,60),sources,fetchedAt:new Date().toISOString(),note:'涵蓋已接入的多司法管轄區官方來源；不是全球政府政策全集。'};
 }
 async function loadSocial() {
   const results=await Promise.allSettled(SOURCES.social.map(async source=>{
     const response=await get(source.url,{'accept':'application/json','user-agent':'Mozilla/5.0 GlobalMarketIntelligence/1.0'});
     const payload=await response.json();
-    const posts=(payload?.data?.children||[]).map(({data:x})=>({id:String(x.id),title:String(x.title||'').slice(0,300),summary:String(x.selftext||'').slice(0,800),url:validUrl(x.permalink?'https://www.reddit.com'+x.permalink:x.url),source:source.label,sourceId:source.id,publishedAt:x.created_utc?new Date(x.created_utc*1000).toISOString():null,score:Number(x.score)||0,comments:Number(x.num_comments)||0,engagement:Number(x.score||0)+Number(x.num_comments||0),sentiment:sentiment((x.title||'')+' '+(x.selftext||'')),evidenceType:'public_social_post',verification:'unverified_user_generated_content'}));
-    return posts;
+    if(source.id==='bluesky-markets') return (payload.posts||[]).map(({post:x})=>({id:String(x.uri||x.cid),title:String(x.record?.text||'').slice(0,300),summary:'',url:validUrl('https://bsky.app/profile/'+(x.author?.handle||'')+'/post/'+String(x.uri||'').split('/').pop()),source:source.label,sourceId:source.id,publishedAt:x.record?.createdAt||null,score:Number(x.likeCount)||0,comments:Number(x.replyCount)||0,engagement:Number(x.likeCount||0)+Number(x.replyCount||0)+Number(x.repostCount||0),sentiment:sentiment(x.record?.text||''),evidenceType:'public_social_post',verification:'unverified_user_generated_content'}));
+    return (payload?.data?.children||[]).map(({data:x})=>({id:String(x.id),title:String(x.title||'').slice(0,300),summary:String(x.selftext||'').slice(0,800),url:validUrl(x.permalink?'https://www.reddit.com'+x.permalink:x.url),source:source.label,sourceId:source.id,publishedAt:x.created_utc?new Date(x.created_utc*1000).toISOString():null,score:Number(x.score)||0,comments:Number(x.num_comments)||0,engagement:Number(x.score||0)+Number(x.num_comments||0),sentiment:sentiment((x.title||'')+' '+(x.selftext||'')),evidenceType:'public_social_post',verification:'unverified_user_generated_content'}));
   }));
   const items=[],sources=[];
   results.forEach((r,i)=>{const source=SOURCES.social[i];if(r.status==='fulfilled'){items.push(...r.value);sources.push({id:source.id,label:source.label,status:r.value.length?'connected':'empty',items:r.value.length});}else sources.push({id:source.id,label:source.label,status:'unavailable',items:0,error:String(r.reason?.message||r.reason)});});
@@ -59,7 +75,8 @@ async function loadOrderbooks(symbols=DEFAULT_SYMBOLS) {
     const base=symbol.replace(/USDT$/,'-USDT');
     jobs.push({id:'binance',symbol,url:'https://api.binance.com/api/v3/depth?symbol='+encodeURIComponent(symbol)+'&limit=20',parse:p=>({bids:p.bids,asks:p.asks})});
     jobs.push({id:'okx',symbol,url:'https://www.okx.com/api/v5/market/books?instId='+encodeURIComponent(base)+'&sz=20',parse:p=>({bids:p.data?.[0]?.bids,asks:p.data?.[0]?.asks})});
-    jobs.push({id:'kraken',symbol,url:'https://api.kraken.com/0/public/Depth?pair='+encodeURIComponent(symbol.replace('USDT','USD'))+'&count=20',parse:p=>{const key=Object.keys(p.result||{})[0];return {bids:p.result?.[key]?.bids,asks:p.result?.[key]?.asks};}});
+    jobs.push({id:'kraken',symbol,url:'https://api.kraken.com/0/public/Depth?pair='+encodeURIComponent(symbol.replace('BTCUSDT','XBTUSD').replace('ETHUSDT','ETHUSD').replace('USDT','USD'))+'&count=20',parse:p=>{const key=Object.keys(p.result||{})[0];return {bids:p.result?.[key]?.bids,asks:p.result?.[key]?.asks};}});
+    if(symbol.endsWith('USDT')) { const product=symbol.replace('USDT','-USD'); jobs.push({id:'coinbase',symbol,url:'https://api.exchange.coinbase.com/products/'+encodeURIComponent(product)+'/book?level=2',parse:p=>({bids:p.bids,asks:p.asks})}); }
   }
   const results=await Promise.allSettled(jobs.map(async job=>{
     const payload=await (await get(job.url)).json(), book=job.parse(payload);
@@ -86,12 +103,33 @@ async function loadWhales() {
   } catch(error) {return {status:'unavailable',items:[],fetchedAt:new Date().toISOString(),error:String(error.message||error)};}
 }
 async function loadMacroOfficial() {
-  const [world,fred]=await Promise.allSettled([
+  const [world,fred,cbc]=await Promise.allSettled([
     (async()=>{const ids=['NY.GDP.MKTP.KD.ZG','FP.CPI.TOTL.ZG','SL.UEM.TOTL.ZS'];const countries='USA;CHN;JPN;GBR;DEU;IND;BRA;CAN;AUS;KOR;TWN';const all=await Promise.all(ids.map(async id=>{const url='https://api.worldbank.org/v2/country/'+countries+'/indicator/'+id+'?format=json&per_page=1000&date=2021:2026';const p=await(await get(url)).json();return {indicator:id,rows:p?.[1]||[]};}));return all.flatMap(x=>x.rows.filter(r=>r.value!==null).map(r=>({country:r.countryiso3code,indicator:x.indicator,value:Number(r.value),period:r.date,source:'World Bank Open Data',url:'https://data.worldbank.org/indicator/'+x.indicator,evidenceType:'official_macro_observation'})));})(),
-    (async()=>{if(!process.env.FRED_API_KEY)throw new Error('FRED_API_KEY_not_configured');const series=['FEDFUNDS','CPIAUCSL','UNRATE','DGS10'];const all=await Promise.all(series.map(async id=>{const u=new URL('https://api.stlouisfed.org/fred/series/observations');u.searchParams.set('series_id',id);u.searchParams.set('api_key',process.env.FRED_API_KEY);u.searchParams.set('file_type','json');u.searchParams.set('sort_order','desc');u.searchParams.set('limit','5');const p=await(await get(u.toString())).json();return (p.observations||[]).filter(x=>x.value!=='.').map(x=>({country:'USA',indicator:id,value:Number(x.value),period:x.date,source:'Federal Reserve Bank of St. Louis FRED',url:'https://fred.stlouisfed.org/series/'+id,evidenceType:'official_macro_observation'}));}));return all.flat();})()
+    (async()=>{if(!process.env.FRED_API_KEY)throw new Error('FRED_API_KEY_not_configured');const series=['FEDFUNDS','CPIAUCSL','UNRATE','DGS10'];const all=await Promise.all(series.map(async id=>{const u=new URL('https://api.stlouisfed.org/fred/series/observations');u.searchParams.set('series_id',id);u.searchParams.set('api_key',process.env.FRED_API_KEY);u.searchParams.set('file_type','json');u.searchParams.set('sort_order','desc');u.searchParams.set('limit','5');const p=await(await get(u.toString())).json();return (p.observations||[]).filter(x=>x.value!=='.').map(x=>({country:'USA',indicator:id,value:Number(x.value),period:x.date,source:'Federal Reserve Bank of St. Louis FRED',url:'https://fred.stlouisfed.org/series/'+id,evidenceType:'official_macro_observation'}));}));return all.flat();})(),
+    (async()=>{
+      const codes=['BP01D01','EG2AM01','EG51M01','EF07M01','BPP2Q01','BPF4Y01'];
+      const all=await Promise.all(codes.map(async code=>{
+        const url='https://cpx.cbc.gov.tw/API/DataAPI/Get?FileName='+encodeURIComponent(code);
+        const payload=await(await get(url)).json();
+        const root=payload.DataSet||payload.data?.dataSets?.[0]||payload.data?.dataSets||payload.data||[];
+        let rows=Array.isArray(root)?root:Object.values(root||{}).filter(Array.isArray);
+        rows=rows.filter(row=>Array.isArray(row)||row&&typeof row==='object');
+        return rows.map((row,index)=>{
+          const values=Array.isArray(row)?row:Object.values(row);
+          const last=values[values.length-1];
+          const numeric=last!==null&&last!==undefined&&last!==''&&last!=='-'&&Number.isFinite(Number(last))?Number(last):null;
+          return {country:'TWN',indicator:code,period:String(values[0]??''),value:numeric,rawRow:row,source:'Central Bank of the Republic of China (Taiwan) Statistical Database',url,evidenceType:'official_central_bank_observation',observationIndex:index};
+        });
+      }));
+      return all.flat();
+    })()
   ]);
-  const data=world.status==='fulfilled'?world.value:[],fredData=fred.status==='fulfilled'?fred.value:[];
-  return {data:[...data,...fredData],sources:[{id:'world-bank',status:world.status==='fulfilled'?(data.length?'connected':'empty'):'unavailable',items:data.length,error:world.status==='rejected'?String(world.reason?.message||world.reason):undefined},{id:'fred',status:fred.status==='fulfilled'?'connected':'not_configured',items:fredData.length,error:fred.status==='rejected'?String(fred.reason?.message||fred.reason):undefined}],fetchedAt:new Date().toISOString(),note:'宏觀資料多為月／季／年頻率，發布有滯後；FRED API key 未設定時不會假裝已連線。'};
+  const data=world.status==='fulfilled'?world.value:[],fredData=fred.status==='fulfilled'?fred.value:[],cbcData=cbc.status==='fulfilled'?cbc.value:[];
+  return {data:[...data,...fredData,...cbcData],sources:[
+    {id:'world-bank',status:world.status==='fulfilled'?(data.length?'connected':'empty'):'unavailable',items:data.length,error:world.status==='rejected'?String(world.reason?.message||world.reason):undefined},
+    {id:'fred',status:fred.status==='fulfilled'?'connected':'not_configured',items:fredData.length,error:fred.status==='rejected'?String(fred.reason?.message||fred.reason):undefined},
+    {id:'taiwan-cbc',status:cbc.status==='fulfilled'?(cbcData.length?'connected':'empty'):'unavailable',items:cbcData.length,error:cbc.status==='rejected'?String(cbc.reason?.message||cbc.reason):undefined}
+  ],fetchedAt:new Date().toISOString(),note:'宏觀資料多為月／季／年頻率，發布有滯後；FRED 需要 API key。台灣央行 API 提供匯率、利率、貨幣、金融市場、國際收支等官方統計；各指標頻率依代碼而異。'};
 }
 async function loadAll(options={}) {
   const [policy,social,orderbooks,whales,macro]=await Promise.all([loadPolicy(),loadSocial(),loadOrderbooks(options.symbols),loadWhales(),loadMacroOfficial()]);
