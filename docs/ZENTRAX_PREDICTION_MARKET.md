@@ -61,3 +61,11 @@ Run:
 - `npm run build`
 
 A green CI run does not prove the migration is applied, the administrator is configured, the resolver secret is set, or any market is live.
+
+## Taiwan legal boundary
+
+The current simulation has no real-money feature. Before any production version accepts virtual assets, handles transfers/custody, exchanges assets, or offers cash-equivalent outcomes, obtain Taiwan-qualified legal advice on the product classification and required approvals. Taiwan's Money Laundering Control Act Article 6 and the FSC's VASP AML registration rules describe registration obligations for specified virtual-asset services; the applicable classification depends on the actual service model. Official references:
+- https://mojlaw.moj.gov.tw/ENG/LawContentE.aspx?LSID=FL006664
+- https://law.fsc.gov.tw/LawContent.aspx?id=GL004000
+
+This note is a release gate, not a legal opinion that the product is or is not permitted.
