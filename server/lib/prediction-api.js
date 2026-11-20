@@ -1,6 +1,7 @@
 'use strict';
 const { randomUUID, timingSafeEqual } = require('node:crypto');
 const { SYMBOLS, validateMarketInput, validateOrderInput, parseBinanceKline, evaluateOutcome, quoteFromPools } = require('./prediction-market');
+const { realMoneyReadiness } = require('./prediction-launch-gates');
 
 function assuranceLevel(req) {
   try {
