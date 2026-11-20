@@ -291,7 +291,8 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
         const roles = await db('ant_admin_roles', {
           query: 'select=role&user_id=eq.' + encodeURIComponent(user.id)
         });
-        if (!roles.some(row => ['SUPER_ADMIN', 'FINANCE_VIEWER'].includes(row.role))) { json(res, 403, { error: 'finance_role_required' }); return true; }\n        if (assuranceLevel(req) !== 'aal2') { json(res, 403, { error: 'mfa_required', requiredAssuranceLevel: 'aal2' }); return true; }
+        if (!roles.some(row => ['SUPER_ADMIN', 'FINANCE_VIEWER'].includes(row.role))) { json(res, 403, { error: 'finance_role_required' }); return true; }
+        if (assuranceLevel(req) !== 'aal2') { json(res, 403, { error: 'mfa_required', requiredAssuranceLevel: 'aal2' }); return true; }
         const [orders, ledger, totalsRows] = await Promise.all([
           db('ant_payment_orders', { query: 'select=id,buyer_wallet,gross_usdt_raw,fee_usdt_raw,net_usdt_raw,quoted_ant_raw,status,tx_hash,created_at&order=created_at.desc&limit=200' }),
           db('ant_financial_ledger', { query: 'select=entry_type,asset_symbol,amount_raw,direction,wallet,tx_hash,created_at&canonical=eq.true&order=created_at.desc&limit=500' }),
