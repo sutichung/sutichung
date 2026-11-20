@@ -7,10 +7,12 @@ const CHAIN_ID = 97;
 const WORKER_KEY = 'ant-bsc-testnet';
 const POLL_MS = Math.max(5000, Number(process.env.ANT_INDEXER_POLL_MS || 15000));
 const RANGE = Math.max(1, Math.min(2000, Number(process.env.ANT_INDEXER_BLOCK_RANGE || 500)));
-const CONFIRMATIONS = Math.max(1, Number(process.env.ANT_INDEXER_CONFIRMATIONS || 12));
+const CONFIRMATIONS = Math.max(12, Number(process.env.ANT_INDEXER_CONFIRMATIONS || 12));
 const EVENT_ABI = ['event AntPurchased(address indexed buyer,uint256 grossUsdt,uint256 feeUsdt,uint256 netUsdt,uint256 antOut,uint256 priceUsdtPerAnt)'];
 const iface = new ethers.Interface(EVENT_ABI);
 const topic = iface.getEvent('AntPurchased').topicHash;
+const transferIface = new ethers.Interface(['event Transfer(address indexed from,address indexed to,uint256 value)']);
+
 
 function required(name) {
   const value = String(process.env[name] || '').trim();
@@ -73,13 +75,44 @@ function decodeEvent(log, cfg) {
   return { ...verified, blockHash: log.blockHash, raw: { topics: log.topics, data: log.data } };
 }
 function ledgerRows(order, event, cfg) {
-  const base = { order_id: order.id, chain_id: CHAIN_ID, tx_hash: event.transactionHash, log_index: event.logIndex };
-  return [
+  const base = { order_id: order.id, chain_id: CHAIN_ID, tx_hash: event.transactionHash, log_index: event.logIndex, canonical: true };
+  const rows = [
     { ...base, entry_type: 'usdt_gross', asset_symbol: 'USDT', asset_contract: cfg.usdt.toLowerCase(), asset_decimals: cfg.usdtDecimals, amount_raw: event.grossUsdtRaw, direction: 'in', wallet: event.buyer },
-    { ...base, entry_type: 'usdt_fee', asset_symbol: 'USDT', asset_contract: cfg.usdt.toLowerCase(), asset_decimals: cfg.usdtDecimals, amount_raw: event.feeUsdtRaw, direction: 'out', wallet: cfg.feeWallet.toLowerCase() },
     { ...base, entry_type: 'usdt_net', asset_symbol: 'USDT', asset_contract: cfg.usdt.toLowerCase(), asset_decimals: cfg.usdtDecimals, amount_raw: event.netUsdtRaw, direction: 'out', wallet: cfg.treasuryWallet.toLowerCase() },
     { ...base, entry_type: 'ant_delivery', asset_symbol: 'ANT', asset_contract: cfg.ant.toLowerCase(), asset_decimals: cfg.antDecimals, amount_raw: event.antOutRaw, direction: 'in', wallet: event.buyer }
   ];
+  if (BigInt(event.feeUsdtRaw) > 0n) rows.splice(1, 0,
+    { ...base, entry_type: 'usdt_fee', asset_symbol: 'USDT', asset_contract: cfg.usdt.toLowerCase(), asset_decimals: cfg.usdtDecimals, amount_raw: event.feeUsdtRaw, direction: 'out', wallet: cfg.feeWallet.toLowerCase() }
+  );
+  return rows;
+}
+function verifyPurchaseReceipt(receipt, log, event, cfg) {
+  if (!receipt || receipt.status !== 1 || receipt.to?.toLowerCase() !== cfg.sale.toLowerCase()) throw new Error('receipt_not_successful_or_wrong_target');
+  if (receipt.transactionHash?.toLowerCase() !== event.transactionHash || receipt.blockNumber !== log.blockNumber || receipt.blockHash !== log.blockHash) {
+    throw new Error('receipt_identity_mismatch');
+  }
+  const purchaseLogs = (receipt.logs || []).filter(item =>
+    item.address.toLowerCase() === cfg.sale.toLowerCase() &&
+    String(item.topics?.[0] || '').toLowerCase() === topic.toLowerCase()
+  );
+  if (purchaseLogs.length !== 1 || purchaseLogs[0].index !== log.index ||
+      purchaseLogs[0].data.toLowerCase() !== log.data.toLowerCase()) throw new Error('receipt_purchase_event_mismatch');
+  const transfers = (receipt.logs || []).flatMap(item => {
+    try {
+      if (item.address.toLowerCase() !== cfg.usdt.toLowerCase() && item.address.toLowerCase() !== cfg.ant.toLowerCase()) return [];
+      const parsed = transferIface.parseLog({ topics: item.topics, data: item.data });
+      return parsed ? [{ token: item.address.toLowerCase(), from: parsed.args.from.toLowerCase(), to: parsed.args.to.toLowerCase(), value: parsed.args.value.toString() }] : [];
+    } catch (_) { return []; }
+  });
+  const usdtTransfers = transfers.filter(item => item.token === cfg.usdt.toLowerCase() && item.from === event.buyer);
+  const antTransfers = transfers.filter(item => item.token === cfg.ant.toLowerCase() && item.from === cfg.sale.toLowerCase() && item.to === event.buyer);
+  const feeMatches = usdtTransfers.filter(item => item.to === cfg.feeWallet.toLowerCase() && item.value === event.feeUsdtRaw);
+  const netMatches = usdtTransfers.filter(item => item.to === cfg.treasuryWallet.toLowerCase() && item.value === event.netUsdtRaw);
+  const antMatches = antTransfers.filter(item => item.value === event.antOutRaw);
+  const expectedUsdtCount = BigInt(event.feeUsdtRaw) > 0n ? 2 : 2;
+  if (usdtTransfers.length !== expectedUsdtCount || feeMatches.length !== 1 || netMatches.length !== 1) throw new Error('receipt_usdt_transfer_reconciliation_failed');
+  if (antTransfers.length !== 1 || antMatches.length !== 1) throw new Error('receipt_ant_delivery_reconciliation_failed');
+  return true;
 }
 async function recordFinalEvent(cfg, providers, log, head) {
   const [blockA, blockB, receiptA, receiptB] = await Promise.all([
@@ -89,7 +122,10 @@ async function recordFinalEvent(cfg, providers, log, head) {
   if (!blockA || !blockB || blockA.hash !== blockB.hash || blockA.hash !== log.blockHash) throw new Error('rpc_canonical_block_disagreement');
   if (!receiptA || !receiptB || receiptA.status !== 1 || receiptB.status !== 1 ||
       receiptA.blockHash !== blockA.hash || receiptB.blockHash !== blockA.hash) throw new Error('receipt_not_canonical_success');
+  const receiptFingerprint = receipt => (receipt.logs || []).map(item => [item.address, ...(item.topics || []), item.data].join(':')).join('|');
+  if (receiptFingerprint(receiptA) !== receiptFingerprint(receiptB)) throw new Error('rpc_receipt_log_disagreement');
   const event = decodeEvent(log, cfg);
+  verifyPurchaseReceipt(receiptA, log, event, cfg);
   const confirmationCount = head - log.blockNumber + 1;
   if (confirmationCount < CONFIRMATIONS) throw new Error('insufficient_confirmations');
   const matches = await db(cfg, 'ant_payment_orders', {
@@ -113,8 +149,7 @@ async function recordFinalEvent(cfg, providers, log, head) {
   }
   const expected = calculateUsdtSplit(order.gross_usdt_raw);
   if (expected.grossRaw !== event.grossUsdtRaw || expected.feeRaw !== event.feeUsdtRaw ||
-      expected.netRaw !== event.netUsdtRaw || event.antOutRaw !== String(order.quoted_ant_raw) ||
-      BigInt(event.antOutRaw) < BigInt(order.min_ant_raw)) {
+      expected.netRaw !== event.netUsdtRaw || BigInt(event.antOutRaw) < BigInt(order.min_ant_raw)) {
     await db(cfg, 'ant_payment_orders', { method: 'PATCH', query: 'id=eq.' + order.id, body: { status: 'manual_review', failure_code: 'chain_order_amount_mismatch', updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
     throw new Error('chain_order_amount_mismatch');
   }
@@ -124,7 +159,7 @@ async function recordFinalEvent(cfg, providers, log, head) {
   });
   await db(cfg, 'ant_financial_ledger', {
     method: 'POST', query: 'on_conflict=chain_id,tx_hash,log_index,entry_type',
-    body: ledgerRows(order, event, cfg), prefer: 'resolution=ignore-duplicates,return=minimal'
+    body: ledgerRows(order, event, cfg), prefer: 'resolution=merge-duplicates,return=minimal'
   });
   await db(cfg, 'ant_payment_orders', {
     method: 'PATCH', query: 'id=eq.' + order.id,
@@ -245,4 +280,4 @@ async function main() {
   await Promise.all(providers.map(provider => provider.destroy()));
 }
 if (require.main === module) main().catch(error => { process.stderr.write(error.stack || String(error)); process.exitCode = 1; });
-module.exports = { config, decodeEvent, ledgerRows, cycle, recordFinalEvent, reconcileUnlinked };
+module.exports = { config, decodeEvent, ledgerRows, verifyPurchaseReceipt, cycle, recordFinalEvent, reconcileUnlinked };
