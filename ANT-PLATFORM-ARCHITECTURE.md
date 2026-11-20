@@ -45,29 +45,25 @@ Independent smart-contract audit; verify official BSC USDT contract and decimals
 Run npm install, npm run compile:token and npm run test:token. Mock oracle and mock ERC20 are test-only, not production price sources or stablecoins.
 
 
-## Persistent platform schema (migration committed, not yet applied)
+## Persistent platform schema (migrations committed, not yet applied)
 
-The ANT branch now includes `supabase/migrations/202611210001_ant_platform_ledger.sql` with:
-- `ant_admin_roles`: explicit SUPER_ADMIN / FINANCE_VIEWER / SUPPORT assignments.
-- `ant_wallets` and `ant_wallet_nonces`: verified wallet association and one-time challenge storage.
-- `ant_sale_events`: idempotent chain event ledger with unique (chain_id, tx_hash, log_index), raw integer token amounts, confirmation status and reconciliation metadata.
-- `ant_admin_audit_log`: append-only administrative audit records.
-- `ant_listing_metric_snapshots`: dated metrics with source, evidence hash, methodology, freshness and quality status.
+The ANT branch includes:
+- `supabase/migrations/202611210001_ant_platform_ledger.sql`: `ant_admin_roles` (SUPER_ADMIN / FINANCE_VIEWER / SUPPORT), `ant_wallets`, one-time `ant_wallet_nonces`, `ant_admin_audit_log`, and evidence-backed `ant_listing_metric_snapshots`.
+- `supabase/migrations/202611200002_ant_payment_gateway.sql`: purchase orders, chain events, financial ledger, and payment audit log. Event rows are unique by (chain_id, tx_hash, log_index); ledger rows are unique by (chain_id, tx_hash, log_index, entry_type).
+- `supabase/migrations/202611220001_ant_indexer_state.sql`: service-only worker checkpoint including last block hash.
 
-The migration enables RLS. Client writes are intentionally not granted; trusted ingestion and nonce consumption must use the server/service role. Members can read only their own wallet and sale rows. Finance viewers and super admins can read the financial ledger; only super admins can read the admin audit log. Role assignment remains service-role-only.
+RLS is enabled. Members can read only their own orders/events/ledger rows and linked wallet. Finance access is checked by the server against `ant_admin_roles`; support has no finance access. Client writes to payment/ledger/admin tables are denied; the server and indexer use the service role. Role assignment remains service-role-only.
 
-**Activation is still pending:** review and apply the migration in the correct Supabase project, verify RLS with separate member / finance / support / super-admin test identities, then implement and test the server-side nonce signer, chain log indexer and finance endpoints. The migration alone does not create a working wallet connection or transaction indexer. Do not claim the database is live until Supabase confirms the migration and policy tests pass.
+**Activation pending:** review and apply all three migrations in Supabase; test member, finance, support and super-admin RLS separately; then run the API and indexer end-to-end. The SQL files are not live merely because they are committed.
 
+## BSC testnet payment API and indexer (code committed; activation gated)
 
-## BSC sale event indexer (code committed; activation gated)
+- `server/lib/ant-api.js` implements authenticated wallet nonce issuance and signature verification, wallet linking, on-chain quote/order creation, transaction submission checks, order lookup and role-gated finance reporting.
+- `server/jobs/ant-chain-indexer.js` uses two independent BSC testnet RPC providers, verifies both providers agree on chain, blocks and logs, and requires at least 12 confirmations.
+- Before marking an order delivered, it validates immutable sale-contract configuration on both RPCs and reconciles the `AntPurchased` event with USDT fee/proceeds transfers and ANT delivery in the transaction receipt.
+- It records idempotent chain events and balanced financial ledger entries, handles zero-fee integer rounding without writing zero-value ledger rows, and marks events/orders non-canonical/reorged when recent block hashes change.
+- `.github/workflows/ant-chain-indexer.yml` runs one bounded cycle every five minutes or manually. It remains disabled unless repository variable `ANT_INDEXER_ENABLED=true`. It uses GitHub Actions rather than creating a paid Render worker.
 
-- `server/jobs/ant-sale-indexer.js` scans only BSC testnet (chain ID 97), waits for at least 12 confirmations, and uses a bounded block range.
-- It validates the `AntPurchased` event against the configured sale contract and immutable token/USDT/recipient addresses.
-- Before writing the ledger it fetches the transaction receipt and reconciles exactly two buyer-to-recipient USDT Transfer events (5% fee and 95% net) plus the ANT sale-contract-to-buyer Transfer event.
-- It stores raw integer amounts, block hash, timestamp, source and confirmation count. Event upserts are idempotent on (chain_id, tx_hash, log_index).
-- It checks a recent block-hash lookback and marks ledger events orphaned if their block was reorganized. The indexer cursor is stored in `ant_indexer_cursors` only after event upserts.
-- `scripts/print-ant-sale-event-topic.js` prints the exact event topic from the compiled ABI. The scheduled GitHub workflow is disabled unless repository variable `ANT_INDEXER_ENABLED=true`.
+Required repository variables: `ANT_INDEXER_ENABLED`, `ANT_INDEXER_START_BLOCK`, `ANT_INDEXER_CONFIRMATIONS` (minimum 12), `ANT_INDEXER_BLOCK_RANGE`, `ANT_INDEXER_REORG_LOOKBACK`, `ANT_USDT_DECIMALS`, `ANT_SALE_CONTRACT`, `ANT_USDT_CONTRACT`, `ANT_TOKEN_CONTRACT`, `ANT_FEE_WALLET`, `ANT_TREASURY_WALLET`. Required secrets: `BSC_TESTNET_RPC_URL`, `BSC_TESTNET_RPC_URL_SECONDARY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`. The member API also requires `SUPABASE_ANON_KEY` and `ANT_WALLET_DOMAIN` on the backend service.
 
-Required GitHub repository variables: `ANT_INDEXER_ENABLED`, `ANT_INDEXER_CHAIN_ID=97`, `ANT_PURCHASED_TOPIC0`, `ANT_INDEXER_START_BLOCK`, `ANT_INDEXER_CONFIRMATIONS` (minimum 12), `ANT_INDEXER_MAX_RANGE`, `ANT_INDEXER_REORG_LOOKBACK`, `ANT_SALE_CONTRACT_ADDRESS`, `ANT_USDT_CONTRACT_ADDRESS`, `ANT_TOKEN_CONTRACT_ADDRESS`, `ANT_FEE_RECIPIENT_ADDRESS`, `ANT_PROCEEDS_RECIPIENT_ADDRESS`. Required GitHub secrets: `BSC_RPC_URLS`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
-
-**Not active yet:** the Supabase migration must be applied, testnet contracts and recipient addresses must be deployed/verified, GitHub variables/secrets must be configured, and the first indexer run must pass end-to-end reconciliation. The workflow must remain disabled until those steps are complete.
+**Not active yet:** the migrations must be applied, testnet token and sale contracts must be deployed and verified, Safe recipients and exact USDT decimals must be checked, the required secrets/variables must be configured, and the first indexer run must pass end-to-end reconciliation. Keep the indexer disabled until then.
