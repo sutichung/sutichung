@@ -272,4 +272,4 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
   }
   return false;
 }
-return module.exports = { createAntApi, buildWalletMessage, parseRaw };
+module.exports = { createAntApi, buildWalletMessage, parseRaw };
