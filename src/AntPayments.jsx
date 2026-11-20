@@ -31,7 +31,8 @@ export default function AntPayments() {
   const [finance,setFinance] = useState(null), [financeError,setFinanceError] = useState('');
   const [history,setHistory] = useState([]);
   const [projectedSales,setProjectedSales] = useState('100000');
-  const projection = Math.max(0, Number(projectedSales) || 0);
+  const projectionValue = Number(projectedSales);
+  const projection = Number.isFinite(projectionValue) ? Math.max(0, projectionValue) : 0;
   const projectedFee = projection * 0.05;
   const projectedCreator = projectedFee * 0.60;
   const decimals = Number(status?.usdtDecimals ?? 18);
@@ -169,15 +170,15 @@ export default function AntPayments() {
     <div style={{marginTop:14,padding:12,background:'#17140f',border:'1px solid rgba(214,181,109,.28)',borderRadius:10}}>
       <b style={{color:'#D6B56D',fontSize:13}}>創作者收益試算（非實際收入）</b>
       <label style={{display:'block',fontSize:12,color:'#b8b1a2',marginTop:9}}>假設累計銷售額（USDT）
-        <input aria-label="假設累計銷售額 USDT" style={{...input,display:'block',marginTop:6}} inputMode="decimal" value={projectedSales} onChange={e=>setProjectedSales(e.target.value)} placeholder="100000"/>
+        <input aria-label="假設累計銷售額 USDT" type="number" min="0" step="any" style={{...input,display:'block',marginTop:6}} inputMode="decimal" value={projectedSales} onChange={e=>setProjectedSales(e.target.value)} placeholder="100000"/>
       </label>
       <div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:8,marginTop:10}}>
         <div style={{background:'#1b1710',padding:10,borderRadius:8}}><small>假設 5% 平台費</small><b style={{display:'block',color:'#D6B56D'}}>{projectedFee.toLocaleString('en-US',{maximumFractionDigits:2})} USDT</b></div>
-        <div style={{background:'#1b1710',padding:10,borderRadius:8}}><small>創作者分配 60%</small><b style={{display:'block',color:'#D6B56D'}}>{projectedCreator.toLocaleString('en-US',{maximumFractionDigits:2})} USDT</b></div>
+        <div style={{background:'#1b1710',padding:10,borderRadius:8}}><small>創作者分配 60%（稅費前試算）</small><b style={{display:'block',color:'#D6B56D'}}>{projectedCreator.toLocaleString('en-US',{maximumFractionDigits:2})} USDT</b></div>
         <div style={{background:'#1b1710',padding:10,borderRadius:8}}><small>產品營運 25%</small><b style={{display:'block'}}>{(projectedFee*0.25).toLocaleString('en-US',{maximumFractionDigits:2})} USDT</b></div>
         <div style={{background:'#1b1710',padding:10,borderRadius:8}}><small>安全法遵 10%＋預備金 5%</small><b style={{display:'block'}}>{(projectedFee*0.15).toLocaleString('en-US',{maximumFractionDigits:2})} USDT</b></div>
       </div>
-      <div style={{...muted,marginTop:8}}>依目前 5% 費率及提案 60/25/10/5 分配計算。不是報酬承諾或實際收入；未扣稅務、退款及其他法定支出，分配政策也尚未由多簽金庫執行。</div>
+      <div style={{...muted,marginTop:8}}>依目前 5% 費率及提案 60/25/10/5 分配計算。不是報酬承諾或實際收入；創作者分配為稅務、退款及法定準備金前的示意值；分配政策尚未由多簽金庫執行。</div>
     </div>
     <div style={{marginTop:14,padding:12,background:'#17140f',border:'1px solid rgba(214,181,109,.28)',borderRadius:10}}>
       <b style={{color:'#D6B56D',fontSize:13}}>創作者權益與反砸盤規則</b>
