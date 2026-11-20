@@ -151,6 +151,54 @@ async function getCheckpoint(cfg) {
 async function setCheckpoint(cfg, block) {
   await db(cfg, 'ant_indexer_state', { method: 'PATCH', query: 'worker_key=eq.' + WORKER_KEY, body: { last_block: block, updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
 }
+async function reconcileUnlinked(cfg, providers, head) {
+  const pending = await db(cfg, 'ant_payment_chain_events', {
+    query: 'select=id,chain_id,tx_hash,log_index,block_number,block_hash,buyer_wallet,gross_usdt_raw,fee_usdt_raw,net_usdt_raw,ant_out_raw,oracle_price_raw,raw_event&order_id=is.null&canonical=eq.true&limit=100'
+  });
+  for (const row of pending) {
+    const [orders, blockA, blockB] = await Promise.all([
+      db(cfg, 'ant_payment_orders', {
+        query: 'select=id,user_id,buyer_wallet,gross_usdt_raw,fee_usdt_raw,net_usdt_raw,quoted_ant_raw,min_ant_raw,status&chain_id=eq.97&tx_hash=eq.' + row.tx_hash + '&limit=2'
+      }),
+      providers[0].getBlock(Number(row.block_number)), providers[1].getBlock(Number(row.block_number))
+    ]);
+    if (!blockA || !blockB || blockA.hash !== blockB.hash || blockA.hash !== row.block_hash) {
+      await db(cfg, 'ant_payment_chain_events', { method: 'PATCH', query: 'id=eq.' + row.id, body: { canonical: false }, prefer: 'return=minimal' });
+      continue;
+    }
+    const order = orders.find(item => String(item.buyer_wallet).toLowerCase() === String(row.buyer_wallet).toLowerCase());
+    if (!order) continue;
+    const split = calculateUsdtSplit(order.gross_usdt_raw);
+    if (split.grossRaw !== String(row.gross_usdt_raw) || split.feeRaw !== String(row.fee_usdt_raw) ||
+        split.netRaw !== String(row.net_usdt_raw) || BigInt(row.ant_out_raw) < BigInt(order.min_ant_raw)) {
+      await db(cfg, 'ant_payment_orders', { method: 'PATCH', query: 'id=eq.' + order.id, body: { status: 'manual_review', failure_code: 'chain_order_amount_mismatch', updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
+      continue;
+    }
+    const event = {
+      transactionHash: row.tx_hash, logIndex: Number(row.log_index), buyer: String(row.buyer_wallet).toLowerCase(),
+      grossUsdtRaw: String(row.gross_usdt_raw), feeUsdtRaw: String(row.fee_usdt_raw),
+      netUsdtRaw: String(row.net_usdt_raw), antOutRaw: String(row.ant_out_raw)
+    };
+    await db(cfg, 'ant_payment_chain_events', { method: 'PATCH', query: 'id=eq.' + row.id, body: { order_id: order.id }, prefer: 'return=minimal' });
+    await db(cfg, 'ant_financial_ledger', {
+      method: 'POST', query: 'on_conflict=chain_id,tx_hash,log_index,entry_type',
+      body: ledgerRows(order, event, cfg), prefer: 'resolution=ignore-duplicates,return=minimal'
+    });
+    const confirmations = head - Number(row.block_number) + 1;
+    if (confirmations >= CONFIRMATIONS) {
+      await db(cfg, 'ant_payment_orders', {
+        method: 'PATCH', query: 'id=eq.' + order.id,
+        body: { status: 'delivered', tx_log_index: Number(row.log_index), block_number: Number(row.block_number), block_hash: blockA.hash, confirmations, failure_code: null, updated_at: new Date().toISOString() },
+        prefer: 'return=minimal'
+      });
+      await db(cfg, 'ant_payment_audit_log', {
+        method: 'POST',
+        body: { actor_type: 'worker', action: 'ant_unlinked_event_reconciled', order_id: order.id, outcome: 'success', metadata: { chain_id: CHAIN_ID, tx_hash: row.tx_hash, log_index: Number(row.log_index), confirmations } },
+        prefer: 'return=minimal'
+      });
+    }
+  }
+}
 async function cycle(cfg, providers, cursor) {
   const [networkA, networkB, headA, headB] = await Promise.all([
     providers[0].getNetwork(), providers[1].getNetwork(), providers[0].getBlockNumber(), providers[1].getBlockNumber()
@@ -182,11 +230,11 @@ async function main() {
   const stop = () => { stopping = true; };
   process.once('SIGTERM', stop); process.once('SIGINT', stop);
   while (!stopping) {
-    try { cursor = await cycle(cfg, providers, cursor); }
+    try { cursor = await cycle(cfg, providers, cursor); const head = Math.min(await providers[0].getBlockNumber(), await providers[1].getBlockNumber()); await reconcileUnlinked(cfg, providers, head); }
     catch (error) { process.stderr.write('ANT indexer fail-closed: ' + error.message + '\n'); }
     await new Promise(resolve => setTimeout(resolve, POLL_MS));
   }
   await Promise.all(providers.map(provider => provider.destroy()));
 }
 if (require.main === module) main().catch(error => { process.stderr.write(error.stack || String(error)); process.exitCode = 1; });
-module.exports = { config, decodeEvent, ledgerRows, cycle, recordFinalEvent };
+module.exports = { config, decodeEvent, ledgerRows, cycle, recordFinalEvent, reconcileUnlinked };
