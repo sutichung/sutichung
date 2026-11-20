@@ -164,7 +164,7 @@ function validateResearchHistory(history, market, options={}) {
   const source=String(history.source || '').trim();
   if (!source || /^(unavailable|unknown|mock|synthetic|simulated)$/i.test(source)) return { ok:false, status:'upstream_unavailable', error:'缺少可驗證的行情來源，拒絕計算績效' };
   const last=history.data.at(-1);
-  const asOf=history.asOf || (last && (last.time || last.openTime));
+  const asOf=(last && (last.time || last.openTime)) || history.asOf;
   const timestamp=parseCandleTime(asOf);
   if (!Number.isFinite(timestamp) || timestamp<=0) return { ok:false, status:'insufficient_data', error:'缺少可驗證的最後一根 K 線時間' };
   const now=Number(options.now === undefined ? Date.now() : options.now);
@@ -177,16 +177,16 @@ function validateResearchHistory(history, market, options={}) {
 
 function runStrategyLab(input, options={}) {
   const market=options.market;
-  if (!MARKET_TYPES.has(market)) return {status:'invalid_market',error:'market must be tw-stock, us-stock or crypto',strategies:[]};
+  if (!MARKET_TYPES.has(market)) return {status:'invalid_market',error:'market must be tw-stock, us-stock or crypto',strategies:[],performance:null,simulatedPerformance:false};
   const checked=validateCandles(input);
-  if(!checked.ok)return {status:'insufficient_data',error:checked.error,invalidIndex:checked.invalidIndex??null,strategies:[],disclaimer:'資料不足或 OHLCV 品質不合格，不會產生策略績效。'};
+  if(!checked.ok)return {status:'insufficient_data',error:checked.error,invalidIndex:checked.invalidIndex??null,strategies:[],performance:null,simulatedPerformance:false,disclaimer:'資料不足或 OHLCV 品質不合格，不會產生策略績效。'};
   const candles=checked.rows;
   const defaults=market==='crypto'?{feeBps:10,slippageBps:5,sellTaxBps:0}:market==='us-stock'?{feeBps:1,slippageBps:5,sellTaxBps:0}:{feeBps:14.25,slippageBps:10,sellTaxBps:30};
   const inferred=inferAnnualization(candles,market);
   const overrides={};
   for(const key of ['feeBps','slippageBps','sellTaxBps','annualization'])if(options[key]!==undefined)overrides[key]=options[key];
   const costs={...defaults,...inferred,market,...overrides};
-  for(const key of ['feeBps','slippageBps','sellTaxBps'])if(!finite(costs[key])||Number(costs[key])<0||Number(costs[key])>1000)return {status:'invalid_costs',error:'交易成本參數必須介於 0 到 1000 bps',strategies:[]};
+  for(const key of ['feeBps','slippageBps','sellTaxBps'])if(!finite(costs[key])||Number(costs[key])<0||Number(costs[key])>1000)return {status:'invalid_costs',error:'交易成本參數必須介於 0 到 1000 bps',strategies:[],performance:null,simulatedPerformance:false};
   const split=Math.floor(candles.length*0.6);
   const trainStart=60,trainEnd=split, testStart=split,testEnd=candles.length;
   const periods=[
