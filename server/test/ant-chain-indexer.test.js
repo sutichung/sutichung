@@ -13,7 +13,8 @@ const cfg = {
   usdtDecimals: 18,
   antDecimals: 18
 };
-const abi = new ethers.Interface(['event AntPurchased(address indexed buyer,uint256 grossUsdt,uint256 feeUsdt,uint256 netUsdt,uint256 antOut,uint256 priceUsdtPerAnt)']);\nconst erc20 = new ethers.Interface(['event Transfer(address indexed from,address indexed to,uint256 value)']);
+const abi = new ethers.Interface(['event AntPurchased(address indexed buyer,uint256 grossUsdt,uint256 feeUsdt,uint256 netUsdt,uint256 antOut,uint256 priceUsdtPerAnt)']);
+const erc20 = new ethers.Interface(['event Transfer(address indexed from,address indexed to,uint256 value)']);
 const buyer = '0x6666666666666666666666666666666666666666';
 function log(gross='1000', fee='50', net='950') {
   const encoded = abi.encodeEventLog(abi.getEvent('AntPurchased'), [buyer, gross, fee, net, '100000000000000000000', '100000000']);
@@ -36,7 +37,8 @@ function receiptFor(eventLog) {
     ]
   };
 }
-\ntest('decodes a valid BSC testnet AntPurchased event with exact 5% fee split', () => {
+
+test('decodes a valid BSC testnet AntPurchased event with exact 5% fee split', () => {
   const event = decodeEvent(log(), cfg);
   assert.equal(event.chainId, 97);
   assert.equal(event.grossUsdtRaw, '1000');
