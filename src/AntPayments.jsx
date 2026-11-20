@@ -28,10 +28,13 @@ export default function AntPayments() {
   const [status,setStatus] = useState(null), [wallet,setWallet] = useState(''), [verified,setVerified] = useState(false);
   const [amount,setAmount] = useState('10'), [quote,setQuote] = useState(null), [order,setOrder] = useState(null);
   const [busy,setBusy] = useState(false), [message,setMessage] = useState(''), [error,setError] = useState('');
-  const [finance,setFinance] = useState(null), [financeError,setFinanceError] = useState('');\n  const [history,setHistory] = useState([]);
+  const [finance,setFinance] = useState(null), [financeError,setFinanceError] = useState('');
+  const [history,setHistory] = useState([]);
   const decimals = Number(status?.usdtDecimals ?? 18);
   const refreshStatus = useCallback(async()=>{try{setStatus(await api('/api/ant/status'));}catch(e){setError(e.message);}},[]);
-  useEffect(()=>{refreshStatus();},[refreshStatus]);\n  const refreshHistory = useCallback(async()=>{try{const result=await api('/api/ant/orders');setHistory(result.orders||[]);}catch(_){setHistory([]);}},[]);\n  useEffect(()=>{refreshHistory();},[refreshHistory]);
+  useEffect(()=>{refreshStatus();},[refreshStatus]);
+  const refreshHistory = useCallback(async()=>{try{const result=await api('/api/ant/orders');setHistory(result.orders||[]);}catch(_){setHistory([]);}},[]);
+  useEffect(()=>{refreshHistory();},[refreshHistory]);
   const connect = async () => {
     setBusy(true);setError('');setMessage('');
     try {
