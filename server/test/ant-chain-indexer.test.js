@@ -45,7 +45,7 @@ test('decodes a valid BSC testnet AntPurchased event with exact 5% fee split', (
   assert.equal(event.feeUsdtRaw, '50');
   assert.equal(event.netUsdtRaw, '950');
   assert.equal(event.buyer, buyer.toLowerCase());
-  assert.equal(event.idempotencyKey, '97:'+'a'.repeat(64)+':2');
+  assert.equal(event.idempotencyKey, '97:0x'+'a'.repeat(64)+':2');
 });
 test('rejects event with incorrect fee split', () => {
   assert.throws(() => decodeEvent(log('1000','49','951'), cfg), /fee_split_mismatch/);
