@@ -101,7 +101,7 @@ function ledgerRows(order, event, cfg) {
   const rows = [
     { ...base, entry_type: 'usdt_gross', asset_symbol: 'USDT', asset_contract: cfg.usdt.toLowerCase(), asset_decimals: cfg.usdtDecimals, amount_raw: event.grossUsdtRaw, direction: 'in', wallet: event.buyer },
     { ...base, entry_type: 'usdt_net', asset_symbol: 'USDT', asset_contract: cfg.usdt.toLowerCase(), asset_decimals: cfg.usdtDecimals, amount_raw: event.netUsdtRaw, direction: 'out', wallet: cfg.treasuryWallet.toLowerCase() },
-    { ...base, entry_type: 'ant_delivery', asset_symbol: 'ANT', asset_contract: cfg.ant.toLowerCase(), asset_decimals: cfg.antDecimals, amount_raw: event.antOutRaw, direction: 'in', wallet: event.buyer }
+    { ...base, entry_type: 'ant_delivery', asset_symbol: 'ANT', asset_contract: cfg.ant.toLowerCase(), asset_decimals: cfg.antDecimals, amount_raw: event.antOutRaw, direction: 'out', wallet: event.buyer }
   ];
   if (BigInt(event.feeUsdtRaw) > 0n) rows.splice(1, 0,
     { ...base, entry_type: 'usdt_fee', asset_symbol: 'USDT', asset_contract: cfg.usdt.toLowerCase(), asset_decimals: cfg.usdtDecimals, amount_raw: event.feeUsdtRaw, direction: 'out', wallet: cfg.feeWallet.toLowerCase() }
