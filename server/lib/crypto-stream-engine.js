@@ -1,6 +1,7 @@
 'use strict';
 const { createCryptoEventStorage } = require('./crypto-event-storage');
 const { CryptoLiveScorer } = require('./crypto-live-scorer');
+const { isMarketDataLicensed } = require('./market-data-license');
 
 const DEFAULT_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
 const toNum = v => v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v);
@@ -12,7 +13,9 @@ function createCryptoStreamEngine(options = {}) {
   const fetchImpl = options.fetchImpl || fetch;
   const now = options.now || Date.now;
   const symbols = [...new Set((options.symbols || process.env.CRYPTO_WS_SYMBOLS || DEFAULT_SYMBOLS.join(',')).split(',').map(x => x.trim().toUpperCase()).filter(x => /^[A-Z0-9]{4,20}$/.test(x)))].slice(0, 30);
-  const exchanges = (options.exchanges || process.env.CRYPTO_WS_EXCHANGES || 'Binance,Bybit,OKX').split(',').map(x => x.trim()).filter(x => ['Binance','Bybit','OKX'].includes(x));
+  const requestedExchanges = (options.exchanges || process.env.CRYPTO_WS_EXCHANGES || 'Binance,Bybit,OKX').split(',').map(x => x.trim()).filter(x => ['Binance','Bybit','OKX'].includes(x));
+  const exchanges = options.skipLicenseCheck ? requestedExchanges : requestedExchanges.filter(x => isMarketDataLicensed(x));
+  const unlicensedProviders = requestedExchanges.filter(x => !exchanges.includes(x));
   const enableFutures = options.enableFutures ?? process.env.CRYPTO_WS_ENABLE_FUTURES !== 'false';
   const staleMs = Number(options.staleMs || process.env.CRYPTO_WS_STALE_MS) || 30000;
   const storage = options.storage || createCryptoEventStorage();
@@ -111,7 +114,10 @@ function createCryptoStreamEngine(options = {}) {
         const mid = Math.floor(sorted.length / 2);
         const baseline = sorted.length % 2 ? sorted[mid] : (sorted[mid-1]+sorted[mid])/2;
         const multiple = baseline > 0 ? quoteVolume / baseline : null;
-        if (multiple >= 2) emit(exchange, marketType, symbol, 'volume_spike', { quoteVolume, baselineMedian: baseline, multiple }, timestamp);
+        if (multiple >= 2) {
+          emit(exchange, marketType, symbol, 'volume_spike', { quoteVolume, baselineMedian: baseline, multiple }, timestamp);
+          maybeAlert(q, { eligible: true, score: 2.2, reasons: ['1 分鐘成交額達近期中位數 ' + multiple.toFixed(2) + ' 倍'] });
+        }
       }
     }
   }
@@ -164,7 +170,7 @@ function createCryptoStreamEngine(options = {}) {
         if (channel === 'tickers') quoteEvent(exchange, marketType, symbol, { price: toNum(d.last), bid: toNum(d.bidPx), ask: toNum(d.askPx), changePct: toNum(d.open24h) > 0 ? (Number(d.last)/Number(d.open24h)-1)*100 : null, quoteVolume24h: toNum(d.volCcy24h) }, ts);
         else if (channel === 'books5') updateBook(exchange, marketType, symbol, d.bids || [], d.asks || [], ts);
         else if (channel === 'trades') handleTrade(exchange, marketType, symbol, { price: d.px, size: d.sz, side: d.side }, ts);
-        else if (channel === 'candle1m') handleCandle(exchange, marketType, symbol, { closed: true, open: d[1], high: d[2], low: d[3], close: d[4], baseVolume: d[5], quoteVolume: d[7] }, d[0]);
+        else if (channel === 'candle1m') handleCandle(exchange, marketType, symbol, { closed: String(d[8]) === '1', open: d[1], high: d[2], low: d[3], close: d[4], baseVolume: d[5], quoteVolume: d[7] }, d[0]);
       }
     }
   }
@@ -276,7 +282,7 @@ function createCryptoStreamEngine(options = {}) {
     const feeds = [...sockets.entries()].map(([id,x]) => ({ id, state:x.state||'idle', connected:x.state==='connected', reconnectAttempts:x.attempts||0, lastMessageAt:iso(x.lastMessageAt), lastError:x.lastError||null, nextReconnectAt:x.nextReconnectAt||null }));
     const rows = [...quotes.values()];
     const fresh = rows.filter(x => now()-x.receivedAtMs <= staleMs);
-    return { enabled:started&&!stopping, startedAt, symbols, exchanges, futuresEnabled:enableFutures, feeds, connectedFeedCount:feeds.filter(x=>x.connected).length, quoteCount:rows.length, freshQuoteCount:fresh.length, staleQuoteCount:rows.length-fresh.length, fundingCount:funding.size, funding:[...funding.values()], stats:{...stats}, storage:{configured:storage.configured,lastPersistAt,pendingBatches:buckets.size}, telegramConfigured:Boolean(process.env.TELEGRAM_BOT_TOKEN&&process.env.TELEGRAM_CHAT_ID), quoteMode:'official exchange WebSocket + 15s REST fallback', timestamp:new Date(now()).toISOString() };
+    return { enabled:started&&!stopping, startedAt, symbols, exchanges, unlicensedProviders, futuresEnabled:enableFutures, feeds, connectedFeedCount:feeds.filter(x=>x.connected).length, quoteCount:rows.length, freshQuoteCount:fresh.length, staleQuoteCount:rows.length-fresh.length, fundingCount:funding.size, funding:[...funding.values()], stats:{...stats}, storage:{configured:storage.configured,lastPersistAt,pendingBatches:buckets.size}, telegramConfigured:Boolean(process.env.TELEGRAM_BOT_TOKEN&&process.env.TELEGRAM_CHAT_ID), quoteMode:'official exchange WebSocket + 15s REST fallback', timestamp:new Date(now()).toISOString() };
   }
   function getQuotes() {
     return [...quotes.values()].map(x => ({ ...x, sourceAgeMs: x.sourceTimestamp ? Math.max(0,now()-Date.parse(x.sourceTimestamp)) : null, freshnessStatus: now()-x.receivedAtMs <= staleMs ? 'fresh' : 'stale', receivedAt:new Date(x.receivedAtMs).toISOString() }));
@@ -308,6 +314,7 @@ function createCryptoStreamEngine(options = {}) {
     if (started) return status();
     started = true; stopping = false;
     if (!symbols.length) throw new Error('no_valid_crypto_symbols');
+    if (!exchanges.length) { process.stderr.write('[crypto-stream] No exchange has a confirmed market-data redistribution license; streams remain disabled.\\n'); return status(); }
     if (!storage.configured) process.stderr.write('[crypto-stream] Supabase storage is not configured; market events will not be durable.\n');
     const specs = connectionSpecs();
     for (const spec of specs) connect(spec);
@@ -341,6 +348,8 @@ function createCryptoStreamEngine(options = {}) {
     });
     return {...snapshot,markets,quoteMode:'multi-exchange WebSocket push + REST fallback',realtime:status(),summary:{...(snapshot.summary||{}),websocketQuoteCount:markets.filter(x=>x.quoteMode==='WebSocket push').length}};
   }
-  return {start,stop,status,getQuotes,mergeMarket};
+  return {start,stop,status,getQuotes,mergeMarket,ingest:handleMessage};
 }
-module.exports={createCryptoStreamEngine,DEFAULT_SYMBOLS};
+let defaultEngine = null;
+function createDefaultCryptoStreamEngine() { if (!defaultEngine) defaultEngine = createCryptoStreamEngine(); return defaultEngine; }
+module.exports={createCryptoStreamEngine,createDefaultCryptoStreamEngine,DEFAULT_SYMBOLS};
