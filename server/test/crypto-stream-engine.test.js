@@ -77,3 +77,14 @@ test('OKX SWAP instrument IDs normalize to the dashboard symbol when merging liv
   assert.equal(merged.markets[0].price,100);
   assert.equal(merged.markets[0].quoteMode,'WebSocket push');
 });
+
+test('OKX perpetual contract sizes are not falsely classified as quote notional whales', async () => {
+  const x = engine();
+  x.instance.ingest('OKX','perpetual',JSON.stringify({arg:{channel:'trades',instId:'BTC-USDT-SWAP'},data:[{px:'50000',sz:'100',side:'buy',ts:String(BASE)}]}));
+  await x.instance.stop();
+  const rows=x.storage.saved.flatMap(batch=>batch.events);
+  assert.equal(rows.filter(row=>row.eventType==='large_trade').length,0);
+  const contract=rows.find(row=>row.eventType==='trade_contract_size');
+  assert.equal(contract.notional,null);
+  assert.equal(contract.whaleClassificationAvailable,false);
+});
