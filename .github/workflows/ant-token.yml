@@ -28,5 +28,7 @@ jobs:
         with:
           node-version: 20
       - run: npm install
+      - name: Syntax-check deployment scripts
+        run: for file in scripts/*.js; do node --check "$file"; done
       - run: npm run compile:token
       - run: npm run test:token
