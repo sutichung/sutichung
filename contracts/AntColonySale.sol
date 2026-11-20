@@ -28,7 +28,7 @@ contract AntColonySale is ReentrancyGuard {
 
     error InvalidAddress();
     error InvalidOracleAge();
-    error InvalidUsdtDecimals();
+    error InvalidUsdtDecimals();\n    error InvalidAntDecimals();\n    error RecipientCollision();
     error InvalidPrice();
     error StalePrice();
     error InvalidAmount();
@@ -39,10 +39,12 @@ contract AntColonySale is ReentrancyGuard {
     event AntPurchased(address indexed buyer, uint256 grossUsdt, uint256 feeUsdt, uint256 netUsdt, uint256 antOut, uint256 priceUsdtPerAnt);
 
     constructor(address usdt_, address ant_, address oracle_, address feeRecipient_, address proceedsRecipient_, uint256 maxOracleAge_) {
-        if (usdt_ == address(0) || ant_ == address(0) || oracle_ == address(0) || feeRecipient_ == address(0) || proceedsRecipient_ == address(0)) revert InvalidAddress();
+        if (usdt_ == address(0) || ant_ == address(0) || oracle_ == address(0) || feeRecipient_ == address(0) || proceedsRecipient_ == address(0) || usdt_ == ant_) revert InvalidAddress();
+        if (feeRecipient_ == proceedsRecipient_) revert RecipientCollision();
         if (maxOracleAge_ == 0) revert InvalidOracleAge();
         uint8 d = IERC20Metadata(usdt_).decimals();
         if (d > 18) revert InvalidUsdtDecimals();
+        if (IERC20Metadata(ant_).decimals() != 18) revert InvalidAntDecimals();
         usdt = IERC20(usdt_);
         ant = IERC20(ant_);
         oracle = IAntUsdtPriceOracle(oracle_);
