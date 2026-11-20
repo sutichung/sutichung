@@ -360,4 +360,4 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
   }
   return false;
 }
-module.exports = { createAntApi, buildWalletMessage, parseRaw, assuranceLevel, verifySaleConfiguration };
+module.exports = { createAntApi, buildWalletMessage, parseRaw, assuranceLevel };
