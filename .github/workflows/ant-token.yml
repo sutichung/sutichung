@@ -5,7 +5,7 @@ on:
     branches: [ant-token-testnet]
     paths:
       - "contracts/**"
-      - "test/AntColony.js"
+      - "test/**"
       - "scripts/deploy-ant.js"
       - "hardhat.config.js"
       - "package.json"
@@ -13,7 +13,7 @@ on:
   pull_request:
     paths:
       - "contracts/**"
-      - "test/AntColony.js"
+      - "test/**"
       - "scripts/deploy-ant.js"
       - "hardhat.config.js"
       - "package.json"
