@@ -13,7 +13,7 @@ export default function QuantResearch({symbol='2330',source='',asOf='',market='t
  useEffect(()=>{setTargetSymbol(symbol);setDraftSymbol(symbol);},[symbol]);
  useEffect(()=>{const d=marketType==='crypto'?{fee:0.10,tax:0,slippage:0.05}:marketType==='us-stock'?{fee:0.01,tax:0,slippage:0.05}:{fee:0.1425,tax:0.30,slippage:0.10};setFee(String(d.fee));setTax(String(d.tax));setSlippage(String(d.slippage));},[marketType]);
  const valid=[fee,tax,slippage].every(x=>x.trim()!==''&&Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=10);
- const params=useMemo(()=>new URLSearchParams({market:marketType,feeBps:String(Number(fee)*100),sellTaxBps:String(Number(tax)*100),slippageBps:String(Number(slippage)*100)}).toString(),[marketType,exchange,cryptoType,fee,tax,slippage]);
+ const params=useMemo(()=>new URLSearchParams({market:marketType,exchange,type:cryptoType,feeBps:String(Number(fee)*100),sellTaxBps:String(Number(tax)*100),slippageBps:String(Number(slippage)*100)}).toString(),[marketType,exchange,cryptoType,fee,tax,slippage]);
  useEffect(()=>{
   if(!targetSymbol||!valid){setResult(null);return;}
   const controller=new AbortController();let alive=true;
