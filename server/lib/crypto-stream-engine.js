@@ -43,11 +43,12 @@ function createCryptoStreamEngine(options = {}) {
     const id = key(exchange, marketType, symbol) + ':' + minute;
     let batch = buckets.get(id);
     if (!batch) {
+      if (buckets.size >= 500) { const oldest = buckets.keys().next().value; const dropped = buckets.get(oldest); stats.droppedEvents += dropped?.events?.length || 0; buckets.delete(oldest); }
       batch = { minute: timestamp.slice(0, 16) + ':00.000Z', exchange, marketType, symbol, events: [] };
       buckets.set(id, batch);
     }
     batch.events.push({ exchange, marketType, symbol, eventType, sourceTimestamp: timestamp, receivedAt: new Date(now()).toISOString(), ...payload });
-    if (batch.events.length > 250) batch.events.splice(0, batch.events.length - 250);
+    if (batch.events.length > 250) stats.droppedEvents += batch.events.splice(0, batch.events.length - 250).length;
   }
   function quoteEvent(exchange, marketType, symbol, data, sourceTimestamp) {
     const k = key(exchange, marketType, symbol);
@@ -264,6 +265,8 @@ function createCryptoStreamEngine(options = {}) {
     timers.add(state.timer);
   }
   async function pollFunding() {
+    if (fundingInFlight || !enableFutures) return;
+    fundingInFlight = true;
     const tasks = [];
     for (const symbol of symbols) for (const exchange of exchanges) {
       if (!enableFutures) continue;
@@ -294,9 +297,11 @@ function createCryptoStreamEngine(options = {}) {
         } catch (e) { stats.errors++; }
       })());
     }
-    await Promise.allSettled(tasks);
+    try { await Promise.allSettled(tasks); } finally { fundingInFlight = false; }
   }
   async function flush() {
+    if (!storage.configured || flushInFlight) return;
+    flushInFlight = true;
     const currentMinute = new Date(now()).toISOString().slice(0,16);
     const ready = [];
     for (const [id,batch] of buckets) if (batch.minute.slice(0,16) < currentMinute || stopping) { ready.push(batch); buckets.delete(id); }
@@ -305,6 +310,7 @@ function createCryptoStreamEngine(options = {}) {
       catch (e) { stats.persistErrors++; batch.events.length = Math.min(batch.events.length,250); buckets.set(key(batch.exchange,batch.marketType,batch.symbol)+':'+batch.minute.slice(0,16),batch); }
     }
     try { await storage.saveStatus(status()); } catch (_) { stats.persistErrors++; }
+    flushInFlight = false;
   }
   function status() {
     const feeds = [...sockets.entries()].map(([id,x]) => ({ id, state:x.state||'idle', connected:x.state==='connected', reconnectAttempts:x.attempts||0, lastMessageAt:iso(x.lastMessageAt), lastError:x.lastError||null, nextReconnectAt:x.nextReconnectAt||null }));
@@ -316,6 +322,8 @@ function createCryptoStreamEngine(options = {}) {
     return [...quotes.values()].map(x => { const sourceAgeMs = x.sourceTimestamp ? now()-Date.parse(x.sourceTimestamp) : null; const fresh = now()-x.receivedAtMs <= staleMs && sourceAgeMs !== null && sourceAgeMs <= staleMs && sourceAgeMs >= -60000; return { ...x, sourceAgeMs, freshnessStatus:fresh?'fresh':'stale', receivedAt:new Date(x.receivedAtMs).toISOString() }; });
   }
   async function restFallback() {
+    if (restInFlight) return;
+    restInFlight = true;
     const jobs = [];
     for (const exchange of exchanges) for (const marketType of (enableFutures ? ['spot','perpetual'] : ['spot'])) for (const symbol of symbols) {
       jobs.push((async () => {
@@ -383,7 +391,7 @@ function createCryptoStreamEngine(options = {}) {
         } else stats.errors++;
       })());
     }
-    await Promise.allSettled(jobs);
+    try { await Promise.allSettled(jobs); } finally { restInFlight = false; }
   }
   function start() {
     if (started) return status();
@@ -395,10 +403,12 @@ function createCryptoStreamEngine(options = {}) {
     for (const spec of specs) connect(spec);
     restFallback().catch(()=>{});
     pollFunding().catch(()=>{});
-    flushTimer = setInterval(() => flush().catch(()=>{}), 10000);
+    if (storage.configured) {
+      flushTimer = setInterval(() => flush().catch(()=>{}), 10000);
+      statusTimer = setInterval(() => storage.saveStatus(status()).catch(()=>{}), 30000);
+    }
     fundingTimer = setInterval(() => pollFunding().catch(()=>{}), 60000);
     const restTimer = setInterval(() => restFallback().catch(()=>{}), 15000); timers.add(restTimer);
-    statusTimer = setInterval(() => { if (storage.configured) storage.saveStatus(status()).catch(()=>{}); }, 30000);
     return status();
   }
   async function stop() {
