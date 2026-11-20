@@ -9,8 +9,6 @@ on:
     - cron: "2-59/5 * * * *"
     - cron: "3-59/5 * * * *"
     - cron: "4-59/5 * * * *"
-    # Heavy technical scan runs separately every 15 minutes.
-    - cron: "0,15,30,45 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -118,7 +116,7 @@ jobs:
           NODE
 
   technical-scan:
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0,15,30,45 * * * *'
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0-59/5 * * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:
@@ -131,6 +129,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          MINUTE=$(date -u +%M)
+          if (( 10#$MINUTE % 15 != 0 )); then
+            echo "Skipping technical scan at UTC minute $MINUTE; it runs every 15 minutes."
+            exit 0
+          fi
           echo "=== technical scan worker at $(date -u +%FT%TZ) ==="
           OIDC_TOKEN=$(curl --fail --silent --show-error --get \
             --data-urlencode "audience=taiwan-stock-hunter-automation" \
