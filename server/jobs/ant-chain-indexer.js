@@ -229,6 +229,14 @@ async function main() {
   let stopping = false;
   const stop = () => { stopping = true; };
   process.once('SIGTERM', stop); process.once('SIGINT', stop);
+  if (process.env.ANT_INDEXER_ONESHOT === 'true') {
+    try {
+      cursor = await cycle(cfg, providers, cursor);
+      const head = Math.min(await providers[0].getBlockNumber(), await providers[1].getBlockNumber());
+      await reconcileUnlinked(cfg, providers, head);
+    } finally { await Promise.all(providers.map(provider => provider.destroy())); }
+    return;
+  }
   while (!stopping) {
     try { cursor = await cycle(cfg, providers, cursor); const head = Math.min(await providers[0].getBlockNumber(), await providers[1].getBlockNumber()); await reconcileUnlinked(cfg, providers, head); }
     catch (error) { process.stderr.write('ANT indexer fail-closed: ' + error.message + '\n'); }
