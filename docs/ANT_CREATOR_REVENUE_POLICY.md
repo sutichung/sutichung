@@ -27,14 +27,14 @@ Use separate, publicly disclosed multisig-controlled addresses:
 4. ecosystemWallet: grants, audits, development, and community programs.
 Do not use one wallet for all purposes. Publish signer threshold, wallet addresses, treasury policy, reporting cadence, and material transfers. Never publish seed phrases or private keys. Do not promise buybacks, price support, guaranteed liquidity, or returns.
 
-## 4. Recommended revenue allocation (proposal only)
-After funds are received, the multisig may allocate creator/platform fee receipts under a published budget. A starting proposal for review—not an automatic on-chain split—is:
-- 40% product development and infrastructure
-- 25% security reviews, audits, and bug bounties
-- 20% operations, support, and compliance
-- 10% ecosystem grants and community education
+## 4. Revenue allocation (current proposal; not implemented)
+The earlier 40/25/20/10/5 allocation in this document is superseded to avoid conflicting revenue projections. The current creator-first proposal is defined in [ZENTRAX Creator Economics](./ZENTRAX_CREATOR_ECONOMICS.md):
+- 60% creator compensation / founder distribution
+- 25% product development, infrastructure and customer support
+- 10% security audits, bug bounty and compliance
 - 5% contingency reserve
-The treasury must report actual amounts, dates, transaction hashes, and variances. This allocation must not be represented as implemented until a tested contract or approved multisig policy enforces it.
+
+These percentages apply only to net, actually received fee revenue after required tax withholding and legally required reserves. They are a treasury-policy proposal, not an automatic on-chain split, not a guaranteed payout, and not proof that any fee wallet or sale is live. Publish actual amounts, dates, transaction hashes, taxes, transfers and variances.
 
 ## 5. Fair-launch / anti-sniper safeguards
 Prefer transparent market-integrity controls over punitive hidden mechanics:
