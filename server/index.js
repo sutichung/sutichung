@@ -16,7 +16,7 @@ const cryptoRealtimeFeed = cryptoRealtime.createDefaultCryptoStreamEngine();
 const cryptoMicrostructure = require('./lib/crypto-microstructure');
 const { assessMarketRisk } = require('./lib/market-risk');
 const { loadRiskHistory, loadFreshMicrostructure } = require('./lib/crypto-risk-fallback');
-const { runStrategyLab } = require('./lib/strategy-lab');
+const { runStrategyLab, validateResearchHistory } = require('./lib/strategy-lab');
 const globalFinance = require('./lib/global-finance');
 const globalIntelligence = require('./lib/intelligence');
 const marketIntelligence = require('./lib/market-intelligence');
@@ -668,8 +668,8 @@ async function route(req,res){
   }
   if(u.pathname.startsWith('/api/research/strategies/')||u.pathname.startsWith('/api/market/research/strategies/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase();
-    const market=u.searchParams.get('market')||'tw-stock';
-    if(!['tw-stock','us-stock','crypto'].includes(market))return json(res,400,{status:'invalid_market',error:'market must be tw-stock, us-stock or crypto'});
+    const market=u.searchParams.get('market');
+    if(!['tw-stock','us-stock','crypto'].includes(market))return json(res,400,{status:'invalid_market',error:'market must be tw-stock, us-stock or crypto',strategies:[],performance:null,simulatedPerformance:false});
     if(market==='tw-stock'&&!validateSymbol(symbol))return json(res,400,{status:'invalid_symbol',error:'invalid Taiwan stock symbol'});
     if(market==='us-stock'&&!/^[A-Z0-9.^=-]{1,12}$/.test(symbol))return json(res,400,{status:'invalid_symbol',error:'invalid US symbol'});
     if(market==='crypto'&&!/^[A-Z0-9_-]{2,30}$/.test(symbol))return json(res,400,{status:'invalid_symbol',error:'invalid crypto symbol'});
@@ -693,9 +693,14 @@ async function route(req,res){
         const chart=await getUsChart(symbol,'2y','1d');
         history={data:chart.candles,source:chart.source,asOf:chart.candles.at(-1)?.time};
       }else history=await loadStockHistory(symbol);
-      const result=runStrategyLab(history.data,{market,symbol,source:history.source,htfCandles,feeBps:u.searchParams.has('feeBps')?Number(u.searchParams.get('feeBps')):undefined,slippageBps:u.searchParams.has('slippageBps')?Number(u.searchParams.get('slippageBps')):undefined,sellTaxBps:u.searchParams.has('sellTaxBps')?Number(u.searchParams.get('sellTaxBps')):undefined});
+      const historyCheck=validateResearchHistory(history,market,{interval:market==='crypto'&&u.searchParams.get('exchange')!=='Coinbase'?'4h':'1d'});
+      if(!historyCheck.ok){
+        const httpStatus=historyCheck.status==='insufficient_data'||historyCheck.status==='invalid_data'?422:503;
+        return json(res,httpStatus,{status:historyCheck.status,error:historyCheck.error,symbol,market,source:history&&history.source||null,asOf:historyCheck.asOf||history&&history.asOf||null,barCount:historyCheck.barCount||history&&history.data&&history.data.length||0,strategies:[],performance:null,simulatedPerformance:false});
+      }
+      const result=runStrategyLab(history.data,{market,symbol,source:history.source,asOf:historyCheck.asOf,htfCandles,feeBps:u.searchParams.has('feeBps')?Number(u.searchParams.get('feeBps')):undefined,slippageBps:u.searchParams.has('slippageBps')?Number(u.searchParams.get('slippageBps')):undefined,sellTaxBps:u.searchParams.has('sellTaxBps')?Number(u.searchParams.get('sellTaxBps')):undefined});
       return json(res,result.status==='ok'?200:422,{...result,source:history.source||result.source,asOf:history.asOf||result.asOf});
-    }catch(e){return json(res,502,{status:'data_unavailable',symbol,market,error:e.message,strategies:[]});}
+    }catch(e){return json(res,502,{status:'upstream_unavailable',symbol,market,error:e.message,strategies:[],performance:null,simulatedPerformance:false});}
   }
   if(u.pathname.startsWith('/api/crypto/history/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase(),type=u.searchParams.get('type')==='perpetual'?'perpetual':'spot',interval=u.searchParams.get('interval')||'1d',exchange=u.searchParams.get('exchange')||'Binance',nativeSymbol=u.searchParams.get('nativeSymbol')||symbol;

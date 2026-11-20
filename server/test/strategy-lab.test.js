@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {runStrategyLab,validateCandles,inferAnnualization}=require('../lib/strategy-lab');
+const {runStrategyLab,validateCandles,validateResearchHistory,inferAnnualization}=require('../lib/strategy-lab');
 const {dailyTrendMap,runMtfStrategy}=require('../lib/mtf-structure-strategy');
 
 function candles(n=240,mode='trend'){
@@ -14,10 +14,30 @@ function candles(n=240,mode='trend'){
 }
 
 test('strategy lab rejects insufficient or malformed OHLCV instead of inventing metrics',()=>{
- assert.equal(runStrategyLab(candles(80)).status,'insufficient_data');
+ assert.equal(runStrategyLab(candles(80),{market:'tw-stock'}).status,'insufficient_data');
  const bad=candles();bad[10].high=1;
  assert.equal(validateCandles(bad).ok,false);
- assert.equal(runStrategyLab(bad).status,'insufficient_data');
+ assert.equal(runStrategyLab(bad,{market:'tw-stock'}).status,'insufficient_data');
+});
+
+
+test('strategy lab requires one exact supported market value',()=>{
+ assert.equal(runStrategyLab(candles(),{}).status,'invalid_market');
+ for(const market of ['TW-STOCK','US','stocks','crypto-futures','']) assert.equal(runStrategyLab(candles(),{market}).status,'invalid_market');
+ for(const market of ['tw-stock','us-stock','crypto']) assert.equal(runStrategyLab(candles(),{market}).status,'ok');
+});
+
+test('research history fails closed on upstream errors, stale timestamps, unknown sources and insufficient candles',()=>{
+ const now=Date.now(); const recent=candles(140).map((x,i)=>({...x,time:new Date(now-(139-i)*86400000).toISOString()})); const valid={data:recent,source:'official test fixture',asOf:recent.at(-1).time};
+ assert.equal(validateResearchHistory(valid,'tw-stock').ok,true);
+ assert.equal(validateResearchHistory({...valid,error:'upstream timeout'},'tw-stock').status,'upstream_unavailable');
+ assert.equal(validateResearchHistory({...valid,source:'unavailable'},'tw-stock').status,'upstream_unavailable');
+ assert.equal(validateResearchHistory({...valid,data:candles(100)},'tw-stock').status,'insufficient_data');
+ const staleRows=recent.map(x=>({...x})); staleRows[staleRows.length-1].time='2000-01-01T00:00:00Z';
+ assert.equal(validateResearchHistory({...valid,data:staleRows},'tw-stock').status,'stale_data');
+ assert.equal(validateResearchHistory(valid,'crypto',{now,interval:'4h'}).ok,true);
+ const futureRows=recent.map(x=>({...x})); futureRows[futureRows.length-1].time=new Date(Date.now()+10*60*1000).toISOString();
+ assert.equal(validateResearchHistory({...valid,data:futureRows},'tw-stock').status,'invalid_data');
 });
 
 test('strategy lab produces separate in-sample and out-of-sample results with explicit costs',()=>{
@@ -40,6 +60,15 @@ test('strategy lab produces separate in-sample and out-of-sample results with ex
  assert.equal(result.costs.feeBps,14.25);
  assert.equal(result.costs.sellTaxBps,30);
  assert.ok(result.disclaimer.includes('下一根 K 線開盤'));
+});
+
+
+test('no-trade backtests keep every performance metric null instead of filling fabricated zeros',()=>{
+ const flat=Array.from({length:240},(_,i)=>({time:new Date(Date.UTC(2026,0,1+i)).toISOString(),open:100,high:101,low:99,close:100,volume:1000}));
+ const result=runStrategyLab(flat,{market:'tw-stock',source:'test fixture'});
+ assert.equal(result.status,'ok');
+ const core=result.strategies.filter(x=>['ema_trend_rsi','macd_momentum','bb_mean_reversion'].includes(x.id));
+ assert.ok(core.every(x=>x.periods.every(p=>p.metrics.status==='no_trades'&&p.metrics.netReturnPct===null&&p.metrics.winRatePct===null&&p.metrics.maxDrawdownPct===null)));
 });
 
 test('strategy lab accepts market-specific fee overrides and never validates no-trade strategies',()=>{
