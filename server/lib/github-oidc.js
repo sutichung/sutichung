@@ -32,7 +32,8 @@ async function verifyGitHubActionsToken(token,{fetchImpl=fetch,now=Date.now(),al
     const seconds=Math.floor(now/1000);
     if(claims.iss!==ISSUER||claims.aud!==EXPECTED.aud)return false;
     if(claims.repository!==EXPECTED.repository||claims.ref!==EXPECTED.ref)return false;
-    const allowedWorkflowEvent=([MARKET_WORKFLOW,REFRESH_WORKFLOW].includes(claims.workflow_ref)&&['schedule','workflow_dispatch'].includes(claims.event_name))||
+    const allowedWorkflowEvent=(claims.workflow_ref===MARKET_WORKFLOW&&['schedule','workflow_dispatch'].includes(claims.event_name))||
+      (claims.workflow_ref===REFRESH_WORKFLOW&&['schedule','workflow_dispatch','push'].includes(claims.event_name))||
       (allowProductionSmoke&&claims.workflow_ref===SMOKE_WORKFLOW&&['push','workflow_run'].includes(claims.event_name));
     if(!allowedWorkflowEvent)return false;
     if(!Number.isFinite(claims.exp)||claims.exp<seconds-30||!Number.isFinite(claims.iat)||claims.iat>seconds+30)return false;
