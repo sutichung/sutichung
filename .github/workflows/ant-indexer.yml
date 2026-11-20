@@ -8,6 +8,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   index:
+    if: github.event_name == 'workflow_dispatch' || vars.ANT_INDEXER_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
