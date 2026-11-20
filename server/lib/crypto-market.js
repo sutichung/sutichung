@@ -74,7 +74,7 @@ async function krakenMarkets(){
  const tmap=tick.result||{};
  return shortlist.map(([key,x])=>{const base=(x.wsname.split('/')[0]||'').replace(/^XBT$/,'BTC'),quote=(x.wsname.split('/')[1]||'').replace(/^XBT$/,'BTC'),native=x.altname||key,q=tmap[native]||tmap[key]||{},last=n(q.c?.[0]),baseVolume=n(q.v?.[1]),quoteVolume=last!==null&&baseVolume!==null?last*baseVolume:null;return row('Kraken','spot',(base+quote).replace(/[^A-Z0-9]/g,''),base,quote,last,q.o&&Number(q.o)>0?(last/Number(q.o)-1)*100:null,quoteVolume,{high24h:q.h?.[1],low24h:q.l?.[1],volume:baseVolume,nativeSymbol:native,nativeType:'spot'});}).filter(Boolean);
 }
-async function loadMarket(){
+async function loadMarket(streamEngine=null){
  const snapshot=await cached('market-multi',15000,async()=>{
   const jobs=[['Binance',binanceMarkets],['Bybit',bybitMarkets],['OKX',okxMarkets],['Coinbase',coinbaseMarkets],['Kraken',krakenMarkets]];
   const settled=await Promise.allSettled(jobs.map(async([name,loader])=>{const started=Date.now();const data=await loader();return {data,updatedAt:now(),latencyMs:Date.now()-started};}));
@@ -86,7 +86,7 @@ async function loadMarket(){
   const receivedAt=now(),sourceTimestampCount=markets.filter(x=>x.sourceTimestamp).length,freshQuoteCount=markets.filter(x=>x.freshnessStatus==='fresh').length,staleQuoteCount=markets.filter(x=>x.freshnessStatus==='stale').length,unverifiedQuoteCount=markets.filter(x=>x.freshnessStatus==='unverified').length;
   return {markets,status:markets.length?'ok':exchanges.every(x=>x.status==='not_configured')?'license_required':'degraded',licenseRequiredProviders:exchanges.filter(x=>x.status==='not_configured').map(x=>x.name),summary:{total:markets.length,spot:markets.filter(x=>x.marketType==='spot').length,perpetual:markets.filter(x=>x.marketType==='perpetual').length,exchanges:exchanges.filter(x=>x.status==='connected').map(x=>x.name),connectedExchangeCount:exchanges.filter(x=>x.status==='connected').length,sourceTimestampCount,sourceTimestampCoveragePct:markets.length?Math.round(sourceTimestampCount/markets.length*100):0,freshQuoteCount,staleQuoteCount,unverifiedQuoteCount},exchanges,coverage:{scope:'僅涵蓋下列五家交易所公開 API 可取得的商品；不代表全世界所有交易所或所有商品',partialProviders:exchanges.filter(x=>x.coverageNote).map(x=>x.name),timestampLimit:'來源時間戳依交易所欄位可能是最後成交或回應時間；超過 5 分鐘標示過期，缺少時間戳標示未驗證'},source:markets.length?'已授權交易所各自行情 API；價格不跨交易所混合':'未取得交易所會員展示／再分發書面授權，未啟用加密貨幣行情',quoteMode:'REST snapshot polling；非 WebSocket 逐筆推送',refreshIntervalMs:15000,receivedAt,timestamp:null};
  });
- let merged = require('./crypto-stream-engine').createDefaultCryptoStreamEngine().mergeMarket(snapshot);
+ let merged = streamEngine && typeof streamEngine.mergeMarket === 'function' ? streamEngine.mergeMarket(snapshot) : snapshot;
  if (process.env.CRYPTO_STREAM_EMBEDDED === 'false') {
   try {
    const persisted = await require('./crypto-event-storage').createCryptoEventStorage().readStatus();
