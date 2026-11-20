@@ -9,8 +9,8 @@ test('social lexical sentiment is explicit proxy and neutral on unknown language
 });
 test('orderbook connector validates levels and computes spread and imbalance',async()=>{
  const old=global.fetch;
- global.fetch=async url=>({ok:true,status:200,json:async()=>String(url).includes('binance')?{bids:[['100','2']],asks:[['102','1']]}:String(url).includes('okx')?{data:[{bids:[['100','2']],asks:[['102','1']]}]}:{result:{XXBTZUSD:{bids:[['100','2']],asks:[['102','1']]}}}});
- try {const out=await loadOrderbooks(['BTCUSDT']);assert.equal(out.books.length,3);assert.equal(out.books[0].spread,2);assert.equal(out.books[0].imbalance,98/302);} finally {global.fetch=old;}
+ global.fetch=async url=>({ok:true,status:200,json:async()=>String(url).includes('binance')?{bids:[['100','2']],asks:[['102','1']]}:String(url).includes('okx')?{data:[{bids:[['100','2']],asks:[['102','1']]}]}:String(url).includes('coinbase')?{bids:[['100','2']],asks:[['102','1']]}:{result:{XXBTZUSD:{bids:[['100','2']],asks:[['102','1']]}}}});
+ try {const out=await loadOrderbooks(['BTCUSDT']);assert.equal(out.books.length,4);assert.equal(out.books[0].spread,2);assert.equal(out.books[0].imbalance,98/302);} finally {global.fetch=old;}
 });
 test('whale data is explicitly unavailable without a configured licensed provider',async()=>{
  const oldUrl=process.env.WHALE_ALERT_API_URL,oldKey=process.env.WHALE_ALERT_API_KEY;
