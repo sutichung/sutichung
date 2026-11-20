@@ -679,11 +679,11 @@ async function route(req,res){
         const exchange=u.searchParams.get('exchange')||'Binance';
         const native=u.searchParams.get('nativeSymbol')||symbol;
         if(exchange==='Coinbase'){
-          history=await cryptoMarket.getHistory(symbol,type,'1d',exchange,native,300);
+          history=await cryptoMarket.getHistory(symbol,type,'1d',exchange,native,300,false);
         }else{
           const [fourHour,daily]=await Promise.all([
-            cryptoMarket.getHistory(symbol,type,'4h',exchange,native,1000),
-            cryptoMarket.getHistory(symbol,type,'1d',exchange,native,600)
+            cryptoMarket.getHistory(symbol,type,'4h',exchange,native,1000,false),
+            cryptoMarket.getHistory(symbol,type,'1d',exchange,native,600,false)
           ]);
           history={...fourHour,source:fourHour.source+' + '+daily.source};
           htfCandles=daily.data;
