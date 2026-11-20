@@ -77,6 +77,7 @@ export default function ZentraxPredictionMarket() {
         </div>
       </article>)}
     </div>}
+    {!account&&<div style={{...styles.muted,marginTop:10}}>登入會員後可領取一次性的 10,000 虛擬點數並記錄預測；不需要連接錢包或存入加密貨幣。</div>}
     {account&&<div style={{marginTop:18,display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,250px),1fr))',gap:10}}>
       <div style={{background:'#100e0b',border:'1px solid #493a20',borderRadius:11,padding:12}}><b>我的持倉</b>{positions.length?positions.map(p=><div key={p.market_id} style={{padding:'8px 0',borderBottom:'1px solid #302718',fontSize:11}}><b>{marketMap.get(p.market_id)?.title||p.market_id}</b><div style={styles.muted}>YES {fmt(p.yes_shares,4)} 份 · NO {fmt(p.no_shares,4)} 份 · 已投入 {fmt(Number(p.yes_cost)+Number(p.no_cost),2)} 點 · 派彩 {fmt(p.payout,2)}</div></div>):<p style={styles.muted}>尚無持倉。</p>}</div>
       <div style={{background:'#100e0b',border:'1px solid #493a20',borderRadius:11,padding:12}}><b>最近預測紀錄</b>{orders.length?orders.slice(0,8).map(o=><div key={o.id} style={{padding:'8px 0',borderBottom:'1px solid #302718',fontSize:11}}><b>{o.side} · {fmt(o.stake,2)} 點</b><div style={styles.muted}>{fmt(o.shares,4)} 份 @ {fmt(Number(o.price)*100,1)}% · {new Date(o.created_at).toLocaleString('zh-TW')}</div></div>):<p style={styles.muted}>尚無交易紀錄。</p>}</div>
