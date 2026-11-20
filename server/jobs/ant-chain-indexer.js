@@ -112,7 +112,8 @@ function verifyPurchaseReceipt(receipt, log, event, cfg) {
     String(item.topics?.[0] || '').toLowerCase() === topic.toLowerCase()
   );
   if (purchaseLogs.length !== 1 || purchaseLogs[0].index !== log.index ||
-      purchaseLogs[0].data.toLowerCase() !== log.data.toLowerCase()) throw new Error('receipt_purchase_event_mismatch');
+      purchaseLogs[0].data.toLowerCase() !== log.data.toLowerCase() ||
+      purchaseLogs[0].topics.map(x => x.toLowerCase()).join(':') !== log.topics.map(x => x.toLowerCase()).join(':')) throw new Error('receipt_purchase_event_mismatch');
   const transfers = (receipt.logs || []).flatMap(item => {
     try {
       if (item.address.toLowerCase() !== cfg.usdt.toLowerCase() && item.address.toLowerCase() !== cfg.ant.toLowerCase()) return [];
@@ -330,7 +331,7 @@ async function cycle(cfg, providers, cursor) {
   const toBlock = Math.min(safeHead, fromBlock + RANGE - 1);
   const filter = { address: cfg.sale, topics: [topic], fromBlock, toBlock };
   const [logsA, logsB] = await Promise.all([providers[0].getLogs(filter), providers[1].getLogs(filter)]);
-  const fingerprint = logs => logs.map(x => [x.transactionHash, x.index, x.blockHash].join(':')).sort().join('|');
+  const fingerprint = logs => logs.map(x => [x.address, x.transactionHash, x.index, x.blockHash, ...(x.topics || []), x.data].join(':')).sort().join('|');
   if (fingerprint(logsA) !== fingerprint(logsB)) throw new Error('rpc_log_disagreement');
   for (const log of logsA) await recordFinalEvent(cfg, providers, log, Math.min(headA, headB));
   const [checkpointA, checkpointB] = await Promise.all([providers[0].getBlock(toBlock), providers[1].getBlock(toBlock)]);
