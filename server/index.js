@@ -385,6 +385,38 @@ async function route(req,res){
       return json(res,status,{error:e.code||'prediction_journal_error',message:e.message});
     }
   }
+  if(req.method==='POST'&&u.pathname==='/api/automation/research/settle'){
+    if(!await verifyGitHubActionsToken(bearerToken(req)))return json(res,401,{error:'automation_authentication_required'});
+    const adapter=String(process.env.PREDICTION_OBSERVATION_ADAPTER_URL||'').replace(/\/$/,'');
+    if(!adapter)return json(res,503,{error:'prediction_observation_adapter_not_configured'});
+    const adapterToken=String(process.env.PREDICTION_OBSERVATION_ADAPTER_TOKEN||'');
+    try{
+      const due=await predictionJournal.listDue();
+      const report={checked:due.length,settled:0,errors:[]};
+      for(const item of due){
+        const prediction=item.market_prediction_snapshots;
+        try{
+          const target=new URL(adapter);
+          target.searchParams.set('market',prediction.market);target.searchParams.set('symbol',prediction.symbol);
+          target.searchParams.set('horizon',item.horizon);target.searchParams.set('dueAt',item.due_at);
+          target.searchParams.set('referenceAsOf',prediction.reference_as_of);
+          const headers={accept:'application/json'};if(adapterToken)headers.authorization='Bearer '+adapterToken;
+          const response=await fetch(target,{headers,signal:AbortSignal.timeout(20000)});
+          if(!response.ok)throw new Error('observation_adapter_http_'+response.status);
+          const observation=await response.json();
+          if(observation.authorized!==true||!observation.source||!observation.observedAt||!Number.isFinite(Number(observation.price)))throw new Error('adapter_observation_not_verified');
+          await predictionJournal.settle(item.id,{price:observation.price,observedAt:observation.observedAt,source:observation.source,authorized:true,costPct:Number(process.env.PREDICTION_COST_PCT||0),neutralBandPct:Number(process.env.PREDICTION_NEUTRAL_BAND_PCT||0.1)});
+          report.settled++;
+        }catch(error){report.errors.push({id:item.id,market:prediction.market,symbol:prediction.symbol,horizon:item.horizon,error:error.code||error.message});}
+      }
+      return json(res,200,report);
+    }catch(error){return json(res,503,{error:error.code||'prediction_settlement_failed',message:error.message});}
+  }
+  if(req.method==='POST'&&u.pathname==='/api/automation/research/calibrate'){
+    if(!await verifyGitHubActionsToken(bearerToken(req)))return json(res,401,{error:'automation_authentication_required'});
+    try{return json(res,200,await predictionJournal.calibrateAll({minimumSamples:Number(process.env.MODEL_CALIBRATION_MIN_SAMPLES||30)}));}
+    catch(error){return json(res,503,{error:error.code||'prediction_calibration_failed',message:error.message});}
+  }
   if(req.method==='POST'&&u.pathname==='/api/automation/research/outcomes'){
     if(!await verifyGitHubActionsToken(bearerToken(req)))return json(res,401,{error:'automation_authentication_required'});
     try{
