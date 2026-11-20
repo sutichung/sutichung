@@ -28,7 +28,9 @@ contract AntColonySale is ReentrancyGuard {
 
     error InvalidAddress();
     error InvalidOracleAge();
-    error InvalidUsdtDecimals();\n    error InvalidAntDecimals();\n    error RecipientCollision();
+    error InvalidUsdtDecimals();
+    error InvalidAntDecimals();
+    error RecipientCollision();
     error InvalidPrice();
     error StalePrice();
     error InvalidAmount();
