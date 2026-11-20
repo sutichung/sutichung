@@ -34,7 +34,8 @@ describe("AntColonySale", function () {
   });
 
   it("rejects a payment whose calculated ANT output rounds to zero", async function () {
-    const { sale } = await setup(6);
+    const { sale, oracle } = await setup(6);
+    await oracle.setPrice(10n ** 30n); // extreme price forces the ANT wei result to round down to zero
     await expect(sale.quote(1n)).to.be.revertedWithCustomError(sale, "ZeroAntOutput");
   });
 
