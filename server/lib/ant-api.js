@@ -372,7 +372,7 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
         const sourceEventId = String(body.sourceEventId || '');
         if (!/^[0-9a-f-]{36}$/i.test(sourceEventId)) { json(res, 400, { error: 'invalid_source_event_id' }); return true; }
         const taxReserveRaw = String(body.taxReserveRaw ?? '0');
-        if (!/^\\d{1,78}$/.test(taxReserveRaw)) { json(res, 400, { error: 'invalid_tax_reserve' }); return true; }
+        if (!/^\d{1,78}$/.test(taxReserveRaw)) { json(res, 400, { error: 'invalid_tax_reserve' }); return true; }
         const eligible = await db('ant_creator_revenue_eligible_events', {
           query: 'select=source_event_id,chain_id,tx_hash,log_index,revenue_month,fee_usdt_raw&source_event_id=eq.' + encodeURIComponent(sourceEventId) + '&limit=1'
         });
