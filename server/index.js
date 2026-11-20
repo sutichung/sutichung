@@ -669,7 +669,7 @@ async function route(req,res){
   if(u.pathname.startsWith('/api/research/strategies/')||u.pathname.startsWith('/api/market/research/strategies/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase();
     const market=u.searchParams.get('market');
-    if(!['tw-stock','us-stock','crypto'].includes(market))return json(res,400,{status:'invalid_market',error:'market must be tw-stock, us-stock or crypto'});
+    if(!['tw-stock','us-stock','crypto'].includes(market))return json(res,400,{status:'invalid_market',error:'market must be tw-stock, us-stock or crypto',strategies:[],performance:null,simulatedPerformance:false});
     if(market==='tw-stock'&&!validateSymbol(symbol))return json(res,400,{status:'invalid_symbol',error:'invalid Taiwan stock symbol'});
     if(market==='us-stock'&&!/^[A-Z0-9.^=-]{1,12}$/.test(symbol))return json(res,400,{status:'invalid_symbol',error:'invalid US symbol'});
     if(market==='crypto'&&!/^[A-Z0-9_-]{2,30}$/.test(symbol))return json(res,400,{status:'invalid_symbol',error:'invalid crypto symbol'});
