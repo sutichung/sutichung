@@ -18,6 +18,6 @@ Only BSC testnet (chain 97) canonical `AntPurchased` events with a matching cano
 
 ## Security and limitations
 - RLS is enabled; browser roles have no table privileges; only service_role can access this accounting table/view.
-- The existing finance API is not yet extended to create/approve/pay allocations. This migration is not applied to Supabase by this commit.
+- The MFA-gated Super Admin API supports listing monthly allocations (`GET /api/ant/admin/creator-revenue/allocations`) and creating draft rows from eligible finalized events (`POST` with `sourceEventId` and `taxReserveRaw`). Approval and payout transitions are intentionally not exposed yet. This migration is not applied to Supabase by this commit.
 - No automatic wallet payout, no claim of earned/withdrawable balance, and no mainnet enablement.
 - Tax, legal, and accounting treatment must be confirmed by qualified local professionals before real funds are accepted.
