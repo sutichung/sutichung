@@ -9,7 +9,9 @@ create table if not exists public.market_prediction_snapshots (
  direction text not null check (direction in ('UP','DOWN','NEUTRAL')),
  score numeric,
  confidence numeric check (confidence is null or confidence between 0 and 1),
+ raw_up_probability numeric check (raw_up_probability is null or raw_up_probability between 0 and 1),
  up_probability numeric check (up_probability is null or up_probability between 0 and 1),
+ calibration_applied boolean not null default false,
  probability_semantics text,
  reference_price numeric not null check (reference_price > 0),
  reference_as_of timestamptz not null,
@@ -82,13 +84,13 @@ begin
    raise exception 'at_least_two_source_observations_required' using errcode='22023';
  end if;
  insert into public.market_prediction_snapshots(
-  prediction_key,market,symbol,timeframe,model_version,direction,score,confidence,up_probability,probability_semantics,
+  prediction_key,market,symbol,timeframe,model_version,direction,score,confidence,raw_up_probability,up_probability,calibration_applied,probability_semantics,
   reference_price,reference_as_of,source_consensus,source_spread_bps,consensus_status,feature_snapshot
  ) values(
   p_snapshot->>'prediction_key',p_snapshot->>'market',upper(p_snapshot->>'symbol'),p_snapshot->>'timeframe',
   p_snapshot->>'model_version',p_snapshot->>'direction',nullif(p_snapshot->>'score','')::numeric,
-  nullif(p_snapshot->>'confidence','')::numeric,nullif(p_snapshot->>'up_probability','')::numeric,
-  p_snapshot->>'probability_semantics',(p_snapshot->>'reference_price')::numeric,(p_snapshot->>'reference_as_of')::timestamptz,
+  nullif(p_snapshot->>'confidence','')::numeric,nullif(p_snapshot->>'raw_up_probability','')::numeric,nullif(p_snapshot->>'up_probability','')::numeric,
+  coalesce((p_snapshot->>'calibration_applied')::boolean,false),p_snapshot->>'probability_semantics',(p_snapshot->>'reference_price')::numeric,(p_snapshot->>'reference_as_of')::timestamptz,
   coalesce(p_snapshot->'source_consensus','{}'::jsonb),(p_snapshot->>'source_spread_bps')::numeric,'VERIFIED',
   coalesce(p_snapshot->'feature_snapshot','{}'::jsonb)
  ) on conflict(prediction_key) do nothing
