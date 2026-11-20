@@ -5,7 +5,7 @@ const { isMarketDataLicensed } = require('./market-data-license');
 
 const DEFAULT_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
 const toNum = v => v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v);
-const iso = v => { const n = Number(v); return Number.isFinite(n) && n > 0 ? new Date(n).toISOString() : null; };
+const iso = v => { if (v === null || v === undefined || v === '') return null; const numeric = typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))); const n = numeric ? Number(v) : Date.parse(v); return Number.isFinite(n) && n > 0 ? new Date(n).toISOString() : null; };
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
 function createCryptoStreamEngine(options = {}) {
@@ -19,8 +19,8 @@ function createCryptoStreamEngine(options = {}) {
   };
   const symbols = [...new Set(toList(options.symbols ?? process.env.CRYPTO_WS_SYMBOLS, DEFAULT_SYMBOLS.join(','))
     .map(x => x.toUpperCase()).filter(x => /^[A-Z0-9]{4,20}$/.test(x)))].slice(0, 30);
-  const requestedExchanges = toList(options.exchanges ?? process.env.CRYPTO_WS_EXCHANGES, 'Binance,Bybit,OKX')
-    .filter(x => ['Binance','Bybit','OKX'].includes(x));
+  const requestedExchanges = toList(options.exchanges ?? process.env.CRYPTO_WS_EXCHANGES, 'Binance,Bybit,OKX,Coinbase,Kraken')
+    .filter(x => ['Binance','Bybit','OKX','Coinbase','Kraken'].includes(x));
   const exchanges = options.skipLicenseCheck ? requestedExchanges : requestedExchanges.filter(x => isMarketDataLicensed(x));
   const unlicensedProviders = requestedExchanges.filter(x => !exchanges.includes(x));
   const enableFutures = options.enableFutures ?? process.env.CRYPTO_WS_ENABLE_FUTURES !== 'false';
@@ -34,8 +34,9 @@ function createCryptoStreamEngine(options = {}) {
   const startedAt = new Date(now()).toISOString();
   const key = (exchange, marketType, symbol) => [exchange, marketType, symbol].join(':');
   const split = symbol => {
-    const suffix = ['USDT','USDC','USD','BTC','ETH'].find(x => symbol.endsWith(x));
-    return suffix ? { baseAsset: symbol.slice(0, -suffix.length), quoteAsset: suffix } : { baseAsset: symbol, quoteAsset: null };
+    const clean = String(symbol || '').toUpperCase().replace(/[-/:]/g, '');
+    const suffix = ['USDT','USDC','USD','BTC','ETH'].find(x => clean.endsWith(x));
+    return suffix ? { baseAsset: clean.slice(0, -suffix.length), quoteAsset: suffix } : { baseAsset: clean, quoteAsset: null };
   };
   function emit(exchange, marketType, symbol, eventType, payload, sourceTimestamp) {
     if (!storage.configured) return;
@@ -52,10 +53,13 @@ function createCryptoStreamEngine(options = {}) {
     if (batch.events.length > 250) stats.droppedEvents += batch.events.splice(0, batch.events.length - 250).length;
   }
   function quoteEvent(exchange, marketType, symbol, data, sourceTimestamp) {
+    const price = toNum(data.price);
+    const sourceTime = iso(sourceTimestamp);
+    if (!(price > 0) || !sourceTime || Date.parse(sourceTime) > now() + 60000) return false;
     const k = key(exchange, marketType, symbol);
     const old = quotes.get(k) || { exchange, marketType, symbol, ...split(symbol) };
     Object.assign(old, data);
-    old.sourceTimestamp = iso(sourceTimestamp) || old.sourceTimestamp;
+    old.sourceTimestamp = sourceTime;
     old.receivedAtMs = now();
     quotes.set(k, old);
     emit(exchange, marketType, symbol, 'ticker', { price: old.price, bid: old.bid, ask: old.ask, changePct: old.changePct, quoteVolume24h: old.quoteVolume24h, quoteMode: old.quoteMode }, old.sourceTimestamp);
@@ -64,6 +68,7 @@ function createCryptoStreamEngine(options = {}) {
       old.liveSignal = score;
       if (score.eligible) maybeAlert(old, score);
     }
+    return true;
   }
   function maybeAlert(quote, score) {
     const sourceAge = quote?.sourceTimestamp ? now() - Date.parse(quote.sourceTimestamp) : Infinity;
@@ -193,6 +198,16 @@ function createCryptoStreamEngine(options = {}) {
       }
       return;
     }
+    if (exchange === 'Coinbase') {
+      if (message.type !== 'ticker' || !message.product_id) return;
+      quoteEvent(exchange, marketType, message.product_id, { price:toNum(message.price), bid:toNum(message.best_bid), ask:toNum(message.best_ask), bidSize:toNum(message.best_bid_size), askSize:toNum(message.best_ask_size), quoteMode:'WebSocket push' }, message.time);
+      return;
+    }
+    if (exchange === 'Kraken') {
+      if (message.channel !== 'ticker' || !Array.isArray(message.data)) return;
+      for (const item of message.data) if (item.symbol) quoteEvent(exchange, marketType, item.symbol, { price:toNum(item.last), bid:toNum(item.bid), ask:toNum(item.ask), bidSize:toNum(item.bid_qty), askSize:toNum(item.ask_qty), quoteMode:'WebSocket push' }, item.timestamp);
+      return;
+    }
     if (exchange === 'OKX') {
       const arg = message.arg || {}, channel = arg.channel, inst = String(arg.instId || '');
       const symbol = inst.replace(/-SWAP$/, '').replace(/-/g, '');
@@ -225,6 +240,12 @@ function createCryptoStreamEngine(options = {}) {
           return ['tickers','books5','trades','candle1m'].map(channel => ({ channel, instId }));
         });
         specs.push({ exchange, marketType, url: 'wss://ws.okx.com:8443/ws/v5/public', subscribe: { op: 'subscribe', args } });
+      } else if (exchange === 'Coinbase' && marketType === 'spot') {
+        const productIds = list.map(s => s.endsWith('USDT') ? s.slice(0,-4) + '-USD' : s);
+        specs.push({ exchange, marketType, url: 'wss://ws-feed.exchange.coinbase.com', subscribe: { type: 'subscribe', product_ids: productIds, channels: ['ticker'] } });
+      } else if (exchange === 'Kraken' && marketType === 'spot') {
+        const pairs = list.map(s => s.endsWith('USDT') ? s.slice(0,-4) + '/USD' : s);
+        specs.push({ exchange, marketType, url: 'wss://ws.kraken.com/v2', subscribe: { method: 'subscribe', params: { channel: 'ticker', symbol: pairs } } });
       }
     }
     return specs;
@@ -285,7 +306,7 @@ function createCryptoStreamEngine(options = {}) {
     if (fundingInFlight || !enableFutures) return;
     fundingInFlight = true;
     const tasks = [];
-    for (const symbol of symbols) for (const exchange of exchanges) {
+    for (const symbol of symbols) for (const exchange of exchanges.filter(x => ['Binance','Bybit','OKX'].includes(x))) {
       if (!enableFutures) continue;
       tasks.push((async () => {
         try {
@@ -349,7 +370,7 @@ function createCryptoStreamEngine(options = {}) {
     if (restInFlight) return;
     restInFlight = true;
     const jobs = [];
-    for (const exchange of exchanges) for (const marketType of (enableFutures ? ['spot','perpetual'] : ['spot'])) for (const symbol of symbols) {
+    for (const exchange of exchanges.filter(x => ['Binance','Bybit','OKX'].includes(x))) for (const marketType of (enableFutures ? ['spot','perpetual'] : ['spot'])) for (const symbol of symbols) {
       jobs.push((async () => {
         let tickerUrl, bookUrl, candleUrl, instId, category;
         if (exchange === 'Binance') {

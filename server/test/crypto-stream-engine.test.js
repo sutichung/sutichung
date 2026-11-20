@@ -18,6 +18,17 @@ function engine(extra = {}) {
   return { instance, storage, advance(ms=1000) { clock += ms; return clock; } };
 }
 
+test('Coinbase and Kraken native USD ticker symbols are normalized and merged', () => {
+  const x = engine();
+  x.instance.ingest('Coinbase','spot',JSON.stringify({type:'ticker',product_id:'BTC-USD',price:'65000',best_bid:'64999',best_ask:'65001',time:new Date(BASE).toISOString()}));
+  x.instance.ingest('Kraken','spot',JSON.stringify({channel:'ticker',data:[{symbol:'BTC/USD',last:65010,bid:65009,ask:65011,timestamp:new Date(BASE).toISOString()}]}));
+  const quotes=x.instance.getQuotes();
+  assert.equal(quotes.find(q=>q.exchange==='Coinbase').price,65000);
+  assert.equal(quotes.find(q=>q.exchange==='Kraken').price,65010);
+  const merged=x.instance.mergeMarket({markets:[{exchange:'Coinbase',marketType:'spot',nativeSymbol:'BTC-USD',price:1},{exchange:'Kraken',marketType:'spot',nativeSymbol:'BTC/USD',price:1}]});
+  assert.equal(merged.markets[0].price,65000);
+  assert.equal(merged.markets[1].price,65010);
+});
 test('Binance ticker websocket message is normalized with source and receive time', () => {
   const x = engine();
   x.instance.ingest('Binance','spot',JSON.stringify({stream:'btcusdt@ticker',data:{e:'24hrTicker',E:BASE,s:'BTCUSDT',c:'100',P:'1.25',q:'123456',h:'105',l:'95'}}));
