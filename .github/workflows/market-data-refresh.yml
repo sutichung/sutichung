@@ -16,7 +16,8 @@ permissions:
   id-token: write
 
 concurrency:
-  group: market-data-refresh
+  # Keep the five offset schedules independent; a shared group would coalesce pending runs.
+  group: market-data-refresh-${{ github.event.schedule || 'manual' }}
   cancel-in-progress: false
 
 jobs:
