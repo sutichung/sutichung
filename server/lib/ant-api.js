@@ -5,7 +5,7 @@ const CHAIN_ID = 97;
 const SALE_ABI = [
   'function quote(uint256 grossUsdt) view returns (uint256 antOut,uint256 feeUsdt,uint256 netUsdt,uint256 price)',
   'function usdt() view returns (address)', 'function ant() view returns (address)',
-  'function feeRecipient() view returns (address)', 'function proceedsRecipient() view returns (address)',
+  'function feeRecipient() view returns (address)', 'function proceedsRecipient() view returns (address)', 'function usdtDecimals() view returns (uint8)',
   'function buy(uint256 grossUsdt,uint256 minAntOut) returns (uint256 antOut)'
 ];
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
@@ -184,13 +184,13 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
         const provider = await providerForTestnet();
         try {
           const sale = new ethers.Contract(contracts.sale, SALE_ABI, provider);
-          const [onchainUsdt, onchainAnt, onchainFee, onchainTreasury] = await Promise.all([
-            sale.usdt(), sale.ant(), sale.feeRecipient(), sale.proceedsRecipient()
+          const [onchainUsdt, onchainAnt, onchainFee, onchainTreasury, onchainDecimals] = await Promise.all([
+            sale.usdt(), sale.ant(), sale.feeRecipient(), sale.proceedsRecipient(), sale.usdtDecimals()
           ]);
           if (onchainUsdt.toLowerCase() !== contracts.usdt.toLowerCase() ||
               onchainAnt.toLowerCase() !== contracts.ant.toLowerCase() ||
               onchainFee.toLowerCase() !== contracts.fee.toLowerCase() ||
-              onchainTreasury.toLowerCase() !== contracts.treasury.toLowerCase()) {
+              onchainTreasury.toLowerCase() !== contracts.treasury.toLowerCase() || Number(onchainDecimals) !== Number(process.env.ANT_USDT_DECIMALS || 18)) {
             json(res, 503, { error: 'sale_contract_configuration_mismatch' }); return true;
           }
           const quote = await sale.quote(gross);
@@ -277,10 +277,10 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
           db('ant_payment_orders', { query: 'select=id,buyer_wallet,gross_usdt_raw,fee_usdt_raw,net_usdt_raw,quoted_ant_raw,status,tx_hash,created_at&order=created_at.desc&limit=200' }),
           db('ant_financial_ledger', { query: 'select=entry_type,asset_symbol,amount_raw,direction,wallet,tx_hash,created_at&order=created_at.desc&limit=500' })
         ]);
-        const sum = (rows, field) => rows.reduce((total, row) => total + BigInt(row[field] || 0), 0n).toString();
+        const sum = (type) => ledger.filter(row => row.entry_type === type).reduce((total, row) => total + BigInt(row.amount_raw || 0), 0n).toString();
         json(res, 200, { network: 'BSC Testnet', chainId: CHAIN_ID, orders, ledger, totals: {
-          grossUsdtRaw: sum(orders, 'gross_usdt_raw'), feeUsdtRaw: sum(orders, 'fee_usdt_raw'),
-          netUsdtRaw: sum(orders, 'net_usdt_raw'), antQuotedRaw: sum(orders, 'quoted_ant_raw')
+          grossUsdtRaw: sum('usdt_gross'), feeUsdtRaw: sum('usdt_fee'),
+          netUsdtRaw: sum('usdt_net'), antDeliveredRaw: sum('ant_delivery')
         } });
       } catch (error) { json(res, error.status || 503, { error: error.message }); }
       return true;
