@@ -28,10 +28,10 @@ export default function AntPayments() {
   const [status,setStatus] = useState(null), [wallet,setWallet] = useState(''), [verified,setVerified] = useState(false);
   const [amount,setAmount] = useState('10'), [quote,setQuote] = useState(null), [order,setOrder] = useState(null);
   const [busy,setBusy] = useState(false), [message,setMessage] = useState(''), [error,setError] = useState('');
-  const [finance,setFinance] = useState(null), [financeError,setFinanceError] = useState('');
+  const [finance,setFinance] = useState(null), [financeError,setFinanceError] = useState('');\n  const [history,setHistory] = useState([]);
   const decimals = Number(status?.usdtDecimals ?? 18);
   const refreshStatus = useCallback(async()=>{try{setStatus(await api('/api/ant/status'));}catch(e){setError(e.message);}},[]);
-  useEffect(()=>{refreshStatus();},[refreshStatus]);
+  useEffect(()=>{refreshStatus();},[refreshStatus]);\n  const refreshHistory = useCallback(async()=>{try{const result=await api('/api/ant/orders');setHistory(result.orders||[]);}catch(_){setHistory([]);}},[]);\n  useEffect(()=>{refreshHistory();},[refreshHistory]);
   const connect = async () => {
     setBusy(true);setError('');setMessage('');
     try {
@@ -61,7 +61,7 @@ export default function AntPayments() {
       if (!/^\d+(?:\.\d{1,18})?$/.test(amount) || Number(amount) <= 0) throw new Error('請輸入有效的 USDT 金額');
       const gross = parseUnits(amount,decimals);
       const result = await api('/api/ant/orders',{wallet,grossUsdtRaw:gross.toString()});
-      setQuote(result);setOrder({id:result.orderId,status:'created'});setMessage('報價已建立，請在 5 分鐘內完成錢包交易。');
+      setQuote(result);setOrder({id:result.orderId,status:'created'});setMessage('報價已建立，請在 5 分鐘內完成錢包交易。');refreshHistory();
     } catch(e) { setError(e.message); }
     finally { setBusy(false); }
   };
@@ -83,7 +83,7 @@ export default function AntPayments() {
       const sale = new Contract(quote.saleContract,SALE_ABI,signer);
       const tx = await sale.buy(quote.grossUsdtRaw,quote.minAntRaw);
       setOrder({...order,status:'submitted',txHash:tx.hash});
-      await api('/api/ant/orders/'+order.id+'/submit',{txHash:tx.hash});
+      await api('/api/ant/orders/'+order.id+'/submit',{txHash:tx.hash});refreshHistory();
       setMessage('交易已送出；等待雙 RPC 鏈上監控與 12 個區塊確認。');
       await tx.wait(1);
     } catch(e) { setError(e.shortMessage || e.message); }
@@ -92,7 +92,7 @@ export default function AntPayments() {
   useEffect(()=>{
     if (!order?.id || !order?.txHash) return;
     let live=true;
-    const poll=async()=>{try{const next=await api('/api/ant/orders/'+order.id);if(live){setOrder(current=>({...current,...next}));if(next.status==='delivered')setMessage('鏈上交易已確認，ANT 已由銷售合約原子交付。');}}catch(e){if(live)setError(e.message);}};
+    const poll=async()=>{try{const next=await api('/api/ant/orders/'+order.id);if(live){setOrder(current=>({...current,...next}));if(next.status==='delivered'){setMessage('鏈上交易已確認，ANT 已由銷售合約原子交付。');refreshHistory();}}}catch(e){if(live)setError(e.message);}};
     poll();const timer=setInterval(poll,10000);
     return()=>{live=false;clearInterval(timer);};
   },[order?.id,order?.txHash]);
@@ -133,6 +133,16 @@ export default function AntPayments() {
     </div>}
     {message&&<div role="status" style={{...muted,marginTop:10,color:'#a7f3d0'}}>{message}</div>}
     {error&&<div role="alert" style={{marginTop:10,color:'#fda4af',fontSize:12}}>{error}</div>}
+    {history.length>0&&<div style={{marginTop:14,borderTop:'1px solid #594728',paddingTop:12}}>
+      <b style={{color:'#D6B56D',fontSize:13}}>我的 ANT 訂單紀錄</b>
+      <div style={{display:'grid',gap:7,marginTop:8}}>
+        {history.slice(0,10).map(item=><div key={item.id} style={{background:'#1b1710',borderRadius:8,padding:10,fontSize:12,display:'grid',gridTemplateColumns:'1fr auto',gap:8}}>
+          <div><b>{display(item.gross_usdt_raw,decimals)} USDT</b><div style={muted}>{new Date(item.created_at).toLocaleString()}</div>
+            {item.tx_hash&&<a style={{color:'#86efac',overflowWrap:'anywhere'}} href={'https://testnet.bscscan.com/tx/'+item.tx_hash} target="_blank" rel="noreferrer">{item.tx_hash.slice(0,12)}…{item.tx_hash.slice(-8)}</a>}
+          </div><div style={{textAlign:'right'}}><b>{item.status}</b><div style={muted}>{item.confirmations||0} confirmations</div></div>
+        </div>)}
+      </div>
+    </div>}
     <div style={{marginTop:14,borderTop:'1px solid #594728',paddingTop:12}}>
       <button style={{...button,background:'#282116'}} onClick={loadFinance}>管理員財務報表</button>
       {financeError&&<div style={{...muted,color:'#fda4af',marginTop:8}}>{financeError}</div>}
