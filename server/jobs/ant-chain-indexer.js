@@ -1,0 +1,192 @@
+'use strict';
+
+const { ethers } = require('ethers');
+const { calculateUsdtSplit, validateSaleEvent } = require('../lib/ant-payment');
+
+const CHAIN_ID = 97;
+const WORKER_KEY = 'ant-bsc-testnet';
+const POLL_MS = Math.max(5000, Number(process.env.ANT_INDEXER_POLL_MS || 15000));
+const RANGE = Math.max(1, Math.min(2000, Number(process.env.ANT_INDEXER_BLOCK_RANGE || 500)));
+const CONFIRMATIONS = Math.max(1, Number(process.env.ANT_INDEXER_CONFIRMATIONS || 12));
+const EVENT_ABI = ['event AntPurchased(address indexed buyer,uint256 grossUsdt,uint256 feeUsdt,uint256 netUsdt,uint256 antOut,uint256 priceUsdtPerAnt)'];
+const iface = new ethers.Interface(EVENT_ABI);
+const topic = iface.getEvent('AntPurchased').topicHash;
+
+function required(name) {
+  const value = String(process.env[name] || '').trim();
+  if (!value) throw new Error('missing_' + name);
+  return value;
+}
+function address(name) {
+  const value = required(name);
+  if (!ethers.isAddress(value) || value === ethers.ZeroAddress) throw new Error('invalid_' + name);
+  return ethers.getAddress(value);
+}
+function config() {
+  const cfg = {
+    rpcA: required('BSC_TESTNET_RPC_URL'),
+    rpcB: required('BSC_TESTNET_RPC_URL_SECONDARY'),
+    supabaseUrl: required('SUPABASE_URL').replace(/\/+$/, ''),
+    serviceKey: required('SUPABASE_SERVICE_ROLE_KEY'),
+    sale: address('ANT_SALE_CONTRACT'),
+    usdt: address('ANT_USDT_CONTRACT'),
+    ant: address('ANT_TOKEN_CONTRACT'),
+    feeWallet: address('ANT_FEE_WALLET'),
+    treasuryWallet: address('ANT_TREASURY_WALLET'),
+    usdtDecimals: Number(required('ANT_USDT_DECIMALS')),
+    antDecimals: 18
+  };
+  if (!Number.isInteger(cfg.usdtDecimals) || cfg.usdtDecimals < 0 || cfg.usdtDecimals > 18) throw new Error('invalid_ANT_USDT_DECIMALS');
+  return cfg;
+}
+async function db(cfg, table, { method = 'GET', query = '', body, prefer } = {}) {
+  const headers = {
+    apikey: cfg.serviceKey,
+    Authorization: 'Bearer ' + cfg.serviceKey,
+    Accept: 'application/json'
+  };
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  if (prefer) headers.Prefer = prefer;
+  const response = await fetch(cfg.supabaseUrl + '/rest/v1/' + table + (query ? '?' + query : ''), {
+    method, headers, body: body === undefined ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(15000)
+  });
+  const raw = await response.text();
+  let data = [];
+  try { data = raw ? JSON.parse(raw) : []; } catch (_) { throw new Error('supabase_invalid_json_' + table); }
+  if (!response.ok) throw new Error('supabase_' + response.status + '_' + table + ':' + raw.slice(0, 300));
+  return data;
+}
+function decodeEvent(log, cfg) {
+  if (String(log.address).toLowerCase() !== cfg.sale.toLowerCase()) throw new Error('wrong_sale_contract');
+  const parsed = iface.parseLog({ topics: log.topics, data: log.data });
+  if (!parsed || parsed.name !== 'AntPurchased') throw new Error('wrong_event');
+  const event = {
+    chainId: CHAIN_ID, address: log.address, eventName: parsed.name,
+    buyer: parsed.args.buyer, transactionHash: log.transactionHash,
+    logIndex: log.index, blockNumber: log.blockNumber,
+    grossUsdt: parsed.args.grossUsdt.toString(), feeUsdt: parsed.args.feeUsdt.toString(),
+    netUsdt: parsed.args.netUsdt.toString(), antOut: parsed.args.antOut.toString(),
+    priceUsdtPerAnt: parsed.args.priceUsdtPerAnt.toString()
+  };
+  const verified = validateSaleEvent(event, { chainId: CHAIN_ID, saleContract: cfg.sale, usdtContract: cfg.usdt, antContract: cfg.ant });
+  return { ...verified, blockHash: log.blockHash, raw: { topics: log.topics, data: log.data } };
+}
+function ledgerRows(order, event, cfg) {
+  const base = { order_id: order.id, chain_id: CHAIN_ID, tx_hash: event.transactionHash, log_index: event.logIndex };
+  return [
+    { ...base, entry_type: 'usdt_gross', asset_symbol: 'USDT', asset_contract: cfg.usdt.toLowerCase(), asset_decimals: cfg.usdtDecimals, amount_raw: event.grossUsdtRaw, direction: 'in', wallet: event.buyer },
+    { ...base, entry_type: 'usdt_fee', asset_symbol: 'USDT', asset_contract: cfg.usdt.toLowerCase(), asset_decimals: cfg.usdtDecimals, amount_raw: event.feeUsdtRaw, direction: 'out', wallet: cfg.feeWallet.toLowerCase() },
+    { ...base, entry_type: 'usdt_net', asset_symbol: 'USDT', asset_contract: cfg.usdt.toLowerCase(), asset_decimals: cfg.usdtDecimals, amount_raw: event.netUsdtRaw, direction: 'out', wallet: cfg.treasuryWallet.toLowerCase() },
+    { ...base, entry_type: 'ant_delivery', asset_symbol: 'ANT', asset_contract: cfg.ant.toLowerCase(), asset_decimals: cfg.antDecimals, amount_raw: event.antOutRaw, direction: 'in', wallet: event.buyer }
+  ];
+}
+async function recordFinalEvent(cfg, providers, log, head) {
+  const [blockA, blockB, receiptA, receiptB] = await Promise.all([
+    providers[0].getBlock(log.blockNumber), providers[1].getBlock(log.blockNumber),
+    providers[0].getTransactionReceipt(log.transactionHash), providers[1].getTransactionReceipt(log.transactionHash)
+  ]);
+  if (!blockA || !blockB || blockA.hash !== blockB.hash || blockA.hash !== log.blockHash) throw new Error('rpc_canonical_block_disagreement');
+  if (!receiptA || !receiptB || receiptA.status !== 1 || receiptB.status !== 1 ||
+      receiptA.blockHash !== blockA.hash || receiptB.blockHash !== blockA.hash) throw new Error('receipt_not_canonical_success');
+  const event = decodeEvent(log, cfg);
+  const confirmationCount = head - log.blockNumber + 1;
+  if (confirmationCount < CONFIRMATIONS) throw new Error('insufficient_confirmations');
+  const matches = await db(cfg, 'ant_payment_orders', {
+    query: 'select=id,user_id,buyer_wallet,gross_usdt_raw,fee_usdt_raw,net_usdt_raw,quoted_ant_raw,min_ant_raw,status&chain_id=eq.97&tx_hash=eq.' + event.transactionHash + '&limit=2'
+  });
+  const order = matches.find(row => String(row.buyer_wallet).toLowerCase() === event.buyer);
+  const row = {
+    order_id: order?.id || null, chain_id: CHAIN_ID, tx_hash: event.transactionHash, log_index: event.logIndex,
+    block_number: log.blockNumber, block_hash: blockA.hash, event_name: 'AntPurchased', buyer_wallet: event.buyer,
+    gross_usdt_raw: event.grossUsdtRaw, fee_usdt_raw: event.feeUsdtRaw, net_usdt_raw: event.netUsdtRaw,
+    ant_out_raw: event.antOutRaw, oracle_price_raw: event.oraclePriceRaw, canonical: true,
+    raw_event: event.raw
+  };
+  await db(cfg, 'ant_payment_chain_events', {
+    method: 'POST', query: 'on_conflict=chain_id,tx_hash,log_index',
+    body: row, prefer: 'resolution=merge-duplicates,return=minimal'
+  });
+  if (!order) {
+    process.stdout.write('ANT event stored without matching order; manual reconciliation required: ' + event.idempotencyKey + '\n');
+    return;
+  }
+  const expected = calculateUsdtSplit(order.gross_usdt_raw);
+  if (expected.grossRaw !== event.grossUsdtRaw || expected.feeRaw !== event.feeUsdtRaw ||
+      expected.netRaw !== event.netUsdtRaw || event.antOutRaw !== String(order.quoted_ant_raw) ||
+      BigInt(event.antOutRaw) < BigInt(order.min_ant_raw)) {
+    await db(cfg, 'ant_payment_orders', { method: 'PATCH', query: 'id=eq.' + order.id, body: { status: 'manual_review', failure_code: 'chain_order_amount_mismatch', updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
+    throw new Error('chain_order_amount_mismatch');
+  }
+  await db(cfg, 'ant_payment_chain_events', {
+    method: 'PATCH', query: 'chain_id=eq.97&tx_hash=eq.' + event.transactionHash + '&log_index=eq.' + event.logIndex,
+    body: { order_id: order.id }, prefer: 'return=minimal'
+  });
+  await db(cfg, 'ant_financial_ledger', {
+    method: 'POST', query: 'on_conflict=chain_id,tx_hash,log_index,entry_type',
+    body: ledgerRows(order, event, cfg), prefer: 'resolution=ignore-duplicates,return=minimal'
+  });
+  await db(cfg, 'ant_payment_orders', {
+    method: 'PATCH', query: 'id=eq.' + order.id,
+    body: {
+      status: 'delivered', tx_log_index: event.logIndex, block_number: log.blockNumber, block_hash: blockA.hash,
+      confirmations: confirmationCount, failure_code: null, updated_at: new Date().toISOString()
+    }, prefer: 'return=minimal'
+  });
+  await db(cfg, 'ant_payment_audit_log', {
+    method: 'POST',
+    body: { actor_type: 'worker', action: 'ant_chain_event_confirmed_and_reconciled', order_id: order.id, outcome: 'success', metadata: { chain_id: CHAIN_ID, tx_hash: event.transactionHash, log_index: event.logIndex, confirmations: confirmationCount } },
+    prefer: 'return=minimal'
+  });
+  process.stdout.write('ANT order delivered and reconciled: ' + event.idempotencyKey + '\n');
+}
+async function getCheckpoint(cfg) {
+  const rows = await db(cfg, 'ant_indexer_state', { query: 'select=last_block&worker_key=eq.' + WORKER_KEY + '&limit=1' });
+  if (rows.length) return Number(rows[0].last_block);
+  const start = Number(required('ANT_INDEXER_START_BLOCK'));
+  if (!Number.isSafeInteger(start) || start < 0) throw new Error('invalid_ANT_INDEXER_START_BLOCK');
+  await db(cfg, 'ant_indexer_state', { method: 'POST', body: { worker_key: WORKER_KEY, chain_id: CHAIN_ID, last_block: start - 1 }, prefer: 'resolution=ignore-duplicates,return=minimal' });
+  return start - 1;
+}
+async function setCheckpoint(cfg, block) {
+  await db(cfg, 'ant_indexer_state', { method: 'PATCH', query: 'worker_key=eq.' + WORKER_KEY, body: { last_block: block, updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
+}
+async function cycle(cfg, providers, cursor) {
+  const [networkA, networkB, headA, headB] = await Promise.all([
+    providers[0].getNetwork(), providers[1].getNetwork(), providers[0].getBlockNumber(), providers[1].getBlockNumber()
+  ]);
+  if (Number(networkA.chainId) !== CHAIN_ID || Number(networkB.chainId) !== CHAIN_ID) throw new Error('wrong_rpc_chain');
+  if (Math.abs(headA - headB) > 2) throw new Error('rpc_head_disagreement');
+  const safeHead = Math.min(headA, headB) - CONFIRMATIONS + 1;
+  if (safeHead <= cursor) return cursor;
+  const fromBlock = cursor + 1;
+  const toBlock = Math.min(safeHead, fromBlock + RANGE - 1);
+  const filter = { address: cfg.sale, topics: [topic], fromBlock, toBlock };
+  const [logsA, logsB] = await Promise.all([providers[0].getLogs(filter), providers[1].getLogs(filter)]);
+  const fingerprint = logs => logs.map(x => [x.transactionHash, x.index, x.blockHash].join(':')).sort().join('|');
+  if (fingerprint(logsA) !== fingerprint(logsB)) throw new Error('rpc_log_disagreement');
+  for (const log of logsA) await recordFinalEvent(cfg, providers, log, Math.min(headA, headB));
+  await setCheckpoint(cfg, toBlock);
+  process.stdout.write('ANT indexer checkpoint ' + toBlock + ', logs ' + logsA.length + '\n');
+  return toBlock;
+}
+async function main() {
+  const cfg = config();
+  const providers = [
+    new ethers.JsonRpcProvider(cfg.rpcA, CHAIN_ID, { staticNetwork: true }),
+    new ethers.JsonRpcProvider(cfg.rpcB, CHAIN_ID, { staticNetwork: true })
+  ];
+  let cursor = await getCheckpoint(cfg);
+  process.stdout.write('ANT BSC testnet indexer starting at ' + (cursor + 1) + '\n');
+  let stopping = false;
+  const stop = () => { stopping = true; };
+  process.once('SIGTERM', stop); process.once('SIGINT', stop);
+  while (!stopping) {
+    try { cursor = await cycle(cfg, providers, cursor); }
+    catch (error) { process.stderr.write('ANT indexer fail-closed: ' + error.message + '\n'); }
+    await new Promise(resolve => setTimeout(resolve, POLL_MS));
+  }
+  await Promise.all(providers.map(provider => provider.destroy()));
+}
+if (require.main === module) main().catch(error => { process.stderr.write(error.stack || String(error)); process.exitCode = 1; });
+module.exports = { config, decodeEvent, ledgerRows, cycle, recordFinalEvent };
