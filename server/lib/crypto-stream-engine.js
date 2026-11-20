@@ -28,7 +28,8 @@ function createCryptoStreamEngine(options = {}) {
   const storage = options.storage || createCryptoEventStorage();
   const scorer = new CryptoLiveScorer({ maxAgeMs: staleMs });
   const sockets = new Map(), timers = new Set(), quotes = new Map(), books = new Map(), depthBooks = new Map(), funding = new Map();
-  const buckets = new Map(), alertCooldown = new Map(), stats = { messages: 0, reconnects: 0, errors: 0, persistedEvents: 0, persistErrors: 0, alerts: 0 };
+  const buckets = new Map(), alertCooldown = new Map(), stats = { messages: 0, reconnects: 0, errors: 0, persistedEvents: 0, persistErrors: 0, droppedEvents: 0, alerts: 0 };
+  let restInFlight = false, fundingInFlight = false, flushPromise = null;
   let started = false, stopping = false, flushTimer = null, fundingTimer = null, statusTimer = null, lastPersistAt = null;
   const startedAt = new Date(now()).toISOString();
   const key = (exchange, marketType, symbol) => [exchange, marketType, symbol].join(':');
