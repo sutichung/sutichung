@@ -2,8 +2,9 @@
 const crypto=require('node:crypto');
 const ACTIONS=new Set(['ALERT_BULLISH','ALERT_BEARISH','HOLD']);
 const HORIZONS=new Set(['1h','1d','5d','20d']);
+const MAX_FUTURE_SKEW_MS=5*60*1000;
 function error(code,message){const e=new Error(message||code);e.code=code;return e;}
-function timestamp(v,label){const n=Date.parse(v||'');if(!Number.isFinite(n))throw error('invalid_'+label,label+' must be a valid timestamp');return new Date(n).toISOString();}
+function timestamp(v,label){const n=Date.parse(v||'');if(!Number.isFinite(n))throw error('invalid_'+label,label+' must be a valid timestamp');if(n>Date.now()+MAX_FUTURE_SKEW_MS)throw error('future_'+label,label+' must not be in the future');return new Date(n).toISOString();}
 function positive(v,label){const n=Number(v);if(!Number.isFinite(n)||n<=0)throw error('invalid_'+label,label+' must be positive');return n;}
 function normalizeSignal(x={}){
  const symbol=String(x.symbol||'').trim().toUpperCase(),market=String(x.market||'').trim().toUpperCase();
