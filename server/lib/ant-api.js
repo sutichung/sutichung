@@ -5,7 +5,7 @@ const CHAIN_ID = 97;
 const SALE_ABI = [
   'function quote(uint256 grossUsdt) view returns (uint256 antOut,uint256 feeUsdt,uint256 netUsdt,uint256 price)',
   'function usdt() view returns (address)', 'function ant() view returns (address)',
-  'function oracle() view returns (address)', 'function feeRecipient() view returns (address)', 'function proceedsRecipient() view returns (address)', 'function usdtDecimals() view returns (uint8)', 'function maxOracleAge() view returns (uint256)', 'function oracle() view returns (address)', 'function maxOracleAge() view returns (uint256)',
+  'function oracle() view returns (address)', 'function feeRecipient() view returns (address)', 'function proceedsRecipient() view returns (address)', 'function usdtDecimals() view returns (uint8)', 'function maxOracleAge() view returns (uint256)',
   'function buy(uint256 grossUsdt,uint256 minAntOut) returns (uint256 antOut)'
 ];
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
@@ -28,6 +28,17 @@ Chain ID: 97
 Nonce: ${nonce}
 Issued At: ${issuedAt}
 Expiration Time: ${expiresAt}`;
+}
+function assuranceLevel(req) {
+  try {
+    const header = String(req && req.headers && req.headers.authorization || '');
+    const match = header.match(/^Bearer\\s+(\\S+)$/i);
+    const token = match ? match[1] : '';
+    const payload = token.split('.')[1];
+    if (!payload) return 'aal1';
+    const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    return claims.aal === 'aal2' ? 'aal2' : 'aal1';
+  } catch (_) { return 'aal1'; }
 }
 function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
   const base = String(supabaseUrl || '').replace(/\/+$/, '');
