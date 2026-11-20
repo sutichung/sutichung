@@ -15,6 +15,7 @@
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
     "server": "node server/index.js",
+    "crypto:worker": "node server/jobs/crypto-stream-worker.js",
     "test:server": "node --test server/test/*.test.js"
   },
   "devDependencies": {
