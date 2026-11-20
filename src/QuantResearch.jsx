@@ -5,7 +5,8 @@ const API_BASE=import.meta.env.VITE_MARKET_API||'/api/market';
 const API=API_BASE.endsWith('/')?API_BASE.slice(0,-1):API_BASE;
 export default function QuantResearch({symbol='2330',source='',asOf='',market='tw-stock'}) {
  const defaults=market==='crypto'?{fee:0.10,tax:0,slippage:0.05}:market==='us-stock'?{fee:0.01,tax:0,slippage:0.05}:{fee:0.1425,tax:0.30,slippage:0.10};
- const [marketType,setMarketType]=useState(market),[targetSymbol,setTargetSymbol]=useState(symbol),[draftSymbol,setDraftSymbol]=useState(symbol);\n const [exchange,setExchange]=useState('Binance'),[cryptoType,setCryptoType]=useState('spot');
+ const [marketType,setMarketType]=useState(market),[targetSymbol,setTargetSymbol]=useState(symbol),[draftSymbol,setDraftSymbol]=useState(symbol);
+ const [exchange,setExchange]=useState('Binance'),[cryptoType,setCryptoType]=useState('spot');
  const [fee,setFee]=useState(String(defaults.fee)),[tax,setTax]=useState(String(defaults.tax)),[slippage,setSlippage]=useState(String(defaults.slippage));
  const [result,setResult]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState('');
  const [outcomes,setOutcomes]=useState(null),[outcomeError,setOutcomeError]=useState('');
