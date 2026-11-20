@@ -98,7 +98,8 @@ Never fabricate volume, holders, users, partnerships, audits, exchange interest,
 | Testnet deployment | Not yet performed |
 | Safe addresses | Not yet supplied/verified |
 | Member auth | Existing Supabase Auth plus ANT wallet nonce/signature API committed; runtime configuration and end-to-end tests pending |
-| ANT wallet/order API | Wallet linking, on-chain quote/order creation, tx submission validation and order lookup committed; activation pending |\n| ANT member purchase UI | Not yet implemented |
+| ANT wallet/order API | Wallet linking, on-chain quote/order creation, tx submission validation and order lookup committed; activation pending |
+| ANT member purchase UI | Not yet implemented |
 | Persistent payment ledger schema | Payment, audit, wallet and indexer migrations committed; not yet applied to Supabase |
 | On-chain event indexer | Dual-RPC testnet indexer, receipt reconciliation, reorg handling and gated 5-minute GitHub workflow committed; disabled pending configuration and end-to-end verification |
 | Finance/admin API | Role-gated finance endpoint committed; visual ANT finance dashboard not yet implemented |
