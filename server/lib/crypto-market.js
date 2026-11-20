@@ -90,9 +90,10 @@ async function loadMarket(){
  if (process.env.CRYPTO_STREAM_EMBEDDED === 'false') {
   try {
    const persisted = await require('./crypto-event-storage').createCryptoEventStorage().readStatus();
-   const live = new Map((persisted.latestQuotes || []).map(q => [q.exchange + ':' + q.marketType + ':' + q.symbol, q]));
+   const canonical = value => String(value || '').toUpperCase().replace(/-SWAP$/,'').replace(/[-/:]/g,'');
+   const live = new Map((persisted.latestQuotes || []).map(q => [q.exchange + ':' + q.marketType + ':' + canonical(q.symbol), q]));
    merged.markets = (merged.markets || []).map(item => {
-    const q = live.get(item.exchange + ':' + item.marketType + ':' + (item.nativeSymbol || item.symbol));
+    const q = live.get(item.exchange + ':' + item.marketType + ':' + canonical(item.nativeSymbol || item.symbol));
     if (!q || !(q.price > 0)) return item;
     return { ...item, price:q.price, bid:q.bid ?? item.bid, ask:q.ask ?? item.ask, changePct:q.changePct ?? item.changePct, quoteVolume:q.quoteVolume24h ?? item.quoteVolume, sourceTimestamp:q.sourceTimestamp, sourceAgeMs:q.sourceAgeMs, freshnessStatus:q.freshnessStatus, signalEligible:q.freshnessStatus==='fresh', quoteMode:q.quoteMode || 'worker WebSocket/REST' , liveSignal:q.liveSignal || null };
    });
