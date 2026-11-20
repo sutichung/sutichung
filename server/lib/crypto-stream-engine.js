@@ -5,7 +5,7 @@ const { isMarketDataLicensed } = require('./market-data-license');
 
 const DEFAULT_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
 const toNum = v => v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v);
-const iso = v => { if (v === null || v === undefined || v === '') return null; const n = typeof v === 'string' && !/^\\d+(\\.\\d+)?$/.test(v) ? Date.parse(v) : Number(v); return Number.isFinite(n) && n > 0 ? new Date(n).toISOString() : null; };
+const iso = v => { if (v === null || v === undefined || v === '') return null; const numeric = typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))); const n = numeric ? Number(v) : Date.parse(v); return Number.isFinite(n) && n > 0 ? new Date(n).toISOString() : null; };
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
 function createCryptoStreamEngine(options = {}) {
