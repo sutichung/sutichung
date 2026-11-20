@@ -146,3 +146,8 @@ ANT 專案的全球自然流量推廣執行計畫已整理於 [ANT Global Growth
 - [ZENTRAX Brand System](./docs/ZENTRAX_BRAND_SYSTEM.md)：平台品牌架構、黑金視覺、ANT 代幣連續性及商標／網域檢查清單。\n- [ANT Creator Revenue & Fair-Launch Policy](./docs/ANT_CREATOR_REVENUE_POLICY.md)：5% 平台佣金、創造者收入、財庫分流、反狙擊公平發行規範與公開銷售前驗收門檻。此為規格文件，不代表銷售已上線。
 
 - [ANT Security Operations & Incident Response](./docs/ANT_SECURITY_OPERATIONS.md)：管理員分權、多簽與金鑰保護、Oracle／USDT 驗證、監控告警及事故處理流程。
+
+
+## ZENTRAX Crypto Prediction Market
+
+Phase 1 virtual-credit-only BTC/ETH/BNB price-event simulator: see [docs/ZENTRAX_PREDICTION_MARKET.md](docs/ZENTRAX_PREDICTION_MARKET.md). Real-money deposits, withdrawals and wagering are disabled.
