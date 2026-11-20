@@ -57,3 +57,17 @@ The ANT branch now includes `supabase/migrations/202611210001_ant_platform_ledge
 The migration enables RLS. Client writes are intentionally not granted; trusted ingestion and nonce consumption must use the server/service role. Members can read only their own wallet and sale rows. Finance viewers and super admins can read the financial ledger; only super admins can read the admin audit log. Role assignment remains service-role-only.
 
 **Activation is still pending:** review and apply the migration in the correct Supabase project, verify RLS with separate member / finance / support / super-admin test identities, then implement and test the server-side nonce signer, chain log indexer and finance endpoints. The migration alone does not create a working wallet connection or transaction indexer. Do not claim the database is live until Supabase confirms the migration and policy tests pass.
+
+
+## BSC sale event indexer (code committed; activation gated)
+
+- `server/jobs/ant-sale-indexer.js` scans only BSC testnet (chain ID 97), waits for at least 12 confirmations, and uses a bounded block range.
+- It validates the `AntPurchased` event against the configured sale contract and immutable token/USDT/recipient addresses.
+- Before writing the ledger it fetches the transaction receipt and reconciles exactly two buyer-to-recipient USDT Transfer events (5% fee and 95% net) plus the ANT sale-contract-to-buyer Transfer event.
+- It stores raw integer amounts, block hash, timestamp, source and confirmation count. Event upserts are idempotent on (chain_id, tx_hash, log_index).
+- It checks a recent block-hash lookback and marks ledger events orphaned if their block was reorganized. The indexer cursor is stored in `ant_indexer_cursors` only after event upserts.
+- `scripts/print-ant-sale-event-topic.js` prints the exact event topic from the compiled ABI. The scheduled GitHub workflow is disabled unless repository variable `ANT_INDEXER_ENABLED=true`.
+
+Required GitHub repository variables: `ANT_INDEXER_ENABLED`, `ANT_INDEXER_CHAIN_ID=97`, `ANT_PURCHASED_TOPIC0`, `ANT_INDEXER_START_BLOCK`, `ANT_INDEXER_CONFIRMATIONS` (minimum 12), `ANT_INDEXER_MAX_RANGE`, `ANT_INDEXER_REORG_LOOKBACK`, `ANT_SALE_CONTRACT_ADDRESS`, `ANT_USDT_CONTRACT_ADDRESS`, `ANT_TOKEN_CONTRACT_ADDRESS`, `ANT_FEE_RECIPIENT_ADDRESS`, `ANT_PROCEEDS_RECIPIENT_ADDRESS`. Required GitHub secrets: `BSC_RPC_URLS`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
+
+**Not active yet:** the Supabase migration must be applied, testnet contracts and recipient addresses must be deployed/verified, GitHub variables/secrets must be configured, and the first indexer run must pass end-to-end reconciliation. The workflow must remain disabled until those steps are complete.
