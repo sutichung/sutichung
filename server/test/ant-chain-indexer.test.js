@@ -56,6 +56,7 @@ test('creates balanced ledger entries without writing zero-value fee rows', () =
   assert.deepEqual(rows.map(x=>x.entry_type), ['usdt_gross','usdt_fee','usdt_net','ant_delivery']);
   assert.equal(BigInt(rows[1].amount_raw)+BigInt(rows[2].amount_raw), BigInt(rows[0].amount_raw));
   assert.equal(rows[3].asset_symbol, 'ANT');
+  assert.equal(rows[3].direction, 'out', 'ANT delivery is an outflow from the platform inventory');
   const zeroFee = { ...event, grossUsdtRaw:'19', feeUsdtRaw:'0', netUsdtRaw:'19' };
   assert.deepEqual(ledgerRows({id:'zero-fee'}, zeroFee, cfg).map(x=>x.entry_type), ['usdt_gross','usdt_net','ant_delivery']);
 });
