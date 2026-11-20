@@ -86,7 +86,7 @@ function createPredictionApi({ supabaseUrl, anonKey, serviceKey, json, readJson 
         if (!user) return json(res, 401, { error: 'authentication_required' }), true;
         const body = await readJson(req, 8192), order = validateOrderInput(body);
         const result = await db('rpc/place_prediction_paper_order', { method: 'POST', body: {
-          p_user_id: user.id, p_market_id: order.marketId, p_side: order.side, p_stake: order.amount
+          p_user_id: user.id, p_market_id: order.marketId, p_side: order.side, p_stake: order.amount, p_client_order_id: order.clientOrderId
         } });
         return json(res, 201, { order: result, mode: 'virtual-credits-only' }), true;
       }
