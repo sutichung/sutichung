@@ -16,21 +16,21 @@ const cfg = {
 const abi = new ethers.Interface(['event AntPurchased(address indexed buyer,uint256 grossUsdt,uint256 feeUsdt,uint256 netUsdt,uint256 antOut,uint256 priceUsdtPerAnt)']);
 const erc20 = new ethers.Interface(['event Transfer(address indexed from,address indexed to,uint256 value)']);
 const buyer = '0x6666666666666666666666666666666666666666';
+
 function log(gross='1000', fee='50', net='950') {
   const encoded = abi.encodeEventLog(abi.getEvent('AntPurchased'), [buyer, gross, fee, net, '100000000000000000000', '100000000']);
   return { address: cfg.sale, topics: encoded.topics, data: encoded.data, transactionHash: '0x'+'a'.repeat(64), index: 2, blockNumber: 100, blockHash: '0x'+'b'.repeat(64) };
 }
-
 function transfer(token, from, to, amount) {
   const encoded = erc20.encodeEventLog(erc20.getEvent('Transfer'), [from, to, amount]);
   return { address: token, topics: encoded.topics, data: encoded.data, index: 3 };
 }
 function receiptFor(eventLog) {
-  const tx = eventLog.transactionHash, blockHash = eventLog.blockHash;
   return {
-    status: 1, to: cfg.sale, transactionHash: tx, blockNumber: eventLog.blockNumber, blockHash,
+    status: 1, to: cfg.sale, transactionHash: eventLog.transactionHash,
+    blockNumber: eventLog.blockNumber, blockHash: eventLog.blockHash,
     logs: [
-      { ...eventLog, index: eventLog.index },
+      { ...eventLog },
       transfer(cfg.usdt, buyer, cfg.feeWallet, 50),
       transfer(cfg.usdt, buyer, cfg.treasuryWallet, 950),
       transfer(cfg.ant, cfg.sale, buyer, '100000000000000000000')
@@ -50,34 +50,24 @@ test('decodes a valid BSC testnet AntPurchased event with exact 5% fee split', (
 test('rejects event with incorrect fee split', () => {
   assert.throws(() => decodeEvent(log('1000','49','951'), cfg), /fee_split_mismatch/);
 });
-test('creates four balanced, idempotent ledger entries', () => {
+test('creates balanced ledger entries without writing zero-value fee rows', () => {
   const event = decodeEvent(log(), cfg);
   const rows = ledgerRows({id:'order-id'}, event, cfg);
-  assert.equal(rows.length, 4);
   assert.deepEqual(rows.map(x=>x.entry_type), ['usdt_gross','usdt_fee','usdt_net','ant_delivery']);
   assert.equal(BigInt(rows[1].amount_raw)+BigInt(rows[2].amount_raw), BigInt(rows[0].amount_raw));
   assert.equal(rows[3].asset_symbol, 'ANT');
+  const zeroFee = { ...event, grossUsdtRaw:'19', feeUsdtRaw:'0', netUsdtRaw:'19' };
+  assert.deepEqual(ledgerRows({id:'zero-fee'}, zeroFee, cfg).map(x=>x.entry_type), ['usdt_gross','usdt_net','ant_delivery']);
 });
 test('rejects a log emitted by a different sale contract', () => {
   const wrong = {...log(), address:'0x7777777777777777777777777777777777777777'};
   assert.throws(() => decodeEvent(wrong, cfg), /wrong_sale_contract/);
 });
-
-test('records a zero-fee rounding event without creating an invalid zero-value ledger row', () => {
-  const zeroFee = {
-    transactionHash: '0x'+'d'.repeat(64), logIndex: 1, buyer, grossUsdtRaw: '19',
-    feeUsdtRaw: '0', netUsdtRaw: '19', antOutRaw: '1'
-  };
-  const rows = ledgerRows({id:'order-zero-fee'}, zeroFee, cfg);
-  assert.deepEqual(rows.map(row => row.entry_type), ['usdt_gross','usdt_net','ant_delivery']);
-});
-
-test('reconciles receipt event, 5 percent fee, 95 percent proceeds and ANT delivery', () => {
+test('reconciles receipt event, USDT fee, net proceeds and ANT delivery', () => {
   const source = log();
   const event = decodeEvent(source, cfg);
   assert.equal(verifyPurchaseReceipt(receiptFor(source), source, event, cfg), true);
 });
-
 test('rejects receipt when fee transfer or ANT delivery is inconsistent', () => {
   const source = log();
   const event = decodeEvent(source, cfg);
@@ -88,4 +78,3 @@ test('rejects receipt when fee transfer or ANT delivery is inconsistent', () => 
   wrongAnt.logs[3] = transfer(cfg.ant, cfg.sale, buyer, 1);
   assert.throws(() => verifyPurchaseReceipt(wrongAnt, source, event, cfg), /receipt_ant_delivery_reconciliation_failed/);
 });
-
