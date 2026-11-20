@@ -6,7 +6,7 @@ on:
     paths:
       - "contracts/**"
       - "test/**"
-      - "scripts/deploy-ant.js"
+      - "scripts/**"
       - "hardhat.config.js"
       - "package.json"
       - ".github/workflows/ant-token.yml"
