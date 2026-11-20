@@ -44,6 +44,8 @@ function createPredictionApi({ supabaseUrl, anonKey, serviceKey, json, readJson 
   }
   async function isSuperAdmin(user) {
     if (!user) return false;
+    const configuredAdmin = String(process.env.SUPABASE_ADMIN_EMAIL || '').trim().toLowerCase();
+    if (configuredAdmin && String(user.email || '').trim().toLowerCase() === configuredAdmin) return true;
     const rows = await db('ant_admin_roles', { query: 'select=role&user_id=eq.' + encodeURIComponent(user.id) + '&role=eq.SUPER_ADMIN&limit=1' });
     return Array.isArray(rows) && rows.length > 0;
   }
@@ -73,13 +75,13 @@ function createPredictionApi({ supabaseUrl, anonKey, serviceKey, json, readJson 
         const user = await userFor(req);
         if (!user) return json(res, 401, { error: 'authentication_required' }), true;
         await db('rpc/ensure_prediction_paper_account', { method: 'POST', body: { p_user_id: user.id } });
-        const [accounts, positions, orders, roles] = await Promise.all([
+        const [accounts, positions, orders, superAdmin] = await Promise.all([
           db('prediction_paper_accounts', { query: 'select=balance,created_at,updated_at&user_id=eq.' + encodeURIComponent(user.id) + '&limit=1' }),
           db('prediction_paper_positions', { query: 'select=market_id,yes_shares,no_shares,yes_cost,no_cost,payout,updated_at&user_id=eq.' + encodeURIComponent(user.id) + '&order=updated_at.desc&limit=100' }),
           db('prediction_paper_orders', { query: 'select=id,market_id,side,stake,shares,price,created_at&user_id=eq.' + encodeURIComponent(user.id) + '&order=created_at.desc&limit=50' }),
-          db('ant_admin_roles', { query: 'select=role&user_id=eq.' + encodeURIComponent(user.id) })
+          isSuperAdmin(user)
         ]);
-        return json(res, 200, { account: accounts?.[0] || null, positions: positions || [], orders: orders || [], isSuperAdmin: (roles || []).some(x => x.role === 'SUPER_ADMIN'), assurance: assuranceLevel(req) }), true;
+        return json(res, 200, { account: accounts?.[0] || null, positions: positions || [], orders: orders || [], isSuperAdmin: superAdmin, assurance: assuranceLevel(req) }), true;
       }
       if (path === '/api/prediction/orders' && req.method === 'POST') {
         const user = await userFor(req);
