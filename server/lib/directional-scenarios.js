@@ -69,7 +69,7 @@ function analyzeDirectionalScenarios(input, options = {}) {
   const intervalMs = Number(options.intervalMs) > 0 ? Number(options.intervalMs) : 86400000;
   const asOf = last.time ? new Date(last.time).toISOString() : null;
   const ageMs = asOf ? Date.now() - Date.parse(asOf) : null;
-  const maxAgeMs = intervalMs * 2.5;
+  const maxAgeMs = Number(options.maxAgeMs) > 0 ? Number(options.maxAgeMs) : intervalMs * 2.5;
   const fresh = ageMs !== null && ageMs >= 0 && ageMs <= maxAgeMs;
   const stale = !fresh;
   const round = value => Number.isFinite(value) ? Number(value.toFixed(6)) : null;
