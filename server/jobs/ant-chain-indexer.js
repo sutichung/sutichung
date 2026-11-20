@@ -49,7 +49,6 @@ function config() {
   };
   if (!Number.isInteger(cfg.usdtDecimals) || cfg.usdtDecimals < 0 || cfg.usdtDecimals > 18) throw new Error('invalid_ANT_USDT_DECIMALS');
   if (!Number.isSafeInteger(cfg.maxOracleAge) || cfg.maxOracleAge < 60) throw new Error('invalid_ANT_MAX_ORACLE_AGE');
-  if (!Number.isSafeInteger(cfg.maxOracleAge) || cfg.maxOracleAge < 60) throw new Error('invalid_ANT_MAX_ORACLE_AGE');
   return cfg;
 }
 async function db(cfg, table, { method = 'GET', query = '', body, prefer } = {}) {
@@ -109,7 +108,8 @@ function ledgerRows(order, event, cfg) {
   return rows;
 }
 function verifyPurchaseReceipt(receipt, log, event, cfg) {
-  if (!receipt || receipt.status !== 1 || receipt.to?.toLowerCase() !== cfg.sale.toLowerCase()) throw new Error('receipt_not_successful_or_wrong_target');
+  if (!receipt || receipt.status !== 1 || receipt.to?.toLowerCase() !== cfg.sale.toLowerCase() ||
+      receipt.from?.toLowerCase() !== event.buyer) throw new Error('receipt_not_successful_or_wrong_target_or_buyer');
   if (receipt.transactionHash?.toLowerCase() !== event.transactionHash || receipt.blockNumber !== log.blockNumber || receipt.blockHash !== log.blockHash) {
     throw new Error('receipt_identity_mismatch');
   }
@@ -132,7 +132,7 @@ function verifyPurchaseReceipt(receipt, log, event, cfg) {
   const feeMatches = usdtTransfers.filter(item => item.to === cfg.feeWallet.toLowerCase() && item.value === event.feeUsdtRaw);
   const netMatches = usdtTransfers.filter(item => item.to === cfg.treasuryWallet.toLowerCase() && item.value === event.netUsdtRaw);
   const antMatches = antTransfers.filter(item => item.value === event.antOutRaw);
-  const expectedUsdtCount = BigInt(event.feeUsdtRaw) > 0n ? 2 : 2;
+  const expectedUsdtCount = 2; // Solidity executes both transferFrom calls, including a zero fee transfer.
   if (usdtTransfers.length !== expectedUsdtCount || feeMatches.length !== 1 || netMatches.length !== 1) throw new Error('receipt_usdt_transfer_reconciliation_failed');
   if (antTransfers.length !== 1 || antMatches.length !== 1) throw new Error('receipt_ant_delivery_reconciliation_failed');
   return true;
