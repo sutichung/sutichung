@@ -3,16 +3,16 @@ import React,{useCallback,useEffect,useState} from 'react';
 const API='/api/intelligence/overview';
 const palette={bg:'#0b1422',panel:'#111a2b',panel2:'#172338',border:'#293951',text:'#e8eef8',muted:'#91a1b8',blue:'#60a5fa',green:'#34d399',red:'#fb7185',yellow:'#fbbf24'};
 async function authHeaders(){const token=localStorage.getItem('ts_access_token')||'';return {Accept:'application/json',...(token?{Authorization:'Bearer '+token}:{})};}
-async function load(){const headers=await authHeaders();const [overviewResponse,diagnosticsResponse]=await Promise.all([fetch(API,{headers}),fetch('/api/diagnostics/providers',{headers})]);const overview=await overviewResponse.json().catch(()=>({}));const diagnostics=await diagnosticsResponse.json().catch(()=>({}));if(!overviewResponse.ok)throw new Error(overview.error||'情報中心載入失敗 '+overviewResponse.status);if(!diagnosticsResponse.ok)throw new Error(diagnostics.error||'API 連線檢測失敗 '+diagnosticsResponse.status);return {...overview,providerDiagnostics:diagnostics};}
+async function load(){const headers=await authHeaders();const [overviewResponse,diagnosticsResponse]=await Promise.all([fetch(API,{headers}),fetch('/api/diagnostics/providers',{headers})]);const overview=await overviewResponse.json().catch(()=>({}));const diagnostics=await diagnosticsResponse.json().catch(()=>({}));if(!overviewResponse.ok)throw new Error(overview.error||'情報中心載入失敗 '+overviewResponse.status);if(!diagnosticsResponse.ok)throw new Error(diagnostics.error||'API 連線檢測失敗 '+diagnosticsResponse.status);const signalsResponse=await fetch('/api/intelligence/market-signals?symbols=BTCUSDT,ETHUSDT',{headers});const marketSignals=await signalsResponse.json().catch(()=>({}));return {...overview,providerDiagnostics:diagnostics,marketSignals};}
 async function loadVulnerabilities(){const response=await fetch('/api/diagnostics/vulnerabilities',{headers:await authHeaders()});const payload=await response.json().catch(()=>({}));if(!response.ok)throw new Error(payload.error||payload.label||'漏洞資料 API '+response.status);return payload;}
 function Card({title,children}){return <section style={{background:palette.panel,border:'1px solid '+palette.border,borderRadius:12,padding:13,minWidth:0}}><b>{title}</b><div style={{marginTop:10}}>{children}</div></section>}
 const badge=(status)=>({display:'inline-block',fontSize:10,padding:'3px 7px',borderRadius:20,border:'1px solid '+palette.border,color:status==='connected'?palette.green:status==='partial'?palette.yellow:palette.muted,background:palette.panel2});
 export default function GlobalIntelligence(){
- const [data,setData]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[topic,setTopic]=useState('all'),[updated,setUpdated]=useState(null),[vulnerabilities,setVulnerabilities]=useState(null),[vulnerabilityError,setVulnerabilityError]=useState('');
+ const [data,setData]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[topic,setTopic]=useState('all'),[updated,setUpdated]=useState(null),[vulnerabilities,setVulnerabilities]=useState(null),[vulnerabilityError,setVulnerabilityError]=useState(''),[marketSignals,setMarketSignals]=useState(null);
  const refresh=useCallback(async()=>{
   setBusy(true);
   const [core,vuln]=await Promise.allSettled([load(),loadVulnerabilities()]);
-  if(core.status==='fulfilled'){setData(core.value);setUpdated(new Date().toISOString());setError('');}
+  if(core.status==='fulfilled'){setData(core.value);setMarketSignals(core.value.marketSignals||null);setUpdated(new Date().toISOString());setError('');}
   else setError(core.reason?.message||'情報中心載入失敗');
   if(vuln.status==='fulfilled'){setVulnerabilities(vuln.value);setVulnerabilityError('');}
   else {setVulnerabilities(null);setVulnerabilityError(vuln.reason?.message||'漏洞資料載入失敗');}
@@ -64,6 +64,31 @@ export default function GlobalIntelligence(){
    <div className="intel-sources" style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:8}}>{(data?.sources||[]).map(s=><div key={s.id} style={{padding:9,background:palette.panel2,borderRadius:8}}><div style={{display:'flex',justifyContent:'space-between',gap:6,alignItems:'center'}}><b style={{fontSize:12}}>{s.label}</b><span style={badge(s.status)}>{s.status==='connected'?'已接通':s.status==='partial'?'部分接通':s.status==='empty'?'目前無資料':s.status==='unavailable'?'暫不可用':'尚未接通'}</span></div><div style={{fontSize:11,color:palette.muted,marginTop:5,lineHeight:1.5}}>{s.coverage}｜筆數 {s.items}</div></div>)}</div>
   </Card>
   <div style={{height:10}}/>
+  <div style={{height:10}}/>
+  <Card title="🌐 政策・社群・委託簿・鏈上巨鯨・全球總經（獨立證據流）">
+   {!marketSignals?<div style={{fontSize:12,color:palette.muted}}>尚未取得情報流；不以空資料推測市場方向。</div>:<>
+    <div className="intel-sources" style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:8}}>
+     {[
+      ['各國政府／政治政策原始來源',marketSignals.policy?.items?.length,marketSignals.policy?.sources],
+      ['公開社群心理訊號',marketSignals.social?.items?.length,marketSignals.social?.sources],
+      ['即時委託簿快照',marketSignals.orderbooks?.books?.length,marketSignals.orderbooks?.sources],
+      ['鏈上巨鯨轉帳',marketSignals.whales?.items?.length,[{status:marketSignals.whales?.status||'unavailable'}]],
+      ['全球總經／央行官方資料',marketSignals.macro?.data?.length,marketSignals.macro?.sources]
+     ].map(([label,count,sources])=><div key={label} style={{padding:9,background:palette.panel2,borderRadius:8}}>
+      <b style={{fontSize:12}}>{label}</b><div style={{fontSize:20,fontWeight:850,marginTop:4}}>{count??0} <small style={{fontSize:10,color:palette.muted}}>筆觀測</small></div>
+      <small style={{display:'block',color:palette.muted,lineHeight:1.5}}>{(sources||[]).map(x=>(x.id||'provider')+': '+(x.status||'unknown')).join(' · ')||'來源未回報'}</small>
+     </div>)}
+    </div>
+    <div style={{display:'grid',gap:7,marginTop:10}}>
+     {(marketSignals.orderbooks?.books||[]).slice(0,6).map((b,i)=><div key={b.exchange+b.symbol+i} style={{padding:9,background:palette.panel2,borderRadius:8,fontSize:11}}>
+      <b>{b.exchange} · {b.symbol}</b>｜買一 {b.bestBid}｜賣一 {b.bestAsk}｜價差 {b.spreadBps?.toFixed(2)} bps｜深度失衡 {b.imbalance?.toFixed(3)}
+     </div>)}
+     {(marketSignals.policy?.items||[]).slice(0,5).map((x,i)=><div key={x.id+i} style={{padding:9,background:palette.panel2,borderRadius:8}}><b style={{fontSize:12}}>{x.title}</b><small style={{display:'block',color:palette.muted,marginTop:4}}>{x.source}｜{x.publishedAt||'發布時間未提供'}｜官方原始來源，仍需人工解讀</small>{x.url&&<a href={x.url} target="_blank" rel="noreferrer" style={{color:palette.blue,fontSize:11}}>官方原文 ↗</a>}</div>)}
+     {(marketSignals.social?.items||[]).slice(0,5).map((x,i)=><div key={x.id+i} style={{padding:9,background:palette.panel2,borderRadius:8}}><b style={{fontSize:12}}>{x.title}</b><small style={{display:'block',color:palette.muted,marginTop:4}}>{x.source}｜互動 {x.engagement}｜詞彙分類 {x.sentiment?.classification}｜未驗證使用者內容</small>{x.url&&<a href={x.url} target="_blank" rel="noreferrer" style={{color:palette.blue,fontSize:11}}>公開貼文 ↗</a>}</div>)}
+    </div>
+    <div style={{fontSize:11,color:palette.yellow,lineHeight:1.6,marginTop:9}}>社群詞彙分數不是民調；委託簿快照不是成交；鏈上轉帳不代表買賣方向。巨鯨供應商：{marketSignals.whales?.status||'unknown'}。總經資料有發布延遲。更新：{marketSignals.generatedAt?new Date(marketSignals.generatedAt).toLocaleString('zh-TW'):'—'}</div>
+   </>}
+  </Card>
   <Card title="🧭 跨領域情報分類">
    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}><button onClick={()=>setTopic('all')} style={{...btnStyle,background:topic==='all'?palette.blue:palette.panel2}}>全部</button>{(data?.topics||[]).map(t=><button key={t.id} onClick={()=>setTopic(t.id)} style={{...btnStyle,background:topic===t.id?palette.blue:palette.panel2}}>{t.label} · {t.count}</button>)}</div>
    <div style={{marginTop:10,display:'grid',gap:8}}>{items.slice(0,40).map((x,i)=><article key={x.url||x.title+i} style={{padding:10,border:'1px solid '+palette.border,borderRadius:8,background:palette.panel2}}><div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap'}}><b style={{fontSize:13}}>{x.title}</b><span style={badge('partial')}>{x.sourceCount>1?'多來源標題相符・仍待驗證':'單一來源・待驗證'}</span></div>{x.summary&&<p style={{fontSize:11,color:palette.muted,lineHeight:1.6,margin:'6px 0'}}>{x.summary}</p>}<small style={{color:palette.muted}}>{(x.sources||[{name:x.source}]).map(s=>s.name).join('、')}｜{x.publishedAt||'發布時間未提供'}｜分類 {x.topic}</small>{x.url&&<div style={{marginTop:5}}><a href={x.url} target="_blank" rel="noreferrer" style={{color:palette.blue,fontSize:11}}>查看原始來源 ↗</a></div>}</article>)}{!items.length&&<div style={{fontSize:12,color:palette.muted}}>目前沒有此分類的可用資料；不以空資料推測市場方向。</div>}</div>
