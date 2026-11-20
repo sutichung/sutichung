@@ -95,15 +95,55 @@ async function loadOrderbooks(symbols=DEFAULT_SYMBOLS) {
   return {books,sources:connected.map(id=>({id,status:'connected',items:books.filter(x=>x.exchange===id).length})).concat(sources),fetchedAt:new Date().toISOString(),note:'各交易所獨立快照，非全市場合併深度；不同商品代碼與市場類型不可直接比較。'};
 }
 async function loadWhales() {
-  const url=process.env.WHALE_ALERT_API_URL, key=process.env.WHALE_ALERT_API_KEY;
-  if(!url||!key) return {status:'not_configured',items:[],source:'Whale Alert-compatible API',fetchedAt:new Date().toISOString(),note:'需設定合法取得的鏈上資料供應商 API；目前不猜測錢包身份、不以單筆大額轉帳推斷買賣方向。'};
+  const items=[],sources=[];
+  const threshold=Math.max(1,Number(process.env.BTC_WHALE_MIN_GROSS_BTC)||100);
   try {
-    const u=new URL(url);u.searchParams.set('api_key',key);
-    const payload=await (await get(u.toString())).json();
-    const items=(payload.transactions||payload.data||[]).slice(0,50).map(x=>({id:String(x.id||x.hash||''),asset:String(x.symbol||x.asset||''),amount:Number(x.amount),amountUsd:Number(x.amount_usd||x.amountUsd),from:String(x.from?.owner_type||x.from?.owner||'unknown'),to:String(x.to?.owner_type||x.to?.owner||'unknown'),hash:validUrl(x.transaction_url||x.url),timestamp:x.timestamp?new Date(Number(x.timestamp)*1000).toISOString():null,source:'Configured on-chain provider',evidenceType:'on_chain_transfer',verification:'transaction_observed_wallet_identity_unverified',direction:'unknown'})).filter(x=>x.id&&Number.isFinite(x.amount));
-    return {status:'connected',items,fetchedAt:new Date().toISOString(),note:'鏈上轉帳可觀測不代表交易所買賣；錢包標籤可能由供應商推定，方向預設 unknown。'};
-  } catch(error) {return {status:'unavailable',items:[],fetchedAt:new Date().toISOString(),error:String(error.message||error)};}
+    const recent=await(await get('https://mempool.space/api/mempool/recent')).json();
+    const candidates=(Array.isArray(recent)?recent:[]).filter(x=>Number(x.value)>=threshold*1e8);
+    for(const x of candidates) items.push({
+      id:String(x.txid),asset:'BTC',amount:Number(x.value)/1e8,amountUsd:null,
+      from:'unknown',to:'unknown',hash:validUrl('https://mempool.space/tx/'+x.txid),
+      timestamp:null,source:'mempool.space public Bitcoin mempool',
+      state:'unconfirmed_mempool',direction:'unknown',
+      evidenceType:'on_chain_large_transaction_candidate',
+      verification:'gross_output_value_not_net_transfer_or_wallet_identity'
+    });
+    sources.push({id:'mempool-space-bitcoin',label:'Bitcoin public mempool',status:'connected',items:candidates.length,thresholdGrossBtc:threshold});
+  } catch(error) {
+    sources.push({id:'mempool-space-bitcoin',label:'Bitcoin public mempool',status:'unavailable',items:0,error:String(error.message||error)});
+  }
+  const url=process.env.WHALE_ALERT_API_URL,key=process.env.WHALE_ALERT_API_KEY;
+  if(url&&key) {
+    try {
+      const u=new URL(url);u.searchParams.set('api_key',key);
+      const payload=await(await get(u.toString())).json();
+      const providerItems=(payload.transactions||payload.data||[]).slice(0,50).map(x=>({
+        id:String(x.id||x.hash||''),asset:String(x.symbol||x.asset||''),
+        amount:Number(x.amount),amountUsd:Number(x.amount_usd||x.amountUsd),
+        from:String(x.from?.owner_type||x.from?.owner||'unknown'),
+        to:String(x.to?.owner_type||x.to?.owner||'unknown'),
+        hash:validUrl(x.transaction_url||x.url),
+        timestamp:x.timestamp?new Date(Number(x.timestamp)*1000).toISOString():null,
+        source:'Configured on-chain provider',state:'provider_observed',
+        evidenceType:'on_chain_transfer',verification:'transaction_observed_wallet_identity_unverified',
+        direction:'unknown'
+      })).filter(x=>x.id&&Number.isFinite(x.amount));
+      items.push(...providerItems);
+      sources.push({id:'configured-whale-provider',label:'Configured on-chain provider',status:'connected',items:providerItems.length});
+    } catch(error) {
+      sources.push({id:'configured-whale-provider',label:'Configured on-chain provider',status:'unavailable',items:0,error:String(error.message||error)});
+    }
+  } else {
+    sources.push({id:'configured-whale-provider',label:'Cross-chain whale provider',status:'not_configured',items:0});
+  }
+  const connected=sources.some(x=>x.status==='connected');
+  return {
+    status:connected?'connected':'unavailable',items:items.sort((a,b)=>(b.amountUsd||b.amount||0)-(a.amountUsd||a.amount||0)).slice(0,50),
+    sources,fetchedAt:new Date().toISOString(),
+    note:'Bitcoin 公開 mempool 只涵蓋尚未確認交易，amount 是交易輸出總額（gross outputs），不是淨流入／淨流出；找零可能重複計入。地址身份與交易方向未知。跨鏈巨鯨供應商需另行設定合法 API。'
+  };
 }
+
 async function loadMacroOfficial() {
   const [world,fred,cbc]=await Promise.allSettled([
     (async()=>{const ids=['NY.GDP.MKTP.KD.ZG','FP.CPI.TOTL.ZG','SL.UEM.TOTL.ZS'];const countries='USA;CHN;JPN;GBR;DEU;IND;BRA;CAN;AUS;KOR;TWN';const all=await Promise.all(ids.map(async id=>{const url='https://api.worldbank.org/v2/country/'+countries+'/indicator/'+id+'?format=json&per_page=1000&date=2021:2026';const p=await(await get(url)).json();return {indicator:id,rows:p?.[1]||[]};}));return all.flatMap(x=>x.rows.filter(r=>r.value!==null).map(r=>({country:r.countryiso3code,indicator:x.indicator,value:Number(r.value),period:r.date,source:'World Bank Open Data',url:'https://data.worldbank.org/indicator/'+x.indicator,evidenceType:'official_macro_observation'})));})(),

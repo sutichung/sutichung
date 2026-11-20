@@ -12,10 +12,19 @@ test('orderbook connector validates levels and computes spread and imbalance',as
  global.fetch=async url=>({ok:true,status:200,json:async()=>String(url).includes('binance')?{bids:[['100','2']],asks:[['102','1']]}:String(url).includes('okx')?{data:[{bids:[['100','2']],asks:[['102','1']]}]}:String(url).includes('coinbase')?{bids:[['100','2']],asks:[['102','1']]}:{result:{XXBTZUSD:{bids:[['100','2']],asks:[['102','1']]}}}});
  try {const out=await loadOrderbooks(['BTCUSDT']);assert.equal(out.books.length,4);assert.equal(out.books[0].spread,2);assert.equal(out.books[0].imbalance,98/302);} finally {global.fetch=old;}
 });
-test('whale data is explicitly unavailable without a configured licensed provider',async()=>{
- const oldUrl=process.env.WHALE_ALERT_API_URL,oldKey=process.env.WHALE_ALERT_API_KEY;
+test('public Bitcoin mempool exposes large gross-output candidates without guessing wallet direction',async()=>{
+ const old=global.fetch,oldUrl=process.env.WHALE_ALERT_API_URL,oldKey=process.env.WHALE_ALERT_API_KEY;
  delete process.env.WHALE_ALERT_API_URL;delete process.env.WHALE_ALERT_API_KEY;
- try {const out=await loadWhales();assert.equal(out.status,'not_configured');assert.deepEqual(out.items,[]);} finally {if(oldUrl!==undefined)process.env.WHALE_ALERT_API_URL=oldUrl;if(oldKey!==undefined)process.env.WHALE_ALERT_API_KEY=oldKey;}
+ global.fetch=async()=>({ok:true,status:200,json:async()=>[{txid:'abc123',value:15000000000,fee:1000,vsize:200}]});
+ try {
+  const out=await loadWhales();
+  assert.equal(out.status,'connected');
+  assert.equal(out.items.length,1);
+  assert.equal(out.items[0].amount,150);
+  assert.equal(out.items[0].state,'unconfirmed_mempool');
+  assert.equal(out.items[0].direction,'unknown');
+  assert.equal(out.items[0].amountUsd,null);
+ } finally {global.fetch=old;if(oldUrl!==undefined)process.env.WHALE_ALERT_API_URL=oldUrl;if(oldKey!==undefined)process.env.WHALE_ALERT_API_KEY=oldKey;}
 });
 
 test('Taiwan CBC macro source parser retains official rows and source identity',async()=>{
