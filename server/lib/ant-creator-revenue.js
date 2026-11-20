@@ -24,12 +24,12 @@ function calculateCreatorAllocation(feeRaw, taxReserveRaw = '0') {
 }
 function parseRaw(value, field) {
   const raw = String(value ?? '');
-  if (!/^\\d{1,78}$/.test(raw) || BigInt(raw) <= 0n) throw new Error('invalid_' + field);
+  if (!/^\d{1,78}$/.test(raw) || BigInt(raw) <= 0n) throw new Error('invalid_' + field);
   return BigInt(raw);
 }
 function parseRawAllowZero(value, field) {
   const raw = String(value ?? '');
-  if (!/^\\d{1,78}$/.test(raw)) throw new Error('invalid_' + field);
+  if (!/^\d{1,78}$/.test(raw)) throw new Error('invalid_' + field);
   return BigInt(raw);
 }
 module.exports = { calculateCreatorAllocation };
