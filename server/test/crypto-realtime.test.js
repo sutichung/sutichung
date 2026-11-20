@@ -27,7 +27,7 @@ test('all five exchanges normalize genuine timestamped ticker messages', () => {
     ['coinbase', { type: 'ticker', product_id: 'BTC-USD', price: '65003', time: new Date(now - 1000).toISOString(), best_bid: '65002', best_ask: '65004' }],
     ['kraken', { channel: 'ticker', data: [{ symbol: 'BTC/USD', last: 65004, timestamp: new Date(now - 1000).toISOString(), bid: 65003, ask: 65005 }] }]
   ];
-  for ( (const [exchange, event] of cases) assert.equal(feed.applyEvent(exchange, event), true, exchange);
+  for (const [exchange, event] of cases) assert.equal(feed.applyEvent(exchange, event), true, exchange);
   const rows = feed.getQuotes();
   assert.equal(rows.length, 5);
   assert.deepEqual(new Set(rows.map(x => x.exchange)), new Set(['Binance', 'Bybit', 'OKX', 'Coinbase', 'Kraken']));
