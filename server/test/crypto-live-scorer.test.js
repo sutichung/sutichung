@@ -7,7 +7,7 @@ const BASE = Date.parse('2026-11-20T00:00:00.000Z');
 const event = (overrides = {}) => ({
   exchange: 'OKX', marketType: 'spot', symbol: 'BTC-USDT',
   timestamp: BASE, last: 100, bid: 99.99, ask: 100.01,
-  changePct: 0.2, quoteVolume: 1000, ...overrides
+  changePct: 0.2, intervalQuoteVolume: 1000, ...overrides
 });
 
 test('live scorer validates identity, price and source timestamp', () => {
@@ -41,14 +41,14 @@ test('momentum is calculated from the rolling price history', () => {
   }
 });
 
-test('volume anomaly compares quote volume against historical median, not 24h price change', () => {
+test('volume anomaly uses completed interval volume, never 24h turnover', () => {
   const scorer = new CryptoLiveScorer();
   for (let i = 0; i < 5; i++) {
     scorer.update(event({ timestamp: BASE + i * 1000, quoteVolume: 1000, changePct: 0 }), BASE + i * 1000);
   }
-  const result = scorer.update(event({ timestamp: BASE + 5000, quoteVolume: 2500, changePct: 0 }), BASE + 5000);
+  const result = scorer.update(event({ timestamp: BASE + 5000, intervalQuoteVolume: 2500, changePct: 0 }), BASE + 5000);
   assert.equal(result.volumeMultiple, 2.5);
-  assert.match(result.reasons.join(' '), /成交額/);
+  assert.match(result.reasons.join(' '), /已完成 K 線成交額/);
 });
 
 test('spread and score remain null when order book fields are missing', () => {
