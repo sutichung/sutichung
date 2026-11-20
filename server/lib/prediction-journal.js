@@ -23,7 +23,7 @@ function compareSources(input,{maxSpreadBps=50,maxTimestampSkewMs=30000,minProvi
  const independentClasses=new Set(observations.map(x=>x.sourceClass));
  if(providers.size<minProviders||independentClasses.size<2)return {status:'INSUFFICIENT_SOURCES',verified:false,reason:'independent_provider_count_below_minimum',observations};
  const times=observations.map(x=>Date.parse(x.observedAt));
- if(times.some(t=>now-t>5*60*1000||t>now+30000))return {status:'INSUFFICIENT_SOURCES',verified:false,reason:'stale_or_future_source_timestamp',observations};
+ if(observations.some(x=>{const age=now-Date.parse(x.observedAt),limit=({REALTIME:5*60*1000,DELAYED:60*60*1000,END_OF_DAY:3*86400000,HISTORICAL:30*86400000})[x.dataMode];return age< -30000||age>limit;}))return {status:'INSUFFICIENT_SOURCES',verified:false,reason:'stale_or_future_source_timestamp',observations};
  if(Math.max(...times)-Math.min(...times)>maxTimestampSkewMs)return {status:'INSUFFICIENT_SOURCES',verified:false,reason:'source_timestamp_skew_exceeded',observations};
  const prices=observations.map(x=>x.price).sort((a,b)=>a-b);
  const median=prices.length%2?prices[(prices.length-1)/2]:(prices[prices.length/2-1]+prices[prices.length/2])/2;
