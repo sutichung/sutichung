@@ -10,6 +10,8 @@ const RANGE = Math.max(1, Math.min(2000, Number(process.env.ANT_INDEXER_BLOCK_RA
 const CONFIRMATIONS = Math.max(12, Number(process.env.ANT_INDEXER_CONFIRMATIONS || 12));
 const EVENT_ABI = ['event AntPurchased(address indexed buyer,uint256 grossUsdt,uint256 feeUsdt,uint256 netUsdt,uint256 antOut,uint256 priceUsdtPerAnt)'];
 const iface = new ethers.Interface(EVENT_ABI);
+const transferIface = new ethers.Interface(['event Transfer(address indexed from,address indexed to,uint256 value)']);
+const SALE_CONFIG_ABI = ['function usdt() view returns (address)', 'function ant() view returns (address)', 'function feeRecipient() view returns (address)', 'function proceedsRecipient() view returns (address)'];
 const topic = iface.getEvent('AntPurchased').topicHash;
 const transferIface = new ethers.Interface(['event Transfer(address indexed from,address indexed to,uint256 value)']);
 
@@ -58,6 +60,41 @@ async function db(cfg, table, { method = 'GET', query = '', body, prefer } = {})
   try { data = raw ? JSON.parse(raw) : []; } catch (_) { throw new Error('supabase_invalid_json_' + table); }
   if (!response.ok) throw new Error('supabase_' + response.status + '_' + table + ':' + raw.slice(0, 300));
   return data;
+}
+function verifyTransferLogs(receipt, cfg, event) {
+  const transfers = [];
+  for (const log of receipt.logs || []) {
+    if (![cfg.usdt.toLowerCase(), cfg.ant.toLowerCase()].includes(String(log.address).toLowerCase())) continue;
+    try {
+      const parsed = transferIface.parseLog({ topics: log.topics, data: log.data });
+      if (parsed) transfers.push({
+        token: String(log.address).toLowerCase(),
+        from: parsed.args.from.toLowerCase(), to: parsed.args.to.toLowerCase(),
+        value: parsed.args.value.toString()
+      });
+    } catch (_) { /* unrelated token log */ }
+  }
+  const has = (token, from, to, amount) => transfers.some(x =>
+    x.token === token.toLowerCase() && x.from === from.toLowerCase() &&
+    x.to === to.toLowerCase() && x.value === String(amount)
+  );
+  if (!has(cfg.usdt, event.buyer, cfg.feeWallet, event.feeUsdtRaw) ||
+      !has(cfg.usdt, event.buyer, cfg.treasuryWallet, event.netUsdtRaw) ||
+      !has(cfg.ant, cfg.sale, event.buyer, event.antOutRaw)) {
+    throw new Error('token_transfer_reconciliation_failed');
+  }
+  return true;
+}
+async function verifyContractConfiguration(provider, cfg) {
+  const sale = new ethers.Contract(cfg.sale, SALE_CONFIG_ABI, provider);
+  const [usdt, ant, fee, treasury] = await Promise.all([
+    sale.usdt(), sale.ant(), sale.feeRecipient(), sale.proceedsRecipient()
+  ]);
+  if (usdt.toLowerCase() !== cfg.usdt.toLowerCase() || ant.toLowerCase() !== cfg.ant.toLowerCase() ||
+      fee.toLowerCase() !== cfg.feeWallet.toLowerCase() || treasury.toLowerCase() !== cfg.treasuryWallet.toLowerCase()) {
+    throw new Error('sale_contract_configuration_mismatch');
+  }
+  return true;
 }
 function decodeEvent(log, cfg) {
   if (String(log.address).toLowerCase() !== cfg.sale.toLowerCase()) throw new Error('wrong_sale_contract');
@@ -259,6 +296,8 @@ async function main() {
     new ethers.JsonRpcProvider(cfg.rpcA, CHAIN_ID, { staticNetwork: true }),
     new ethers.JsonRpcProvider(cfg.rpcB, CHAIN_ID, { staticNetwork: true })
   ];
+  await verifyContractConfiguration(providers[0], cfg);
+  await verifyContractConfiguration(providers[1], cfg);
   let cursor = await getCheckpoint(cfg);
   process.stdout.write('ANT BSC testnet indexer starting at ' + (cursor + 1) + '\n');
   let stopping = false;
