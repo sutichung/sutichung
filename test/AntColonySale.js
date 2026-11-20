@@ -76,4 +76,37 @@ describe("AntColonySale", function () {
     expect(sale.interface.hasFunction("setFee")).to.equal(false);
     expect(sale.interface.hasFunction("setOracle")).to.equal(false);
   });
+
+  it("rolls back the entire purchase if the fee recipient transfer fails", async function () {
+    const [, buyer, proceeds, fee] = await ethers.getSigners();
+    const usdt = await (await ethers.getContractFactory("MockFailingERC20")).deploy(6);
+    const ant = await (await ethers.getContractFactory("MockERC20")).deploy("Ant Colony", "ANT", 18);
+    const oracle = await (await ethers.getContractFactory("MockAntUsdtOracle")).deploy(10n ** 8n);
+    const sale = await (await ethers.getContractFactory("AntColonySale")).deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), fee.address, proceeds.address, 3600);
+    await ant.mint(await sale.getAddress(), ethers.parseUnits("1000", 18));
+    await usdt.mint(buyer.address, ethers.parseUnits("100", 6));
+    await usdt.connect(buyer).approve(await sale.getAddress(), ethers.MaxUint256);
+    await usdt.setBlockedRecipient(fee.address);
+    await expect(sale.connect(buyer).buy(ethers.parseUnits("100", 6), 0)).to.be.revertedWithCustomError(usdt, "BlockedRecipient");
+    expect(await usdt.balanceOf(buyer.address)).to.equal(ethers.parseUnits("100", 6));
+    expect(await usdt.balanceOf(proceeds.address)).to.equal(0n);
+    expect(await ant.balanceOf(buyer.address)).to.equal(0n);
+  });
+
+  it("rolls back the fee transfer if the proceeds recipient transfer fails", async function () {
+    const [, buyer, proceeds, fee] = await ethers.getSigners();
+    const usdt = await (await ethers.getContractFactory("MockFailingERC20")).deploy(6);
+    const ant = await (await ethers.getContractFactory("MockERC20")).deploy("Ant Colony", "ANT", 18);
+    const oracle = await (await ethers.getContractFactory("MockAntUsdtOracle")).deploy(10n ** 8n);
+    const sale = await (await ethers.getContractFactory("AntColonySale")).deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), fee.address, proceeds.address, 3600);
+    await ant.mint(await sale.getAddress(), ethers.parseUnits("1000", 18));
+    await usdt.mint(buyer.address, ethers.parseUnits("100", 6));
+    await usdt.connect(buyer).approve(await sale.getAddress(), ethers.MaxUint256);
+    await usdt.setBlockedRecipient(proceeds.address);
+    await expect(sale.connect(buyer).buy(ethers.parseUnits("100", 6), 0)).to.be.revertedWithCustomError(usdt, "BlockedRecipient");
+    expect(await usdt.balanceOf(buyer.address)).to.equal(ethers.parseUnits("100", 6));
+    expect(await usdt.balanceOf(fee.address)).to.equal(0n);
+    expect(await ant.balanceOf(buyer.address)).to.equal(0n);
+  });
+
 });
