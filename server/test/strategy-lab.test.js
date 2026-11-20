@@ -28,13 +28,13 @@ test('strategy lab requires one exact supported market value',()=>{
 });
 
 test('research history fails closed on upstream errors, stale timestamps, unknown sources and insufficient candles',()=>{
- const valid={data:candles(140),source:'official test fixture',asOf:new Date().toISOString()};
+ const now=Date.now(); const recent=candles(140).map((x,i)=>({...x,time:new Date(now-(139-i)*86400000).toISOString()})); const valid={data:recent,source:'official test fixture',asOf:recent.at(-1).time};
  assert.equal(validateResearchHistory(valid,'tw-stock').ok,true);
  assert.equal(validateResearchHistory({...valid,error:'upstream timeout'},'tw-stock').status,'upstream_unavailable');
  assert.equal(validateResearchHistory({...valid,source:'unavailable'},'tw-stock').status,'upstream_unavailable');
  assert.equal(validateResearchHistory({...valid,data:candles(100)},'tw-stock').status,'insufficient_data');
  assert.equal(validateResearchHistory({...valid,asOf:'2000-01-01T00:00:00Z'},'tw-stock').status,'stale_data');
- assert.equal(validateResearchHistory(valid,'crypto',{now:Date.now(),interval:'4h'}).ok,true);
+ assert.equal(validateResearchHistory(valid,'crypto',{now,interval:'4h'}).ok,true);
  assert.equal(validateResearchHistory({...valid,asOf:new Date(Date.now()+10*60*1000).toISOString()},'tw-stock').status,'invalid_data');
 });
 
