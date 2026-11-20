@@ -288,3 +288,28 @@ test('derivatives API returns license_required without querying any exchange whe
  try{const result=await getDerivatives('BTCUSDT','Binance');assert.equal(result.status,'license_required');assert.equal(calls,0);}
  finally{global.fetch=original;for(const [key,value] of Object.entries(previous)){if(value===undefined)delete process.env[key];else process.env[key]=value;}}
 });
+
+test('strategy history can request closed-only candles without changing live chart defaults',async()=>{
+ const originalFetch=global.fetch,originalNow=Date.now;
+ const currentOpen=Date.parse('2026-11-18T00:00:00.000Z');
+ Date.now=()=>currentOpen+12*60*60*1000;
+ const rows=[
+  [String(currentOpen-86400000),'100','110','90','105','12'],
+  [String(currentOpen),'105','115','100','112','18']
+ ];
+ global.fetch=async url=>{
+  const u=String(url);
+  if(u.includes('data-api.binance.vision/api/v3/klines'))return {ok:true,status:200,json:async()=>rows};
+  return {ok:false,status:404,json:async()=>({})};
+ };
+ try{
+  const {getHistory}=require('../lib/crypto-market');
+  const closed=await getHistory('BTCUSDT','spot','1d','Binance','BTCUSDT',10,false);
+  assert.equal(closed.data.length,1);
+  assert.equal(closed.data[0].closed,true);
+  assert.equal(closed.asOf,new Date(currentOpen-86400000).toISOString());
+  const live=await getHistory('BTCUSDT','spot','1d','Binance','BTCUSDT',10,true);
+  assert.equal(live.data.length,2);
+  assert.equal(live.data.at(-1).closed,false);
+ }finally{global.fetch=originalFetch;Date.now=originalNow;}
+});
