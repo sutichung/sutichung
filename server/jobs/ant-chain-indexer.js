@@ -297,7 +297,8 @@ async function reconcileRecentCanonical(cfg, providers, head) {
       ]));
     }
     const [a,b] = cache.get(blockNumber);
-    if (a && b && a.hash === b.hash && a.hash === row.block_hash) continue;
+    if (!a || !b || a.hash !== b.hash) throw new Error('rpc_canonical_block_unavailable_or_disagreement');
+    if (a.hash === row.block_hash) continue;
     await db(cfg, 'ant_payment_chain_events', {
       method: 'PATCH', query: 'id=eq.' + row.id,
       body: { canonical: false }, prefer: 'return=minimal'
