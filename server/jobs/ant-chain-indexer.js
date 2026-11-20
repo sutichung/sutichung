@@ -7,11 +7,14 @@ const CHAIN_ID = 97;
 const WORKER_KEY = 'ant-bsc-testnet';
 const POLL_MS = Math.max(5000, Number(process.env.ANT_INDEXER_POLL_MS || 15000));
 const RANGE = Math.max(1, Math.min(2000, Number(process.env.ANT_INDEXER_BLOCK_RANGE || 500)));
-const CONFIRMATIONS = Number(process.env.ANT_INDEXER_CONFIRMATIONS || 12);\nconst REORG_LOOKBACK = Number(process.env.ANT_INDEXER_REORG_LOOKBACK || 64);\nif (!Number.isSafeInteger(CONFIRMATIONS) || CONFIRMATIONS < 12) throw new Error('ANT_INDEXER_CONFIRMATIONS must be an integer of at least 12');\nif (!Number.isSafeInteger(REORG_LOOKBACK) || REORG_LOOKBACK < CONFIRMATIONS || REORG_LOOKBACK > 500) throw new Error('ANT_INDEXER_REORG_LOOKBACK must be between confirmations and 500');
+const CONFIRMATIONS = Number(process.env.ANT_INDEXER_CONFIRMATIONS || 12);
+const REORG_LOOKBACK = Number(process.env.ANT_INDEXER_REORG_LOOKBACK || 64);
+if (!Number.isSafeInteger(CONFIRMATIONS) || CONFIRMATIONS < 12) throw new Error('ANT_INDEXER_CONFIRMATIONS must be an integer of at least 12');
+if (!Number.isSafeInteger(REORG_LOOKBACK) || REORG_LOOKBACK < CONFIRMATIONS || REORG_LOOKBACK > 500) throw new Error('ANT_INDEXER_REORG_LOOKBACK must be between confirmations and 500');
 const EVENT_ABI = ['event AntPurchased(address indexed buyer,uint256 grossUsdt,uint256 feeUsdt,uint256 netUsdt,uint256 antOut,uint256 priceUsdtPerAnt)'];
 const iface = new ethers.Interface(EVENT_ABI);
 const transferIface = new ethers.Interface(['event Transfer(address indexed from,address indexed to,uint256 value)']);
-const SALE_CONFIG_ABI = ['function usdt() view returns (address)', 'function ant() view returns (address)', 'function feeRecipient() view returns (address)', 'function proceedsRecipient() view returns (address)'];
+const SALE_CONFIG_ABI = ['function usdt() view returns (address)', 'function ant() view returns (address)', 'function feeRecipient() view returns (address)', 'function proceedsRecipient() view returns (address)', 'function usdtDecimals() view returns (uint8)'];
 const topic = iface.getEvent('AntPurchased').topicHash;
 
 
@@ -63,11 +66,11 @@ async function db(cfg, table, { method = 'GET', query = '', body, prefer } = {})
 }
 async function verifyContractConfiguration(provider, cfg) {
   const sale = new ethers.Contract(cfg.sale, SALE_CONFIG_ABI, provider);
-  const [usdt, ant, fee, treasury] = await Promise.all([
-    sale.usdt(), sale.ant(), sale.feeRecipient(), sale.proceedsRecipient()
+  const [usdt, ant, fee, treasury, decimals] = await Promise.all([
+    sale.usdt(), sale.ant(), sale.feeRecipient(), sale.proceedsRecipient(), sale.usdtDecimals()
   ]);
   if (usdt.toLowerCase() !== cfg.usdt.toLowerCase() || ant.toLowerCase() !== cfg.ant.toLowerCase() ||
-      fee.toLowerCase() !== cfg.feeWallet.toLowerCase() || treasury.toLowerCase() !== cfg.treasuryWallet.toLowerCase()) {
+      fee.toLowerCase() !== cfg.feeWallet.toLowerCase() || treasury.toLowerCase() !== cfg.treasuryWallet.toLowerCase() || Number(decimals) !== cfg.usdtDecimals) {
     throw new Error('sale_contract_configuration_mismatch');
   }
   return true;
