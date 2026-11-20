@@ -43,6 +43,7 @@ Set these only in the Render service environment; never commit credentials:
 | `CRYPTO_WHALE_THRESHOLD_USD=50000` | Large-trade notional threshold |
 | `CRYPTO_ALERT_SCORE=2` | Minimum score for a price/microstructure alert |
 | `CRYPTO_ALERT_COOLDOWN_MS=900000` | Per-market alert cooldown |
+| `CRYPTO_FUNDING_ALERT_ABS=0.001` | Absolute funding-rate alert threshold (0.1% when set to 0.001) |
 | `TELEGRAM_BOT_TOKEN` | Optional Telegram bot token |
 | `TELEGRAM_CHAT_ID` | Optional Telegram destination |
 | `CRYPTO_STREAM_EMBEDDED=false` | Disable WebSockets in web process when a separate worker is deployed |
