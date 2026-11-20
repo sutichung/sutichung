@@ -107,7 +107,7 @@ as $$
 declare m public.prediction_markets; a public.prediction_paper_accounts;
   yp numeric; np numeric; px numeric; shares numeric; order_row public.prediction_paper_orders;
 begin
-  if p_side not in ('YES','NO') or p_stake < 1 or p_stake > 1000 or round(p_stake,2) <> p_stake then
+  if p_user_id is null or p_client_order_id is null or p_side is null or p_side not in ('YES','NO') or p_stake is null or p_stake < 1 or p_stake > 1000 or round(p_stake,2) <> p_stake then
     raise exception 'invalid_prediction_order';
   end if;
   perform public.ensure_prediction_paper_account(p_user_id);
@@ -160,7 +160,24 @@ begin
     into winning_shares from public.prediction_paper_positions where market_id = p_market_id;
   update public.prediction_markets set status='resolved', resolved_outcome=p_outcome, resolution_price=p_resolution_price,
     resolution_source=p_source, resolution_candle_open=p_candle_open, resolved_at=now() where id=p_market_id;
-  if winning_shares > 0 and total_pool > 0 then
+  if winning_shares = 0 then
+    -- If no participant chose the resolved side, refund each paper stake instead of confiscating credits.
+    with refunds as (
+      select user_id, yes_cost + no_cost as amount
+      from public.prediction_paper_positions
+      where market_id=p_market_id and yes_cost + no_cost > 0
+    ), credited as (
+      update public.prediction_paper_accounts a set balance=a.balance+r.amount, updated_at=now()
+      from refunds r where a.user_id=r.user_id returning a.user_id, r.amount
+    )
+    insert into public.prediction_paper_ledger(user_id, market_id, entry_type, amount, idempotency_key)
+    select user_id, p_market_id, 'market_payout', amount, 'payout:' || p_market_id::text || ':' || user_id::text from credited
+    on conflict (idempotency_key) do nothing;
+    update public.prediction_paper_positions p set payout=coalesce(l.amount,0), updated_at=now()
+    from (select user_id, sum(amount) amount from public.prediction_paper_ledger
+      where market_id=p_market_id and entry_type='market_payout' group by user_id) l
+    where p.market_id=p_market_id and p.user_id=l.user_id;
+  elsif total_pool > 0 then
     with payouts as (
       select user_id, round(total_pool * (case when p_outcome then yes_shares else no_shares end) / winning_shares, 8) as amount
       from public.prediction_paper_positions where market_id=p_market_id
