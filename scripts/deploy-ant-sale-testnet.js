@@ -16,7 +16,15 @@ async function main() {
   const maxAge = Number(process.env.ANT_MAX_ORACLE_AGE || 3600);
   if (!Number.isInteger(decimals) || decimals < 0 || decimals > 18) throw new Error("ANT_USDT_DECIMALS must be verified and between 0 and 18.");
   if (!Number.isSafeInteger(maxAge) || maxAge < 60) throw new Error("ANT_MAX_ORACLE_AGE must be at least 60 seconds.");
+  if (feeWallet.toLowerCase() === treasuryWallet.toLowerCase()) throw new Error("Fee and treasury recipients must be separate Safe wallets.");
   const provider = ethers.provider;
+  const safeAbi = ["function getThreshold() view returns(uint256)", "function getOwners() view returns(address[])"];
+  for (const [label, wallet] of [["ANT_FEE_WALLET", feeWallet], ["ANT_TREASURY_WALLET", treasuryWallet]]) {
+    if (await provider.getCode(wallet) === "0x") throw new Error(label + " must be a deployed Safe contract.");
+    const safe = new ethers.Contract(wallet, safeAbi, provider);
+    const [threshold, owners] = await Promise.all([safe.getThreshold(), safe.getOwners()]);
+    if (threshold < 2n || owners.length < 3) throw new Error(label + " must have a Safe threshold of at least 2 with at least 3 owners.");
+  }
   const usdt = new ethers.Contract(usdtAddress, ["function decimals() view returns(uint8)"], provider);
   const ant = new ethers.Contract(antAddress, ["function decimals() view returns(uint8)"], provider);
   const oracle = new ethers.Contract(oracleAddress, ["function latestPrice() view returns(uint256,uint256)"], provider);
