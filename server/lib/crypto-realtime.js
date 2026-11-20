@@ -108,10 +108,12 @@ function createCryptoRealtimeFeed(options = {}) {
     }
     const nativeSymbol = String(symbol || '');
     const normalized = canonicalSymbol(nativeSymbol);
-    const configured = exchangeSymbols(exchange).some(x => canonicalSymbol(x) === normalized);
+    const configured = exchangeSymbols(exchange).some(x => canonicalSymbol(x) === normalized.replace(/SWAP$/, ''));
     const numPrice = Number(price);
     if (!configured || !Number.isFinite(numPrice) || numPrice <= 0) return null;
     const sourceTimestamp = isoTimestamp(timestamp);
+    const sourceMs = sourceTimestamp ? Date.parse(sourceTimestamp) : NaN;
+    if (!Number.isFinite(sourceMs) || sourceMs > now() + 60000 || now() - sourceMs > staleAfterMs) return null;
     const { baseAsset, quoteAsset } = exchange === 'coinbase'
       ? { baseAsset: nativeSymbol.split('-')[0], quoteAsset: nativeSymbol.split('-')[1] }
       : exchange === 'kraken'
@@ -130,7 +132,7 @@ function createCryptoRealtimeFeed(options = {}) {
   }
   function applyEvent(exchange, raw, marketType = 'spot') {
     const key = String(exchange || '').toLowerCase();
-    if (!PROVIDERS[key]) return false;
+    if (!PROVIDERS[key] || !allowed(key)) return false;
     const event = typeof raw === 'string' || Buffer.isBuffer(raw) ? parseJson(raw) : raw;
     if (!event || typeof event !== 'object') return false;
     const quote = quoteFromEvent(key, marketType, event);
