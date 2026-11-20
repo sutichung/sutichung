@@ -27,6 +27,7 @@ jobs:
           set -uo pipefail
           for cycle in 1 2 3 4 5; do
             CYCLE_START=$(date +%s)
+            rm -f /tmp/tw-market.json /tmp/tw-scan.json /tmp/crypto-market.json /tmp/us-market.json
             echo "=== market refresh cycle ${cycle}/5 at $(date -u +%FT%TZ) ==="
             OIDC_TOKEN=$(curl --fail --silent --show-error --get \
               --data-urlencode "audience=taiwan-stock-hunter-automation" \
@@ -58,7 +59,7 @@ jobs:
             wait "$CRYPTO_PID" || echo "::warning::Crypto market refresh failed"
             wait "$US_PID" || echo "::warning::US market refresh failed"
 
-            node - <<'NODE'
+            CYCLE="$cycle" node - <<'NODE' || exit 1
           const fs = require('node:fs');
           function read(path) {
             try { return JSON.parse(fs.readFileSync(path, 'utf8')); }
@@ -73,7 +74,7 @@ jobs:
           const cryptoCount = Array.isArray(crypto.markets) ? crypto.markets.length : 0;
           const usCount = Object.keys(us.data || {}).length;
           console.log(JSON.stringify({
-            cycle: Number(process.env.CYCLE || 0),
+            cycle: Number(process.env.CYCLE),
             generatedAt: new Date().toISOString(),
             taiwan: { count: twCount, source: tw.source || null, dataMode: tw.dataMode || null, asOf: tw.timestamp || null, error: tw.error || null },
             taiwanTechnicalScan: { count: scanCount, source: scan.source || null, historyAsOf: scan.historyAsOf || null, error: scan.error || null },
