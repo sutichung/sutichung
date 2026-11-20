@@ -26,6 +26,7 @@ Apply migrations in timestamp order to the intended **test** Supabase project:
 1. `supabase/migrations/202611200002_ant_payment_gateway.sql`
 2. `supabase/migrations/202611210001_ant_platform_ledger.sql`
 3. `supabase/migrations/202611220001_ant_indexer_state.sql`
+4. `supabase/migrations/202611230001_ant_order_submission_and_ledger_totals.sql`
 
 The earlier global-finance and market-journal migrations may already be part of the existing project; check migration history before applying. Do not apply blindly to production. The new tables use RLS and deny client writes; only the server/service role can ingest orders, chain events, ledgers and checkpoints. After applying, test member A, member B, support, finance viewer and super admin with separate identities. Seed the initial super-admin role through a reviewed SQL operation in the intended project; do not expose a public bootstrap endpoint.
 
