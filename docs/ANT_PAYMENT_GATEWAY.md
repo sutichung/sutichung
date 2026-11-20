@@ -48,9 +48,11 @@ The API verifies the sale contract's immutable USDT, ANT, fee and treasury addre
 
 ## Indexer options and hosting cost
 
-- `server/jobs/ant-chain-indexer.js` is a long-running dual-RPC worker. `deploy/render-ant-indexer.blueprint.yaml` defines a separate Render worker, but the Render plan could not be created because the workspace requires billing information for the Starter worker. No paid resource was approved or created.
-- `.github/workflows/ant-indexer.yml` provides a no-cost scheduled fallback every five minutes and can also be manually dispatched. It is **not real-time** and GitHub scheduled runs are best-effort. Set repository variable `ANT_INDEXER_ENABLED=true` only after configuration is verified. Add GitHub Actions secrets `BSC_TESTNET_RPC_URL`, `BSC_TESTNET_RPC_URL_SECONDARY`, `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. Add repository variables `ANT_SALE_CONTRACT`, `ANT_USDT_CONTRACT`, `ANT_TOKEN_CONTRACT`, `ANT_ORACLE_CONTRACT`, `ANT_FEE_WALLET`, `ANT_TREASURY_WALLET`, `ANT_INDEXER_START_BLOCK`, `ANT_INDEXER_CONFIRMATIONS`, `ANT_INDEXER_BLOCK_RANGE`, `ANT_INDEXER_REORG_LOOKBACK`, `ANT_USDT_DECIMALS` and `ANT_MAX_ORACLE_AGE`. Until enabled, scheduled runs only report that the indexer is disabled; manual dispatch is available.
-- The worker checkpoint is stored in `ant_indexer_state`; first start requires the actual sale deployment block. Do not guess this block.
+- `server/jobs/ant-chain-indexer.js` is a dual-RPC BSC testnet indexer. It can run continuously as a worker or in one-shot mode for scheduled execution.
+- `.github/workflows/ant-chain-indexer.yml` runs one bounded cycle every five minutes or manually. It is gated by repository variable `ANT_INDEXER_ENABLED=true`; until enabled, it only reports that indexing is disabled. GitHub scheduled runs are best-effort, not real-time, and subject to the repository's Actions quota.
+- No paid Render worker or separate Render blueprint is deployed. This avoids creating a paid resource before the testnet path is proven.
+- The checkpoint and canonical block hash are stored in `ant_indexer_state`; first start requires the actual sale deployment block. Never guess this block.
+- Required GitHub secrets: `BSC_TESTNET_RPC_URL`, `BSC_TESTNET_RPC_URL_SECONDARY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`. Required repository variables: `ANT_INDEXER_ENABLED`, `ANT_INDEXER_START_BLOCK`, `ANT_INDEXER_CONFIRMATIONS` (minimum 12), `ANT_INDEXER_BLOCK_RANGE`, `ANT_INDEXER_REORG_LOOKBACK`, `ANT_USDT_DECIMALS`, `ANT_SALE_CONTRACT`, `ANT_USDT_CONTRACT`, `ANT_TOKEN_CONTRACT`, `ANT_FEE_WALLET`, `ANT_TREASURY_WALLET`. Sale deployment also requires `ANT_ORACLE_CONTRACT` and `ANT_MAX_ORACLE_AGE`.
 
 ## Testnet deployment and validation
 
