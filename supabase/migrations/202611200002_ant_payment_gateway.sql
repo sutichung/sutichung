@@ -26,7 +26,7 @@ create table if not exists public.ant_payment_orders (
   updated_at timestamptz not null default now(),
   check (gross_usdt_raw = fee_usdt_raw + net_usdt_raw),
   check (min_ant_raw <= quoted_ant_raw),
-  check ((tx_hash is null) = (tx_log_index is null))
+  constraint ant_payment_orders_tx_log_requires_hash check (tx_log_index is null or tx_hash is not null)
 );
 create unique index if not exists ant_payment_orders_chain_tx_uidx
   on public.ant_payment_orders(chain_id, tx_hash, tx_log_index) where tx_hash is not null;
