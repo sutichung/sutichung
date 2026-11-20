@@ -32,6 +32,7 @@ contract AntColonySale is ReentrancyGuard {
     error InvalidPrice();
     error StalePrice();
     error InvalidAmount();
+    error ZeroAntOutput();
     error SlippageExceeded(uint256 actual, uint256 minimum);
     error InsufficientInventory(uint256 available, uint256 required);
 
@@ -60,6 +61,7 @@ contract AntColonySale is ReentrancyGuard {
         feeUsdt = Math.mulDiv(grossUsdt, FEE_BPS, BPS);
         netUsdt = grossUsdt - feeUsdt;
         antOut = Math.mulDiv(netUsdt, ANT_SCALE * PRICE_SCALE, price * (10 ** usdtDecimals));
+        if (antOut == 0) revert ZeroAntOutput();
     }
 
     function buy(uint256 grossUsdt, uint256 minAntOut) external nonReentrant returns (uint256 antOut) {
