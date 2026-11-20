@@ -112,7 +112,7 @@ async function loadMacroOfficial() {
         const url='https://cpx.cbc.gov.tw/API/DataAPI/Get?FileName='+encodeURIComponent(code);
         const payload=await(await get(url)).json();
         const root=payload.DataSet||payload.data?.dataSets?.[0]||payload.data?.dataSets||payload.data||[];
-        let rows=Array.isArray(root)?root.flat(1):Object.values(root||{}).filter(Array.isArray).flat(1);
+        let rows=Array.isArray(root)?root:Object.values(root||{}).filter(Array.isArray);
         rows=rows.filter(row=>Array.isArray(row)||row&&typeof row==='object');
         return rows.map((row,index)=>{
           const values=Array.isArray(row)?row:Object.values(row);
