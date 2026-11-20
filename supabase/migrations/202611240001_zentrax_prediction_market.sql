@@ -113,6 +113,9 @@ begin
   perform public.ensure_prediction_paper_account(p_user_id);
   select * into order_row from public.prediction_paper_orders where user_id=p_user_id and client_order_id=p_client_order_id;
   if found then
+    if order_row.market_id <> p_market_id or order_row.side <> p_side or order_row.stake <> p_stake then
+      raise exception 'prediction_idempotency_key_reused';
+    end if;
     select * into a from public.prediction_paper_accounts where user_id=p_user_id;
     return jsonb_build_object('orderId',order_row.id,'side',order_row.side,'stake',order_row.stake,'shares',order_row.shares,'price',order_row.price,'balance',a.balance,'duplicate',true);
   end if;
@@ -120,6 +123,9 @@ begin
   if not found or m.status <> 'open' or m.close_at <= now() then raise exception 'prediction_market_not_open'; end if;
   select * into a from public.prediction_paper_accounts where user_id = p_user_id for update;
   if a.balance < p_stake then raise exception 'insufficient_virtual_credits'; end if;
+  if (select count(*) from public.prediction_paper_orders where user_id=p_user_id and created_at > now() - interval '1 minute') >= 30 then
+    raise exception 'prediction_order_rate_limit';
+  end if;
   yp := least(0.95::numeric, greatest(0.05::numeric, (m.yes_pool + 1000) / (m.yes_pool + m.no_pool + 2000)));
   np := 1 - yp;
   px := case when p_side = 'YES' then yp else np end;
