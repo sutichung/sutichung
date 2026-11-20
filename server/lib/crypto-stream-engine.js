@@ -389,7 +389,7 @@ function createCryptoStreamEngine(options = {}) {
     if (started) return status();
     started = true; stopping = false;
     if (!symbols.length) throw new Error('no_valid_crypto_symbols');
-    if (!exchanges.length) { process.stderr.write('[crypto-stream] No exchange has a confirmed market-data redistribution license; streams remain disabled.\\n'); return status(); }
+    if (!exchanges.length) { process.stderr.write('[crypto-stream] No exchange has a confirmed market-data redistribution license; streams remain disabled.\\n'); if (storage.configured) storage.saveStatus(status()).catch(() => {}); return status(); }
     if (!storage.configured) process.stderr.write('[crypto-stream] Supabase storage is not configured; market events will not be durable.\n');
     const specs = connectionSpecs();
     for (const spec of specs) connect(spec);
