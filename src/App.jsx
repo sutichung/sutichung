@@ -10,6 +10,7 @@ const QuantResearch = lazy(() => import('./QuantResearch'));
 const USMarket = lazy(() => import('./USMarket'));
 const CryptoMarket = lazy(() => import('./CryptoMarket'));
 const AntColony = lazy(() => import('./AntColony'));
+const AntPayments = lazy(() => import('./AntPayments'));
 const GlobalFinance = lazy(() => import('./GlobalFinance'));
 const GlobalIntelligence = lazy(() => import('./GlobalIntelligence'));
 
@@ -119,11 +120,13 @@ export default function App(){
   <a href="#tw-market" style={{flex:'1 0 110px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#18304b',border:'1px solid #315579',color:'#bfdbfe',fontWeight:800,fontSize:13}}>🇹🇼 台股專區</a>
   <a href="#us-market" style={{flex:'1 0 110px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#18372f',border:'1px solid #28634f',color:'#a7f3d0',fontWeight:800,fontSize:13}}>🇺🇸 美股專區</a>
   <a href="#crypto-market" style={{flex:'1 0 130px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#382b19',border:'1px solid #745323',color:'#fde68a',fontWeight:800,fontSize:13}}>₿ 加密貨幣專區</a>
+  <a href="#ant-payments" style={{flex:'1 0 145px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#382b19',border:'1px solid #8d7442',color:'#D6B56D',fontWeight:800,fontSize:13}}>🐜 ANT 代幣平台</a>
   <a href="#global-finance" style={{flex:'1 0 140px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#252342',border:'1px solid #514b82',color:'#ddd6fe',fontWeight:800,fontSize:13}}>🌐 全球金融中心</a>
   <a href="#global-intelligence" style={{flex:'1 0 160px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#332334',border:'1px solid #75465c',color:'#fecdd3',fontWeight:800,fontSize:13}}>🛡️ 全球情報攻防中心</a>
   <a href="#strategy-lab" style={{flex:'1 0 130px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#1e3440',border:'1px solid #356274',color:'#bae6fd',fontWeight:800,fontSize:13}}>🧪 策略實驗室</a>
  </nav>
  <DeferredSection minHeight={320}><AntColony/></DeferredSection>
+ <DeferredSection minHeight={360}><AntPayments/></DeferredSection>
  <DeferredSection minHeight={320}><GlobalFinance/></DeferredSection>
  <DeferredSection minHeight={320}><GlobalIntelligence/></DeferredSection>
  <DeferredSection minHeight={360}><USMarket/></DeferredSection>
