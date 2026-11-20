@@ -24,7 +24,7 @@ function transferLog(token,from,to,value){
   return {address:token,topics:[TRANSFER_TOPIC,topicAddress(from),topicAddress(to)],data:'0x'+word(value)};
 }
 function makeReceipt(){
-  return {status:'0x1',to:sale,blockHash,logs:[
+  return {status:'0x1',to:sale,blockHash,transactionHash:txHash,blockNumber:'0x64',logs:[makeLog(),
     transferLog(usdt,buyer,fee,5000000),
     transferLog(usdt,buyer,proceeds,95000000),
     transferLog(ant,sale,buyer,'95000000000000000000')
@@ -73,6 +73,22 @@ test('decodes standard ERC20 Transfer logs',()=>{
 test('reconciles both USDT recipient transfers and ANT delivery in the transaction receipt',()=>{
   const event=decodePurchaseLog(makeLog(),config);
   assert.equal(verifyPurchaseReceipt(makeReceipt(),event,config),true);
+});
+
+
+test('rejects receipts that do not contain the exact purchase event',()=>{
+  const event=decodePurchaseLog(makeLog(),config);
+  const receipt=makeReceipt();
+  receipt.logs[0]=makeLog();
+  receipt.logs[0].data='0x'+[word(100000000),word(5000000),word(94000000),word('95000000000000000000'),word(100000000)].join('');
+  assert.throws(()=>verifyPurchaseReceipt(receipt,event,config),/purchase_event_receipt_mismatch_netUsdt/);
+});
+
+test('rejects receipts with mismatched transaction or block identity',()=>{
+  const event=decodePurchaseLog(makeLog(),config);
+  const receipt=makeReceipt();
+  receipt.transactionHash='0x'+'d'.repeat(64);
+  assert.throws(()=>verifyPurchaseReceipt(receipt,event,config),/purchase_receipt_transaction_hash_mismatch/);
 });
 
 test('rejects a receipt if the 95 percent proceeds transfer is missing or wrong',()=>{
