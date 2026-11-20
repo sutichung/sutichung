@@ -5,6 +5,7 @@ const MARKETS=new Set(['TW-STOCK','US-STOCK','CRYPTO']);
 const MAX_FUTURE_SKEW_MS=5*60*1000;
 function fail(code,message=code){const e=new Error(message);e.code=code;return e;}
 function iso(value,name){const n=Date.parse(value||'');if(!Number.isFinite(n)||n>Date.now()+MAX_FUTURE_SKEW_MS)throw fail('invalid_'+name,name+' timestamp invalid or in future');return new Date(n).toISOString();}
+function dueIso(value,name,reference){const n=Date.parse(value||'');if(!Number.isFinite(n)||n<=Date.parse(reference)||n>Date.now()+21*86400000+MAX_FUTURE_SKEW_MS)throw fail('invalid_'+name,name+' must be after the prediction time and within 21 days');return new Date(n).toISOString();}
 function positive(value,name){const n=Number(value);if(!Number.isFinite(n)||n<=0)throw fail('invalid_'+name,name+' must be positive');return n;}
 function normalizeObservation(x={}){
  const provider=String(x.provider||'').trim().slice(0,120),sourceClass=String(x.sourceClass||'').trim().slice(0,80);
@@ -51,7 +52,7 @@ function normalizePrediction(x={}){
  const predictionKey=String(x.predictionKey||crypto.createHash('sha256').update([market,symbol,timeframe,modelVersion,direction,referenceAsOf].join('|')).digest('hex'));
  const horizons=(x.horizons||[{horizon:timeframe,dueAt:new Date(Date.parse(referenceAsOf)+({'1h':3600000,'1d':86400000,'5d':432000000,'20d':1728000000}[timeframe])).toISOString()}]).map(h=>{
   if(!HORIZONS.has(h.horizon))throw fail('invalid_outcome_horizon');
-  return {horizon:h.horizon,dueAt:iso(h.dueAt,'outcome_due_at')};
+  return {horizon:h.horizon,dueAt:dueIso(h.dueAt,'outcome_due_at',referenceAsOf)};
  });
  return {snapshot:{prediction_key:predictionKey,market,symbol,timeframe,model_version:modelVersion,direction,score:x.score==null?null:Number(x.score),confidence,up_probability:probability,probability_semantics:probability===null?null:'UP_PROBABILITY',reference_price:referencePrice,reference_as_of:referenceAsOf,source_consensus:{providers:consensus.providers,observedAt:consensus.observedAt,consensusPrice:consensus.consensusPrice},source_spread_bps:consensus.spreadBps,consensus_status:consensus.status,feature_snapshot:x.featureSnapshot||{}},observations:observations.map(o=>({...o,source_class:o.sourceClass,observed_at:o.observedAt,data_mode:o.dataMode,latency_ms:o.latencyMs})),horizons:horizons.map(h=>({horizon:h.horizon,due_at:h.dueAt})),consensus};
 }
