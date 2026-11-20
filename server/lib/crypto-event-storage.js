@@ -5,7 +5,7 @@ const BUCKET = 'crypto-realtime';
 function createCryptoEventStorage({ env = process.env, fetchImpl = fetch } = {}) {
   const base = String(env.SUPABASE_URL || '').replace(/\/$/, '');
   const key = String(env.SUPABASE_SERVICE_ROLE_KEY || '');
-  let bucketReady = false;
+  let bucketReady = false, statusCache = null, statusCacheAt = 0;
   async function ensureBucket() {
     if (!base || !key) throw new Error('crypto_storage_not_configured');
     if (bucketReady) return;
@@ -46,16 +46,19 @@ function createCryptoEventStorage({ env = process.env, fetchImpl = fetch } = {})
       body: JSON.stringify(status), signal: AbortSignal.timeout(10000)
     });
     if (!response.ok) throw new Error('crypto_storage_status_http_' + response.status);
+    statusCache = status; statusCacheAt = Date.now();
     return { stored: true };
   }
   async function readStatus() {
     if (!base || !key) return { configured: false, status: 'not_configured' };
+    if (statusCache && Date.now() - statusCacheAt < 1000) return statusCache;
     const response = await fetchImpl(base + '/storage/v1/object/authenticated/' + BUCKET + '/status/latest.json', {
       headers: { apikey: key, authorization: 'Bearer ' + key }, signal: AbortSignal.timeout(8000)
     });
-    if (response.status === 404) return { configured: true, status: 'not_started' };
+    if (response.status === 404) { statusCache = { configured: true, status: 'not_started' }; statusCacheAt = Date.now(); return statusCache; }
     if (!response.ok) throw new Error('crypto_storage_status_read_http_' + response.status);
-    return { configured: true, ...(await response.json()) };
+    statusCache = { configured: true, ...(await response.json()) }; statusCacheAt = Date.now();
+    return statusCache;
   }
   return { ensureBucket, saveMinuteBatch, saveStatus, readStatus, configured: Boolean(base && key) };
 }
