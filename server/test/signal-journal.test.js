@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
 const {normalizeSignal,classifyOutcome,buildDailyReview,createSignalJournal}=require('../lib/signal-journal');
-const base={symbol:'BTCUSDT',market:'CRYPTO',timeframe:'1d',action:'ALERT_BULLISH',price:100,asOf:'2026-11-18T00:00:00Z',source:'Licensed Exchange API',confidence:0.8};
+const base={symbol:'BTCUSDT',market:'crypto',timeframe:'1d',action:'ALERT_BULLISH',price:100,asOf:'2026-11-18T00:00:00Z',source:'Licensed Exchange API',confidence:0.8};
 test('normalizes signals and creates deterministic idempotency keys',()=>{const a=normalizeSignal(base),b=normalizeSignal(base);assert.equal(a.signalKey,b.signalKey);assert.equal(a.side,'LONG');});
 test('rejects incomplete or invalid signal inputs',()=>{assert.throws(()=>normalizeSignal({...base,source:''}),/source is required/);assert.throws(()=>normalizeSignal({...base,confidence:1.2}),/confidence/);assert.throws(()=>normalizeSignal({...base,price:0}),/positive/);});
 test('rejects signal timestamps materially ahead of the server clock',()=>{const future=new Date(Date.now()+6*60*1000).toISOString();assert.throws(()=>normalizeSignal({...base,asOf:future}),/must not be in the future/);});
@@ -10,3 +10,8 @@ test('daily review excludes neutral and flat signals from directional hit rate',
 test('journal uses the database atomic RPC and never exposes credentials in returned values',async()=>{const calls=[];const j=createSignalJournal({env:{SUPABASE_URL:'https://project.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'server-secret'},fetchImpl:async(url,o)=>{calls.push({url,o});return {ok:true,status:200,text:async()=>JSON.stringify({status:'recorded',reason:'ACCEPTED',signal_id:'123e4567-e89b-12d3-a456-426614174000'})};}});const r=await j.record(base);assert.equal(r.status,'recorded');assert.equal(r.signal.side,'LONG');assert.ok(calls[0].url.endsWith('/rest/v1/rpc/record_market_signal'));assert.equal(r.signal.metadata&&JSON.stringify(r).includes('server-secret'),false);});
 test('journal rejects future settlement observations before database access',async()=>{let calls=0;const j=createSignalJournal({env:{SUPABASE_URL:'https://project.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'server-secret'},fetchImpl:async()=>{calls++;throw Error('must not fetch');}});const future=new Date(Date.now()+6*60*1000).toISOString();await assert.rejects(()=>j.settle('123e4567-e89b-12d3-a456-426614174000',{asOf:future,source:'Licensed Exchange API',price:101}),/must not be in the future/);assert.equal(calls,0);});
 test('journal fails closed when database credentials are absent',async()=>{const j=createSignalJournal({env:{},fetchImpl:async()=>{throw Error('must not fetch');}});await assert.rejects(()=>j.record(base),/credentials are not configured/);});
+
+test('signal journal only accepts the three canonical market identifiers',()=>{
+ for(const market of ['tw-stock','us-stock','crypto']) assert.equal(normalizeSignal({...base,market}).market,market);
+ for(const market of ['TW-STOCK','CRYPTO','US','stock','crypto-futures','']) assert.throws(()=>normalizeSignal({...base,market}),/market must be/);
+});
