@@ -159,7 +159,7 @@ function createCryptoStreamEngine(options = {}) {
     if (exchange === 'Bybit') {
       const topic = String(message.topic || ''), data = message.data;
       if (!topic || !data) return;
-      const parts = topic.split('.'), type = parts[0], symbol = String(Array.isArray(data) ? data[0]?.s : data.s || '').toUpperCase();
+      const parts = topic.split('.'), type = parts[0], symbol = String((Array.isArray(data) ? data[0]?.s : data.s) || parts.at(-1) || '').toUpperCase();
       if (!symbols.includes(symbol)) return;
       const ts = message.ts || data.ts || now();
       if (type === 'tickers') {
