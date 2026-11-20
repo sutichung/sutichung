@@ -131,13 +131,13 @@ function normalizeKlines(rows,exchange,interval='1d',asOf=Date.now(),includeCurr
  return [...unique.values()].sort((a,b)=>Date.parse(a.time)-Date.parse(b.time));
 }
 
-async function getHistory(symbol,marketType='spot',interval='1d',exchange='Binance',nativeSymbol='',requestedLimit=240){
+async function getHistory(symbol,marketType='spot',interval='1d',exchange='Binance',nativeSymbol='',requestedLimit=240,includeCurrent=true){
  const clean=String(nativeSymbol||symbol||'').toUpperCase();
  requireMarketDataLicense(exchange);
  const cap=exchange==='OKX'?300:exchange==='Coinbase'?300:exchange==='Kraken'?720:1000;
  const limit=Math.max(1,Math.min(cap,Math.floor(Number(requestedLimit)||240)));
  const cacheTtl=interval==='1m'||interval==='5m'?5000:interval==='15m'?10000:interval==='30m'||interval==='1h'?20000:interval==='4h'?60000:300000;
- return cached('history:'+exchange+':'+marketType+':'+clean+':'+interval+':'+limit,cacheTtl,async()=>{
+ return cached('history:'+exchange+':'+marketType+':'+clean+':'+interval+':'+limit+':'+(includeCurrent?'with-current':'closed-only'),cacheTtl,async()=>{
   let rows=[],source=exchange+' public candles';
   const iv=interval==='1d'?'1d':interval;
   if(exchange==='Binance'){const path=marketType==='perpetual'?'/fapi/v1/klines':'/api/v3/klines',query=new URLSearchParams({symbol:clean,interval:iv,limit:String(limit)});if(marketType==='perpetual'){rows=await getJson('https://fapi.binance.com'+path+'?'+query);}else{const bases=['https://data-api.binance.vision','https://api.binance.com','https://api1.binance.com','https://api2.binance.com','https://api3.binance.com','https://api4.binance.com'];const result=await getJsonFallback(bases.map(base=>base+path+'?'+query));rows=result.data;source='Binance official spot market-data API ('+result.base+')';}}
@@ -146,7 +146,7 @@ async function getHistory(symbol,marketType='spot',interval='1d',exchange='Binan
   else if(exchange==='Coinbase'){const product=clean.includes('-')?clean:clean.replace(/(USDT|USDC|USD)$/,'-$1');const granularity=({'1m':60,'5m':300,'15m':900,'1h':3600,'1d':86400}[iv]||86400);rows=await getJson('https://api.exchange.coinbase.com/products/'+encodeURIComponent(product)+'/candles?granularity='+granularity);}
   else if(exchange==='Kraken'){const x=await getJson('https://api.kraken.com/0/public/OHLC?'+new URLSearchParams({pair:clean,interval:iv==='4h'?'240':iv==='1h'?'60':iv==='30m'?'30':iv==='15m'?'15':iv==='5m'?'5':iv==='1m'?'1':'1440'}));if(x.error?.length)throw new Error(x.error.join(','));const key=Object.keys(x.result||{}).find(k=>k!=='last');rows=x.result?.[key]||[];}
   else if(exchange==='Kraken Futures'){const base=clean.replace(/(USDT|USDC|USD)$/,'').replace(/^BTC$/,'XBT');const resolution=({'1m':'1m','5m':'5m','15m':'15m','30m':'30m','1h':'1h','4h':'4h','1d':'1d'}[iv]||'1d');const tickerPayload=await getJson('https://futures.kraken.com/derivatives/api/v3/tickers');const tickers=Array.isArray(tickerPayload.tickers)?tickerPayload.tickers:Array.isArray(tickerPayload.result)?tickerPayload.result:[];const ticker=tickers.find(x=>{if(!x||x.tag!=='perpetual')return false;const pair=String(x.pair||'').toUpperCase().split(/[:/]/);const pairBase=(pair[0]||'').replace(/^XBT$/,'BTC');const pairQuote=pair[1]||'';const targetBase=base.replace(/^XBT$/,'BTC');return pairBase===targetBase&&pairQuote==='USD';});const product=String(ticker?.symbol||'').toUpperCase();if(!product)throw new Error('Kraken Futures 找不到對應的官方永續商品代碼');const x=await getJson('https://futures.kraken.com/api/charts/v1/trade/'+encodeURIComponent(product)+'/'+resolution+'?count='+String(limit));rows=Array.isArray(x.candles)?x.candles:[];source='Kraken Futures official public '+product+' candles';}
-  const candles=normalizeKlines(rows,exchange,iv,Date.now(),true);
+  const candles=normalizeKlines(rows,exchange,iv,Date.now(),includeCurrent);
   if(!candles.length)throw new Error(exchange+' 此市場沒有可用 K 線');
   return {symbol,marketType,exchange,interval,data:candles,indicators:indicators(candles),asOf:candles.at(-1).time,source,timestamp:now()};
  });
