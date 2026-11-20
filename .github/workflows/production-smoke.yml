@@ -27,13 +27,24 @@ jobs:
           MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
         run: |
           set -euo pipefail
+          git fetch --no-tags --depth=100 origin main
+          is_safe_main_advance() {
+            local current_main="$1" changed_files
+            [ "$current_main" = "$EXPECTED_COMMIT" ] && return 0
+            git merge-base --is-ancestor "$EXPECTED_COMMIT" "$current_main" || return 1
+            changed_files=$(git diff --name-only "$EXPECTED_COMMIT" "$current_main")
+            [ -z "$changed_files" ] || ! printf '%s\n' "$changed_files" | grep -Evq '^(\.github/workflows/|server/test/|docs/)'
+          }
           CURRENT_MAIN=$(git ls-remote "https://github.com/$GITHUB_REPOSITORY.git" refs/heads/main | cut -f1)
           if [ "$CURRENT_MAIN" != "$EXPECTED_COMMIT" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "Skipping stale commit $EXPECTED_COMMIT; main is now $CURRENT_MAIN"
-            exit 0
+            git fetch --no-tags --depth=100 origin main
+            if ! is_safe_main_advance "$CURRENT_MAIN"; then
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              echo "Skipping stale runtime commit $EXPECTED_COMMIT; main advanced with application changes to $CURRENT_MAIN"
+              exit 0
+            fi
+            echo "Main advanced only with documentation/tests/workflow files; continuing smoke for runtime commit $EXPECTED_COMMIT"
           fi
-          git fetch --no-tags --depth=30 origin main
           DEPLOY_COMMIT="$EXPECTED_COMMIT"
           for history_step in $(seq 1 20); do
             CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r "$DEPLOY_COMMIT")
@@ -47,9 +58,12 @@ jobs:
           for attempt in $(seq 1 36); do
             CURRENT_MAIN=$(git ls-remote "https://github.com/$GITHUB_REPOSITORY.git" refs/heads/main | cut -f1)
             if [ "$CURRENT_MAIN" != "$EXPECTED_COMMIT" ]; then
-              echo "skip=true" >> "$GITHUB_OUTPUT"
-              echo "Skipping stale commit $EXPECTED_COMMIT; main advanced to $CURRENT_MAIN"
-              exit 0
+              git fetch --no-tags --depth=100 origin main
+              if ! is_safe_main_advance "$CURRENT_MAIN"; then
+                echo "skip=true" >> "$GITHUB_OUTPUT"
+                echo "Skipping stale runtime commit $EXPECTED_COMMIT; main advanced with application changes to $CURRENT_MAIN"
+                exit 0
+              fi
             fi
             if curl --fail --silent --show-error --max-time 10 "$MARKET_APP_URL/api/health" -o /tmp/health.json; then
               ACTUAL_COMMIT=$(node -e "const h=require('/tmp/health.json');process.stdout.write(h.commit||'')")
