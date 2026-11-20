@@ -202,5 +202,5 @@ revoke all on function public.ensure_prediction_paper_account(uuid) from public,
 revoke all on function public.place_prediction_paper_order(uuid,uuid,text,numeric,uuid) from public, anon, authenticated;
 revoke all on function public.settle_prediction_market(uuid,boolean,numeric,text,timestamptz) from public, anon, authenticated;
 grant execute on function public.ensure_prediction_paper_account(uuid) to service_role;
-grant execute on function public.place_prediction_paper_order(uuid,uuid,text,numeric) to service_role;
+grant execute on function public.place_prediction_paper_order(uuid,uuid,text,numeric,uuid) to service_role;
 grant execute on function public.settle_prediction_market(uuid,boolean,numeric,text,timestamptz) to service_role;
