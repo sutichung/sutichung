@@ -71,7 +71,7 @@ function applyCalibration(rawProbability,calibration,{minimumBinSamples=5}={}){
  return {probability:Number(Math.max(0,Math.min(1,y1+(y2-y1)*ratio)).toFixed(6)),applied:true,reason:null};
 }
 function calibrationMetrics(rows,{minimumSamples=30,bins=10}={}){
- const valid=rows.filter(x=>Number.isFinite(Number(x.up_probability))&&Number(x.up_probability)>=0&&Number(x.up_probability)<=1&&typeof x.actual_up==='boolean');
+ const valid=rows.filter(x=>x.up_probability!==null&&x.up_probability!==undefined&&x.up_probability!==''&&Number.isFinite(Number(x.up_probability))&&Number(x.up_probability)>=0&&Number(x.up_probability)<=1&&typeof x.actual_up==='boolean');
  const n=valid.length;
  if(n<minimumSamples)return {eligible:false,sampleCount:n,brierScore:null,directionalAccuracy:null,bins:[],reason:'minimum_calibration_sample_not_met'};
  const groups=Array.from({length:bins},(_,i)=>({lower:i/bins,upper:(i+1)/bins,count:0,meanProbability:0,observedUpRate:0}));
