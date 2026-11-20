@@ -109,7 +109,11 @@ function createCryptoStreamEngine(options = {}) {
     const notional = price * size;
     const threshold = Number(process.env.CRYPTO_WHALE_THRESHOLD_USD || 50000);
     const side = String(trade.side || '').toLowerCase();
-    if (notional >= threshold) emit(exchange, marketType, symbol, 'large_trade', { side, price, size, notional, threshold }, timestamp);
+    if (notional >= threshold) {
+      emit(exchange, marketType, symbol, 'large_trade', { side, price, size, notional, threshold }, timestamp);
+      const q = quotes.get(key(exchange, marketType, symbol));
+      if (q) maybeAlert(q, { eligible:true, score:2.1, reasons:['大額主動成交 '+side+' 約 '+Math.round(notional).toLocaleString()+' '+(split(symbol).quoteAsset||'報價幣')] });
+    }
   }
   function handleCandle(exchange, marketType, symbol, candle, timestamp) {
     if (!candle.closed) return;
@@ -277,6 +281,9 @@ function createCryptoStreamEngine(options = {}) {
           }
           const id = key(exchange,'perpetual',symbol); funding.set(id,{exchange,symbol,...row,receivedAt:new Date(now()).toISOString()});
           emit(exchange,'perpetual',symbol,'funding_rate',row,row.sourceTimestamp);
+          const q = quotes.get(id);
+          const fundingAlertThreshold = Number(process.env.CRYPTO_FUNDING_ALERT_ABS || 0.001);
+          if (q && row.rate !== null && Math.abs(row.rate) >= fundingAlertThreshold) maybeAlert(q, { eligible:true, score:2.3, reasons:['資金費率異常 '+(row.rate*100).toFixed(4)+'%'] });
         } catch (e) { stats.errors++; }
       })());
     }
