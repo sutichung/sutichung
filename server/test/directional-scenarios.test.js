@@ -16,7 +16,7 @@ test('directional scenarios produce explicit bull, bear and neutral cases from O
  assert.equal(result.safety.liveTrading,false);
 });
 test('stale candles never produce an actionable direction',()=>{
- const rows=candles().map(x=>({...x,time:new Date(Date.now()-30*86400000).toISOString()}));
+ const rows=candles().map((x,i)=>({...x,time:new Date(Date.now()-30*86400000+i*86400000).toISOString()}));
  const result=analyzeDirectionalScenarios(rows,{intervalMs:86400000});
  assert.equal(result.status,'stale_data');
  assert.equal(result.direction,'資料不足');
