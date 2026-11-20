@@ -2,8 +2,6 @@
 const { indicators } = require('./indicators');
 const { createAsyncCache } = require('./market-cache');
 const { isMarketDataLicensed, requireMarketDataLicense } = require('./market-data-license');
-const { CryptoLiveScorer } = require('./crypto-live-scorer');
-const liveScorer = new CryptoLiveScorer();
 const marketCache=createAsyncCache({maxEntries:500});
 const now=()=>new Date().toISOString();
 async function getJson(url,timeout=14000){
@@ -88,23 +86,24 @@ async function loadMarket(){
   const receivedAt=now(),sourceTimestampCount=markets.filter(x=>x.sourceTimestamp).length,freshQuoteCount=markets.filter(x=>x.freshnessStatus==='fresh').length,staleQuoteCount=markets.filter(x=>x.freshnessStatus==='stale').length,unverifiedQuoteCount=markets.filter(x=>x.freshnessStatus==='unverified').length;
   return {markets,status:markets.length?'ok':exchanges.every(x=>x.status==='not_configured')?'license_required':'degraded',licenseRequiredProviders:exchanges.filter(x=>x.status==='not_configured').map(x=>x.name),summary:{total:markets.length,spot:markets.filter(x=>x.marketType==='spot').length,perpetual:markets.filter(x=>x.marketType==='perpetual').length,exchanges:exchanges.filter(x=>x.status==='connected').map(x=>x.name),connectedExchangeCount:exchanges.filter(x=>x.status==='connected').length,sourceTimestampCount,sourceTimestampCoveragePct:markets.length?Math.round(sourceTimestampCount/markets.length*100):0,freshQuoteCount,staleQuoteCount,unverifiedQuoteCount},exchanges,coverage:{scope:'僅涵蓋下列五家交易所公開 API 可取得的商品；不代表全世界所有交易所或所有商品',partialProviders:exchanges.filter(x=>x.coverageNote).map(x=>x.name),timestampLimit:'來源時間戳依交易所欄位可能是最後成交或回應時間；超過 5 分鐘標示過期，缺少時間戳標示未驗證'},source:markets.length?'已授權交易所各自行情 API；價格不跨交易所混合':'未取得交易所會員展示／再分發書面授權，未啟用加密貨幣行情',quoteMode:'REST snapshot polling；非 WebSocket 逐筆推送',refreshIntervalMs:15000,receivedAt,timestamp:null};
  });
- const merged = require('./crypto-stream-engine').createDefaultCryptoStreamEngine().mergeMarket(snapshot);
- merged.markets = (merged.markets || []).map(market => {
-  const sourceMs = market.sourceTimestamp ? Date.parse(market.sourceTimestamp) : NaN;
-  if (!Number.isFinite(sourceMs) || market.freshnessStatus !== 'fresh') {
-   return { ...market, liveSignal: { eligible: false, status: 'unverified_or_stale_source', score: null, reasons: ['來源時間戳未驗證或行情已過期'] } };
-  }
+ let merged = require('./crypto-stream-engine').createDefaultCryptoStreamEngine().mergeMarket(snapshot);
+ if (process.env.CRYPTO_STREAM_EMBEDDED === 'false') {
   try {
-   const liveSignal = liveScorer.update({
-    exchange: market.exchange, marketType: market.marketType, symbol: market.nativeSymbol || market.symbol,
-    timestamp: sourceMs, last: market.price, bid: market.bid, ask: market.ask,
-    changePct: market.changePct
-    // Deliberately omit 24h quoteVolume: volume anomaly scoring requires completed interval volume.
+   const persisted = await require('./crypto-event-storage').createCryptoEventStorage().readStatus();
+   const live = new Map((persisted.latestQuotes || []).map(q => [q.exchange + ':' + q.marketType + ':' + q.symbol, q]));
+   merged.markets = (merged.markets || []).map(item => {
+    const q = live.get(item.exchange + ':' + item.marketType + ':' + (item.nativeSymbol || item.symbol));
+    if (!q || !(q.price > 0)) return item;
+    return { ...item, price:q.price, bid:q.bid ?? item.bid, ask:q.ask ?? item.ask, changePct:q.changePct ?? item.changePct, quoteVolume:q.quoteVolume24h ?? item.quoteVolume, sourceTimestamp:q.sourceTimestamp, sourceAgeMs:q.sourceAgeMs, freshnessStatus:q.freshnessStatus, signalEligible:q.freshnessStatus==='fresh', quoteMode:q.quoteMode || 'worker WebSocket/REST' , liveSignal:q.liveSignal || null };
    });
-   return { ...market, liveSignal };
-  } catch (_) {
-   return { ...market, liveSignal: { eligible: false, status: 'scoring_error', score: null, reasons: ['評分資料驗證失敗'] } };
+   merged.realtime = persisted;
+  } catch (error) {
+   merged.realtimePersistenceWarning = '無法讀取獨立行情 worker 狀態：' + String(error.message || error);
   }
+ }
+ merged.markets = (merged.markets || []).map(market => {
+  if (market.liveSignal) return market;
+  return { ...market, liveSignal: { eligible:false, status:'signal_unavailable', score:null, reasons:['沒有來自常駐行情引擎的有效評分'] } };
  });
  return merged;
 }
