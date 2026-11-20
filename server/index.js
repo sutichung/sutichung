@@ -15,6 +15,7 @@ const cryptoRealtime = require('./lib/crypto-stream-engine');
 const cryptoRealtimeFeed = cryptoRealtime.createDefaultCryptoStreamEngine();
 const cryptoMicrostructure = require('./lib/crypto-microstructure');
 const { assessMarketRisk } = require('./lib/market-risk');
+const { analyzeDirectionalScenarios } = require('./lib/directional-scenarios');
 const { loadRiskHistory, loadFreshMicrostructure } = require('./lib/crypto-risk-fallback');
 const { runStrategyLab } = require('./lib/strategy-lab');
 const globalFinance = require('./lib/global-finance');
@@ -695,6 +696,25 @@ async function route(req,res){
       const result=runStrategyLab(history.data,{market,symbol,source:history.source,htfCandles,feeBps:u.searchParams.has('feeBps')?Number(u.searchParams.get('feeBps')):undefined,slippageBps:u.searchParams.has('slippageBps')?Number(u.searchParams.get('slippageBps')):undefined,sellTaxBps:u.searchParams.has('sellTaxBps')?Number(u.searchParams.get('sellTaxBps')):undefined});
       return json(res,result.status==='ok'?200:422,{...result,source:history.source||result.source,asOf:history.asOf||result.asOf});
     }catch(e){return json(res,502,{status:'data_unavailable',symbol,market,error:e.message,strategies:[]});}
+  }
+  if(u.pathname.startsWith('/api/directional-scenarios/')){
+    const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase();
+    const market=u.searchParams.get('market')||'tw-stock';
+    const interval=u.searchParams.get('interval')||(market==='crypto'?'1h':'1d');
+    const exchange=u.searchParams.get('exchange')||'Binance';
+    const type=u.searchParams.get('type')==='perpetual'?'perpetual':'spot';
+    try{
+      let history;
+      if(market==='crypto') history=await cryptoMarket.getHistory(symbol,type,interval,exchange,u.searchParams.get('nativeSymbol')||symbol,300);
+      else if(market==='us-stock'){
+        const chart=await getUsChart(symbol,'2y',interval);
+        history={data:chart.candles,source:chart.source,asOf:chart.candles.at(-1)?.time};
+      }else if(market==='tw-stock') history=await loadStockHistory(symbol);
+      else return json(res,400,{status:'invalid_market',error:'market must be tw-stock, us-stock or crypto',scenarios:[]});
+      const intervalMs=interval==='1m'?60000:interval==='5m'?300000:interval==='15m'?900000:interval==='30m'?1800000:interval==='1h'?3600000:interval==='4h'?14400000:86400000;
+      const result=analyzeDirectionalScenarios(history.data,{market,symbol,interval,intervalMs,maxAgeMs:market==='crypto'?intervalMs*2.5:intervalMs*4,source:history.source});
+      return json(res,result.status==='insufficient_data'?422:200,{...result,market,exchange:market==='crypto'?exchange:null,asOf:history.asOf||result.asOf});
+    }catch(e){return json(res,502,{status:'data_unavailable',market,symbol,error:String(e.message||e),scenarios:[]});}
   }
   if(u.pathname.startsWith('/api/crypto/history/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase(),type=u.searchParams.get('type')==='perpetual'?'perpetual':'spot',interval=u.searchParams.get('interval')||'1d',exchange=u.searchParams.get('exchange')||'Binance',nativeSymbol=u.searchParams.get('nativeSymbol')||symbol;
