@@ -29,3 +29,21 @@ test('Taiwan CBC macro source parser retains official rows and source identity',
    assert.ok(out.data.some(x=>x.country==='TWN'&&x.indicator==='BP01D01'&&x.value===32.1));
  } finally {global.fetch=old;if(oldKey!==undefined)process.env.FRED_API_KEY=oldKey;}
 });
+
+test('official central bank policy RSS sources are parsed and independently attributed',async()=>{
+ const old=global.fetch,oldKey=process.env.FRED_API_KEY;
+ delete process.env.FRED_API_KEY;
+ global.fetch=async url=>({
+  ok:true,status:200,
+  json:async()=>String(url).includes('federalregister')?{results:[]}:String(url).includes('ey.gov.tw')?[]:[],
+  text:async()=>'<rss><channel><item><guid>source-guid</guid><title>Central bank policy update</title><link>https://example.gov/policy</link><pubDate>Fri, 20 Nov 2026 00:00:00 GMT</pubDate><description>Official release</description></item></channel></rss>'
+ });
+ try {
+  const {loadPolicy}=require('../lib/market-intelligence');
+  const out=await loadPolicy();
+  assert.equal(out.sources.find(x=>x.id==='boj').status,'connected');
+  assert.equal(out.sources.find(x=>x.id==='boe').status,'connected');
+  assert.ok(out.items.some(x=>x.sourceId==='boj'&&x.title==='Central bank policy update'));
+  assert.ok(out.items.some(x=>x.sourceId==='boe'&&x.title==='Central bank policy update'));
+ } finally {global.fetch=old;if(oldKey!==undefined)process.env.FRED_API_KEY=oldKey;}
+});

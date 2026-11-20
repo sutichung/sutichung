@@ -2,7 +2,7 @@
 
 ## Source coverage
 
-- **Government/policy originals:** US Federal Register API; US Federal Reserve Board press-release RSS; European Commission press releases; Taiwan Executive Yuan primary JSON feed; Taiwan Presidential Office news-release RSS. This is a multi-jurisdiction starter set, not complete global legal coverage. Each source may be unavailable independently.
+- **Government/policy originals:** US Federal Register API; US Federal Reserve Board press-release RSS; European Commission press releases; Taiwan Executive Yuan primary JSON feed; Taiwan Presidential Office news-release RSS; Bank of Japan official updates RSS; Bank of England official news RSS. This is a multi-jurisdiction starter set, not complete global legal coverage. Each source may be unavailable independently.
 - **Public social signals:** Reddit r/CryptoCurrency and r/investing plus public Bluesky search API. This is platform-limited public content, not a representative poll, not a measure of the whole population, and not a personal-psychology assessment. X/Twitter and some other platforms require paid/authorized API access and are not scraped around access controls.
 - **Order books:** Binance, OKX, Kraken and Coinbase Exchange public REST depth snapshots. These are per-venue snapshots, not a consolidated order book or executed trades. REST snapshots are not WebSocket streaming.
 - **On-chain whale transfers:** disabled until an authorized provider URL and key are configured. Blockchain explorers alone do not reliably identify whale owners; unknown wallets remain unknown and transfer direction remains unknown.
