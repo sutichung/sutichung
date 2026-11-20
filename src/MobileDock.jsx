@@ -8,6 +8,7 @@ const tabs = [
 ];
 
 const moreLinks = [
+  { href: '#zentrax-prediction', label: 'ZENTRAX 預測市場', detail: 'BTC／ETH／BNB 價格事件與虛擬點數' },
   { href: '#global-finance', label: '全球金融中心', detail: '匯率、資金與跨市場觀察' },
   { href: '#global-intelligence', label: '全球情報中心', detail: '事件、風險與市場攻防' },
   { href: '#strategy-lab', label: '策略實驗室', detail: '策略研究與驗證' },
