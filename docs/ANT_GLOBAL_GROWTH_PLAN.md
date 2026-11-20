@@ -197,3 +197,7 @@ Monthly report:
 - GitHub Actions run `44747104678` completed successfully: `compile-and-test` job passed `npm install`, `npm run compile:token`, and `npm run test:token`.
 - This CI result validates compilation and automated tests only. It does not establish a deployed token, verified explorer source, live website marketing changes, completed audit, deployed USDT sale flow, or live social accounts.
 - The deployment script requires BSC Testnet chain ID 97 and `ANT_MULTISIG_ADDRESS`; deployment remains unconfirmed until a transaction hash, contract address, multisig address, and explorer verification are independently checked.
+
+
+## Creator revenue and fair-launch policy
+The current sale-contract revenue model and its safeguards are specified in [ANT Creator Revenue & Fair-Launch Policy](./ANT_CREATOR_REVENUE_POLICY.md). The existing sale contract routes 5% of gross USDT to feeRecipient and 95% to proceedsRecipient; this is a purchase fee, not a token transfer tax. This is a code-level design observation, not proof of deployment, audit, or public-sale readiness. All release gates in that policy remain mandatory.
