@@ -632,11 +632,11 @@ async function route(req,res){
     return json(res,200,{quotes:cryptoRealtimeFeed.getQuotes(),status:cryptoRealtimeFeed.status(),timestamp:now()});
   }
   if(u.pathname==='/api/crypto/market'){
-    const result=await safeLoad('crypto-market',15000,cryptoMarket.loadMarket,e=>({markets:[],summary:{total:0,spot:0,perpetual:0},source:'unavailable',timestamp:now(),error:e.message}));
+    const result=await safeLoad('crypto-market',15000,()=>cryptoMarket.loadMarket(cryptoRealtimeFeed),e=>({markets:[],summary:{total:0,spot:0,perpetual:0},source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,result.error?503:200,result);
   }
   if(u.pathname==='/api/crypto/scan'){
-    const market=await safeLoad('crypto-market',60000,cryptoMarket.loadMarket,e=>({markets:[],error:e.message}));
+    const market=await safeLoad('crypto-market',60000,()=>cryptoMarket.loadMarket(cryptoRealtimeFeed),e=>({markets:[],error:e.message}));
     const offset=Math.max(0,Number(u.searchParams.get('offset'))||0),limit=Math.min(10,Math.max(1,Number(u.searchParams.get('limit'))||8));
     const batch=(market.markets||[]).slice(offset,offset+limit);
     const results=await Promise.all(batch.map(async item=>{

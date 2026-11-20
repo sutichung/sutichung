@@ -256,6 +256,20 @@ test('Kraken Futures REST ticker fallback preserves funding, index and source ti
  }finally{global.fetch=original;}
 });
 
+test('loadMarket merges live quotes from the API process shared stream engine',async()=>{
+ const keys=Object.keys(MARKET_DATA_TEST_LICENSES),previous=Object.fromEntries(keys.map(k=>[k,process.env[k]]));
+ for(const key of keys)delete process.env[key];
+ const original=global.fetch;global.fetch=async()=>{throw new Error('provider_fetch_must_not_run_without_license');};
+ let called=0;
+ try{
+  const {loadMarket}=require('../lib/crypto-market');
+  const result=await loadMarket({mergeMarket(snapshot){called++;return {...snapshot,sharedEngineMerged:true};}});
+  assert.equal(called,1);
+  assert.equal(result.sharedEngineMerged,true);
+  assert.equal(result.status,'license_required');
+ }finally{global.fetch=original;for(const [key,value] of Object.entries(previous)){if(value===undefined)delete process.env[key];else process.env[key]=value;}}
+});
+
 test('market discovery reports license_required without calling exchange APIs when no redistribution licenses exist',async()=>{
  const keys=Object.keys(MARKET_DATA_TEST_LICENSES),previous=Object.fromEntries(keys.map(k=>[k,process.env[k]]));
  for(const key of keys)delete process.env[key];
