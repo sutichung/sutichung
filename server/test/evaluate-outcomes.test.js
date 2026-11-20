@@ -73,3 +73,79 @@ test('uses a conservative Taiwan round-trip cost by default',()=>{
  assert.match(report.costAssumption,/0\.1425%/);
  assert.match(report.costAssumption,/0\.30%/);
 });
+
+
+function eodPrevious(snapshotTimestamp='2026-11-19T13:40:00+08:00'){
+ return {snapshotTimestamp,topBullish:[{symbol:'2330',price:100}],topBearish:[]};
+}
+function officialDailyQuote(overrides={}){
+ return {
+  symbol:'2330',market:'TWSE',price:102,timestamp:null,sourceTimestamp:null,
+  dataMode:'END_OF_DAY',quoteType:'official-daily-close',delayed:true,
+  asOf:'2026-11-20',source:'TWSE OpenAPI STOCK_DAY_ALL',...overrides
+ };
+}
+function eodSnapshot(quote){
+ return {source:'TWSE + TPEx official daily close',data:{'2330':quote}};
+}
+
+test('1d evaluation accepts a later official TWSE EOD close using the Taiwan session close timestamp',()=>{
+ const fixedNow=Date.parse('2026-11-20T14:00:00+08:00');
+ const report=evaluateOutcomes(eodPrevious(),eodSnapshot(officialDailyQuote()),{horizon:'1d',sessions:1,now:fixedNow});
+ assert.equal(report.evaluatedCount,1);
+ assert.equal(report.excludedCount,0);
+ assert.equal(report.results[0].observationMode,'END_OF_DAY');
+ assert.equal(report.results[0].quoteTimestamp,'2026-11-20T05:30:00.000Z');
+ assert.equal(report.currentSnapshotAsOf,'2026-11-20T05:30:00.000Z');
+});
+
+test('1h evaluation refuses to substitute an official EOD close for an intraday observation',()=>{
+ const fixedNow=Date.parse('2026-11-20T14:00:00+08:00');
+ const report=evaluateOutcomes(eodPrevious('2026-11-20T12:00:00+08:00'),eodSnapshot(officialDailyQuote()),{horizon:'1h',sessions:0,now:fixedNow});
+ assert.equal(report.evaluatedCount,0);
+ assert.equal(report.excluded[0].reason,'intraday_quote_required');
+});
+
+test('1h evaluation accepts a fresh source timestamp from a real intraday quote',()=>{
+ const fixedNow=Date.parse('2026-11-20T14:00:00+08:00');
+ const quote={symbol:'2330',market:'TWSE',price:102,timestamp:'2026-11-20T13:59:00+08:00',source:'Licensed realtime feed',dataMode:'REALTIME',delayed:false};
+ const report=evaluateOutcomes(eodPrevious('2026-11-20T13:00:00+08:00'),eodSnapshot(quote),{horizon:'1h',sessions:0,now:fixedNow});
+ assert.equal(report.evaluatedCount,1);
+ assert.equal(report.results[0].observationMode,'REALTIME');
+ assert.equal(report.results[0].quoteTimestamp,'2026-11-20T05:59:00.000Z');
+});
+
+test('stale official daily closes are excluded rather than treated as current prices',()=>{
+ const fixedNow=Date.parse('2026-11-20T14:00:00+08:00');
+ const report=evaluateOutcomes(eodPrevious('2026-11-10T13:40:00+08:00'),eodSnapshot(officialDailyQuote({asOf:'2026-11-14'})),{horizon:'1d',sessions:1,now:fixedNow});
+ assert.equal(report.evaluatedCount,0);
+ assert.equal(report.excluded[0].reason,'stale_or_future_quote');
+});
+
+test('future-dated official daily closes are excluded',()=>{
+ const fixedNow=Date.parse('2026-11-20T14:00:00+08:00');
+ const report=evaluateOutcomes(eodPrevious(),eodSnapshot(officialDailyQuote({asOf:'2026-11-21'})),{horizon:'1d',sessions:1,now:fixedNow});
+ assert.equal(report.evaluatedCount,0);
+ assert.equal(report.excluded[0].reason,'stale_or_future_quote');
+});
+
+test('an official daily close observed before the signal snapshot is excluded',()=>{
+ const fixedNow=Date.parse('2026-11-20T14:00:00+08:00');
+ const report=evaluateOutcomes(eodPrevious('2026-11-20T13:35:00+08:00'),eodSnapshot(officialDailyQuote()),{horizon:'1d',sessions:1,now:fixedNow});
+ assert.equal(report.evaluatedCount,0);
+ assert.equal(report.excluded[0].reason,'quote_predates_signal_snapshot');
+});
+
+test('EOD data from an unsupported market is not assigned the Taiwan session close time',()=>{
+ const fixedNow=Date.parse('2026-11-20T14:00:00+08:00');
+ const report=evaluateOutcomes(eodPrevious(),eodSnapshot(officialDailyQuote({market:'US',exchange:'NASDAQ'})),{horizon:'1d',sessions:1,now:fixedNow});
+ assert.equal(report.evaluatedCount,0);
+ assert.equal(report.excluded[0].reason,'unsupported_eod_market');
+});
+
+test('malformed official EOD dates are excluded',()=>{
+ const fixedNow=Date.parse('2026-11-20T14:00:00+08:00');
+ const report=evaluateOutcomes(eodPrevious(),eodSnapshot(officialDailyQuote({asOf:'20-11-2026'})),{horizon:'1d',sessions:1,now:fixedNow});
+ assert.equal(report.evaluatedCount,0);
+ assert.equal(report.excluded[0].reason,'invalid_eod_date');
+});
