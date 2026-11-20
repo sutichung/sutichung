@@ -1,6 +1,7 @@
-# ANT Global Growth Plan
+# ZENTRAX Global Growth Plan
 
-**Project:** Ant Colony (ANT)  
+**Platform brand:** ZENTRAX  
+**Blockchain ecosystem / token:** Ant Colony / ANT  
 **Repository branch:** `ant-token-testnet`  
 **Growth target:** 10,000 genuine community members  
 **Budget:** zero-cost, organic distribution first  
@@ -23,7 +24,9 @@ Never promise returns, price appreciation, guaranteed liquidity, exchange listin
 4. Potential ecosystem contributors, translators, moderators, and developers.
 
 ### Brand promise
-**“A transparent community building the Ant Colony ecosystem, one verifiable release at a time.”**
+**“ZENTRAX — Next-gen financial technology, built transparently and verified release by release.”**
+
+ZENTRAX is the platform brand. ANT remains the token name and ticker; the rebrand does not change token contracts or token economics. Visual identity: black and metallic gold. See [ZENTRAX Brand System](./ZENTRAX_BRAND_SYSTEM.md).
 
 Voice: precise, curious, technically credible, calm, multilingual. Avoid hype language such as “100x”, “guaranteed”, “moon”, “risk-free”, “next Bitcoin”, or “buy before it is too late”.
 
