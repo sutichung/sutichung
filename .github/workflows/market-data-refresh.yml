@@ -1,8 +1,8 @@
-name: Always-on market data refresh
+name: Market data refresh
 
 on:
   schedule:
-    # GitHub scheduled workflows have a 5-minute minimum interval.
+    # GitHub Actions scheduled workflows have a 5-minute minimum interval.
     - cron: "*/5 * * * *"
   workflow_dispatch:
 
@@ -11,69 +11,74 @@ permissions:
   id-token: write
 
 concurrency:
-  group: always-on-market-data-refresh
+  group: market-data-refresh
   cancel-in-progress: false
 
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 4
     steps:
-      - name: Refresh market caches every minute while unattended
+      - name: Refresh quote and technical-analysis caches
         env:
           MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
         shell: bash
         run: |
-          set -u
-          for cycle in 1 2 3 4 5; do
-            CYCLE_START=$(date +%s)
-            echo "=== market refresh cycle ${cycle}/5 at $(date -u +%FT%TZ) ==="
-            OIDC_TOKEN=$(curl --fail --silent --show-error --get \
-              --data-urlencode "audience=taiwan-stock-hunter-automation" \
-              "$ACTIONS_ID_TOKEN_REQUEST_URL" \
-              -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r '.value')
-            if [ -z "$OIDC_TOKEN" ] || [ "$OIDC_TOKEN" = "null" ]; then
-              echo "::error::Unable to obtain GitHub Actions OIDC token"
-              exit 1
-            fi
-            echo "::add-mask::$OIDC_TOKEN"
-            AUTH_HEADER="Authorization: Bearer $OIDC_TOKEN"
+          set -uo pipefail
+          OIDC_TOKEN=$(curl --fail --silent --show-error --get \
+            --data-urlencode "audience=taiwan-stock-hunter-automation" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL" \
+            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r '.value')
+          if [ -z "$OIDC_TOKEN" ] || [ "$OIDC_TOKEN" = "null" ]; then
+            echo "::error::Unable to obtain GitHub Actions OIDC token"
+            exit 1
+          fi
+          echo "::add-mask::$OIDC_TOKEN"
+          AUTH_HEADER="Authorization: Bearer $OIDC_TOKEN"
 
-            # Refresh independently so one unavailable provider does not hide the others.
-            curl --fail --silent --show-error --max-time 45 -H "$AUTH_HEADER" \
-              "$MARKET_APP_URL/api/market/snapshot" -o /tmp/tw-market.json &
-            TW_PID=$!
-            curl --fail --silent --show-error --max-time 45 -H "$AUTH_HEADER" \
-              "$MARKET_APP_URL/api/crypto/market" -o /tmp/crypto-market.json &
-            CRYPTO_PID=$!
-            curl --fail --silent --show-error --max-time 45 -H "$AUTH_HEADER" \
-              "$MARKET_APP_URL/api/us/market" -o /tmp/us-market.json &
-            US_PID=$!
+          # Each scheduled run refreshes the quote feeds and the stock scan.
+          curl --fail --silent --show-error --max-time 90 -H "$AUTH_HEADER" \
+            "$MARKET_APP_URL/api/market/snapshot" -o /tmp/tw-market.json &
+          TW_PID=$!
+          curl --fail --silent --show-error --max-time 90 -H "$AUTH_HEADER" \
+            "$MARKET_APP_URL/api/market/scan" -o /tmp/tw-scan.json &
+          SCAN_PID=$!
+          curl --fail --silent --show-error --max-time 90 -H "$AUTH_HEADER" \
+            "$MARKET_APP_URL/api/crypto/market" -o /tmp/crypto-market.json &
+          CRYPTO_PID=$!
+          curl --fail --silent --show-error --max-time 90 -H "$AUTH_HEADER" \
+            "$MARKET_APP_URL/api/us/market" -o /tmp/us-market.json &
+          US_PID=$!
 
-            TW_OK=0; CRYPTO_OK=0; US_OK=0
-            wait "$TW_PID" && TW_OK=1 || echo "::warning::TWSE/TPEx snapshot refresh failed"
-            wait "$CRYPTO_PID" && CRYPTO_OK=1 || echo "::warning::Crypto market refresh failed"
-            wait "$US_PID" && US_OK=1 || echo "::warning::US market refresh failed"
+          TW_OK=0; SCAN_OK=0; CRYPTO_OK=0; US_OK=0
+          wait "$TW_PID" && TW_OK=1 || echo "::error::Taiwan official quote refresh failed"
+          wait "$SCAN_PID" && SCAN_OK=1 || echo "::error::Taiwan technical scan refresh failed"
+          wait "$CRYPTO_PID" && CRYPTO_OK=1 || echo "::warning::Crypto market refresh failed"
+          wait "$US_PID" && US_OK=1 || echo "::warning::US market refresh failed"
 
-            node - <<'NODE'
+          node - <<'NODE'
           const fs = require('node:fs');
-          for (const [label, file, count] of [
-            ['TWSE/TPEx official daily close', '/tmp/tw-market.json', x => x.quoteCount ?? Object.keys(x.data || {}).length],
-            ['Crypto REST snapshots', '/tmp/crypto-market.json', x => x.markets?.length ?? 0],
-            ['US watchlist (non-official source)', '/tmp/us-market.json', x => Object.keys(x.data || {}).length],
-          ]) {
-            try {
-              const x = JSON.parse(fs.readFileSync(file, 'utf8'));
-              console.log(JSON.stringify({market: label, count: count(x), source: x.source || 'unknown', dataMode: x.dataMode || null, timestamp: x.timestamp || null, error: x.error || null}));
-            } catch (e) {
-              console.log(JSON.stringify({market: label, status: 'unavailable', error: e.message}));
-            }
+          function read(path) {
+            try { return JSON.parse(fs.readFileSync(path, 'utf8')); }
+            catch (error) { return { error: error.message }; }
           }
+          const tw = read('/tmp/tw-market.json');
+          const scan = read('/tmp/tw-scan.json');
+          const crypto = read('/tmp/crypto-market.json');
+          const us = read('/tmp/us-market.json');
+          const twCount = Number(tw.quoteCount ?? Object.keys(tw.data || {}).length);
+          const scanCount = Number(scan.scannedCount ?? Object.keys(scan.data || {}).length);
+          const cryptoCount = Array.isArray(crypto.markets) ? crypto.markets.length : 0;
+          const usCount = Object.keys(us.data || {}).length;
+          console.log(JSON.stringify({
+            generatedAt: new Date().toISOString(),
+            taiwan: { count: twCount, source: tw.source || null, dataMode: tw.dataMode || null, asOf: tw.timestamp || null, error: tw.error || null },
+            taiwanTechnicalScan: { count: scanCount, source: scan.source || null, historyAsOf: scan.historyAsOf || null, error: scan.error || null },
+            crypto: { count: cryptoCount, status: crypto.status || null, licenseRequiredProviders: crypto.licenseRequiredProviders || [], error: crypto.error || null },
+            us: { count: usCount, source: us.source || null, timestamp: us.timestamp || null, error: us.error || null }
+          }, null, 2));
+          if (twCount < 1) throw new Error('No valid official Taiwan daily quotes returned');
+          if (scanCount < 1) throw new Error('Taiwan technical-analysis scan returned no symbols');
+          if (usCount < 1) throw new Error('US watchlist returned no quotes');
+          if (cryptoCount < 1) console.warn('Crypto prices remain unavailable until redistribution/display rights are confirmed; no license gate was bypassed.');
           NODE
-
-            if [ "$cycle" -lt 5 ]; then
-              ELAPSED=$(( $(date +%s) - CYCLE_START ))
-              REMAINING=$(( 60 - ELAPSED ))
-              if [ "$REMAINING" -gt 0 ]; then sleep "$REMAINING"; fi
-            fi
-          done
