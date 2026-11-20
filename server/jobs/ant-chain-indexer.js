@@ -14,7 +14,7 @@ if (!Number.isSafeInteger(REORG_LOOKBACK) || REORG_LOOKBACK < CONFIRMATIONS || R
 const EVENT_ABI = ['event AntPurchased(address indexed buyer,uint256 grossUsdt,uint256 feeUsdt,uint256 netUsdt,uint256 antOut,uint256 priceUsdtPerAnt)'];
 const iface = new ethers.Interface(EVENT_ABI);
 const transferIface = new ethers.Interface(['event Transfer(address indexed from,address indexed to,uint256 value)']);
-const SALE_CONFIG_ABI = ['function usdt() view returns (address)', 'function ant() view returns (address)', 'function feeRecipient() view returns (address)', 'function proceedsRecipient() view returns (address)', 'function usdtDecimals() view returns (uint8)'];
+const SALE_CONFIG_ABI = ['function usdt() view returns (address)', 'function ant() view returns (address)', 'function feeRecipient() view returns (address)', 'function proceedsRecipient() view returns (address)', 'function usdtDecimals() view returns (uint8)', 'function oracle() view returns (address)', 'function maxOracleAge() view returns (uint256)'];
 const topic = iface.getEvent('AntPurchased').topicHash;
 
 
@@ -40,6 +40,7 @@ function config() {
     ant: address('ANT_TOKEN_CONTRACT'),
     feeWallet: address('ANT_FEE_WALLET'),
     treasuryWallet: address('ANT_TREASURY_WALLET'),
+    maxOracleAge: Math.max(60, Number(process.env.ANT_MAX_ORACLE_AGE || 3600)),
     usdtDecimals: Number(required('ANT_USDT_DECIMALS')),
     antDecimals: 18
   };
@@ -66,11 +67,11 @@ async function db(cfg, table, { method = 'GET', query = '', body, prefer } = {})
 }
 async function verifyContractConfiguration(provider, cfg) {
   const sale = new ethers.Contract(cfg.sale, SALE_CONFIG_ABI, provider);
-  const [usdt, ant, fee, treasury, decimals] = await Promise.all([
-    sale.usdt(), sale.ant(), sale.feeRecipient(), sale.proceedsRecipient(), sale.usdtDecimals()
+  const [usdt, ant, fee, treasury, decimals, oracle, maxAge] = await Promise.all([
+    sale.usdt(), sale.ant(), sale.feeRecipient(), sale.proceedsRecipient(), sale.usdtDecimals(), sale.oracle(), sale.maxOracleAge()
   ]);
   if (usdt.toLowerCase() !== cfg.usdt.toLowerCase() || ant.toLowerCase() !== cfg.ant.toLowerCase() ||
-      fee.toLowerCase() !== cfg.feeWallet.toLowerCase() || treasury.toLowerCase() !== cfg.treasuryWallet.toLowerCase() || Number(decimals) !== cfg.usdtDecimals) {
+      fee.toLowerCase() !== cfg.feeWallet.toLowerCase() || treasury.toLowerCase() !== cfg.treasuryWallet.toLowerCase() || Number(decimals) !== cfg.usdtDecimals || oracle.toLowerCase() !== cfg.oracle.toLowerCase() || Number(maxAge) !== cfg.maxOracleAge) {
     throw new Error('sale_contract_configuration_mismatch');
   }
   return true;
