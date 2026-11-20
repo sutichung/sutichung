@@ -22,3 +22,11 @@ test('raw token amounts reject floats, signs, empty and oversized inputs', () =>
   assert.equal(parseRaw('123456789','gross'), '123456789');
   for (const value of ['','0','-1','1.5','1e8','9'.repeat(79)]) assert.throws(() => parseRaw(value,'gross'));
 });
+
+test('finance assurance requires an MFA aal2 token claim', () => {
+  const { assuranceLevel } = require('../lib/ant-api');
+  const token = payload => 'header.' + Buffer.from(JSON.stringify(payload)).toString('base64url') + '.signature';
+  assert.equal(assuranceLevel({headers:{authorization:'Bearer '+token({aal:'aal2'})}}),'aal2');
+  assert.equal(assuranceLevel({headers:{authorization:'Bearer '+token({aal:'aal1'})}}),'aal1');
+  assert.equal(assuranceLevel({headers:{authorization:'Bearer not-a-jwt'}}),'aal1');
+});
