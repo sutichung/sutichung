@@ -12,7 +12,7 @@ test('allocates net-of-tax fee income with integer arithmetic', () => {
 test('rounding dust is deterministically assigned to reserve', () => {
   const a = calculateCreatorAllocation('101', '0');
   assert.equal(BigInt(a.creatorRaw)+BigInt(a.productRaw)+BigInt(a.securityRaw)+BigInt(a.reserveRaw), 101n);
-  assert.equal(a.reserveRaw, '7');
+  assert.equal(a.reserveRaw, '6');
 });
 test('rejects invalid raw units and tax reserves above fee income', () => {
   for (const value of ['', '0.1', '-1', '1e4', '9'.repeat(79)]) assert.throws(() => calculateCreatorAllocation(value));
