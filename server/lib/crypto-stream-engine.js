@@ -236,8 +236,16 @@ function createCryptoStreamEngine(options = {}) {
     state.ws = ws;
     ws.on('open', () => {
       if (state.ws !== ws) return;
-      state.state = 'connected'; state.attempts = 0; state.connectedAt = now(); state.lastError = null;
+      state.state = 'connected'; state.connectedAt = now(); state.lastMessageAt = now(); state.lastError = null;
       if (spec.subscribe) ws.send(JSON.stringify(spec.subscribe));
+      state.watchdog = setInterval(() => {
+        if (state.ws !== ws || state.state !== 'connected') return;
+        if (now() - (state.lastMessageAt || state.connectedAt) > staleMs) {
+          state.lastError = 'websocket_message_timeout';
+          try { ws.terminate(); } catch (_) { try { ws.close(); } catch (_) {} }
+        }
+      }, Math.min(10000, Math.max(1000, Math.floor(staleMs / 3))));
+      timers.add(state.watchdog);
       if (spec.exchange === 'OKX') {
         state.ping = setInterval(() => { if (ws.readyState === WebSocketImpl.OPEN) ws.send('ping'); }, 20000);
         timers.add(state.ping);
@@ -247,13 +255,16 @@ function createCryptoStreamEngine(options = {}) {
       if (state.ws !== ws) return;
       if (String(raw) === 'pong') return;
       state.lastMessageAt = now();
+      if (now() - (state.connectedAt || now()) > 30000) state.attempts = 0;
       handleMessage(spec.exchange, spec.marketType, raw);
     });
     ws.on('error', e => { stats.errors++; state.lastError = String(e.message || e).slice(0,200); });
     ws.on('close', () => {
       if (state.ws !== ws) return;
+      if (now() - (state.connectedAt || now()) > 30000) state.attempts = 0;
       state.state = 'disconnected'; state.ws = null;
       if (state.ping) { clearInterval(state.ping); timers.delete(state.ping); state.ping = null; }
+      if (state.watchdog) { clearInterval(state.watchdog); timers.delete(state.watchdog); state.watchdog = null; }
       if (!stopping) scheduleReconnect(spec, state);
     });
   }
