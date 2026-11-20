@@ -10,7 +10,7 @@ The first market types are:
 - The market creator captures and stores the Binance Spot reference ticker and timestamp when publishing.
 - The exact 1-minute candle whose open time equals `close_at` is the resolution evidence. A market is not resolved until that candle is available. No fallback or guessed price is allowed.
 - YES/NO indicative prices are driven by the virtual-credit pools, start at 50/50, and are bounded to 5%–95%. They are community pool indications, not calibrated probabilities or exchange prices.
-- Winning virtual positions split the virtual stakes pool pro rata. There is no guaranteed payout, no real asset and no cash value.
+- Winning virtual positions split the virtual stakes pool pro rata. If no participant holds the winning side, each participant receives their own virtual stake back. There is no guaranteed profit, no real asset and no cash value.
 
 ## Implemented routes
 
