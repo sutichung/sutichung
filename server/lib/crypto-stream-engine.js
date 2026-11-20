@@ -302,27 +302,74 @@ function createCryptoStreamEngine(options = {}) {
     return [...quotes.values()].map(x => { const sourceAgeMs = x.sourceTimestamp ? now()-Date.parse(x.sourceTimestamp) : null; const fresh = now()-x.receivedAtMs <= staleMs && sourceAgeMs !== null && sourceAgeMs <= staleMs && sourceAgeMs >= -60000; return { ...x, sourceAgeMs, freshnessStatus:fresh?'fresh':'stale', receivedAt:new Date(x.receivedAtMs).toISOString() }; });
   }
   async function restFallback() {
+    const jobs = [];
     for (const exchange of exchanges) for (const marketType of (enableFutures ? ['spot','perpetual'] : ['spot'])) for (const symbol of symbols) {
-      try {
-        let data, timestamp;
+      jobs.push((async () => {
+        let tickerUrl, bookUrl, candleUrl, instId, category;
         if (exchange === 'Binance') {
           const base = marketType === 'spot' ? 'https://api.binance.com/api/v3' : 'https://fapi.binance.com/fapi/v1';
-          const r = await fetchImpl(base+'/ticker/24hr?symbol='+symbol,{signal:AbortSignal.timeout(7000)}); if(!r.ok)throw new Error('HTTP '+r.status);
-          data=await r.json(); timestamp=data.closeTime || now();
+          tickerUrl = base + '/ticker/24hr?symbol=' + symbol;
+          bookUrl = base + '/depth?symbol=' + symbol + '&limit=20';
+          candleUrl = base + '/klines?symbol=' + symbol + '&interval=1m&limit=3';
         } else if (exchange === 'Bybit') {
-          const category = marketType==='spot'?'spot':'linear';
-          const r=await fetchImpl('https://api.bybit.com/v5/market/tickers?category='+category+'&symbol='+symbol,{signal:AbortSignal.timeout(7000)});if(!r.ok)throw new Error('HTTP '+r.status);
-          const d=await r.json();data=d.result?.list?.[0];timestamp=d.time;if(d.retCode!==0||!data)throw new Error(d.retMsg||'no_ticker');
-          data={c:data.lastPrice,P:toNum(data.price24hPcnt)*100,q:data.turnover24h,h:data.highPrice24h,l:data.lowPrice24h};
+          category = marketType === 'spot' ? 'spot' : 'linear';
+          tickerUrl = 'https://api.bybit.com/v5/market/tickers?category=' + category + '&symbol=' + symbol;
+          bookUrl = 'https://api.bybit.com/v5/market/orderbook?category=' + category + '&symbol=' + symbol + '&limit=50';
+          candleUrl = 'https://api.bybit.com/v5/market/kline?category=' + category + '&symbol=' + symbol + '&interval=1&limit=3';
         } else {
-          const instId=symbol.endsWith('USDT')?symbol.slice(0,-4)+'-USDT'+(marketType==='perpetual'?'-SWAP':''):symbol;
-          const r=await fetchImpl('https://www.okx.com/api/v5/market/ticker?instId='+encodeURIComponent(instId),{signal:AbortSignal.timeout(7000)});if(!r.ok)throw new Error('HTTP '+r.status);
-          const d=await r.json(),x=d.data?.[0];if(d.code!=='0'||!x)throw new Error(d.msg||'no_ticker');
-          data={c:x.last,P:toNum(x.open24h)>0?(Number(x.last)/Number(x.open24h)-1)*100:0,q:x.volCcy24h,h:x.high24h,l:x.low24h};timestamp=x.ts;
+          instId = symbol.endsWith('USDT') ? symbol.slice(0,-4) + '-USDT' + (marketType === 'perpetual' ? '-SWAP' : '') : symbol;
+          tickerUrl = 'https://www.okx.com/api/v5/market/ticker?instId=' + encodeURIComponent(instId);
+          bookUrl = 'https://www.okx.com/api/v5/market/books?instId=' + encodeURIComponent(instId) + '&sz=20';
+          candleUrl = 'https://www.okx.com/api/v5/market/candles?instId=' + encodeURIComponent(instId) + '&bar=1m&limit=3';
         }
-        quoteEvent(exchange,marketType,symbol,{price:toNum(data.c),changePct:toNum(data.P),quoteVolume24h:toNum(data.q),high24h:toNum(data.h),low24h:toNum(data.l),quoteMode:'REST fallback'},timestamp);
-      } catch (e) { stats.errors++; }
+        const get = async url => {
+          const response = await fetchImpl(url, { signal: AbortSignal.timeout(8000), headers: { accept: 'application/json' } });
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          return response.json();
+        };
+        const results = await Promise.allSettled([get(tickerUrl), get(bookUrl), get(candleUrl)]);
+        if (results[0].status === 'fulfilled') {
+          const raw = results[0].value;
+          let d, timestamp;
+          if (exchange === 'Binance') { d = raw; timestamp = d.closeTime; }
+          else if (exchange === 'Bybit') { if (raw.retCode !== 0) throw new Error(raw.retMsg || 'Bybit ticker error'); d = raw.result?.list?.[0]; timestamp = raw.time; }
+          else { if (raw.code !== '0') throw new Error(raw.msg || 'OKX ticker error'); d = raw.data?.[0]; timestamp = d?.ts; }
+          if (d) {
+            const normalized = exchange === 'Binance'
+              ? { price:d.lastPrice, change:d.priceChangePercent, quoteVolume:d.quoteVolume, high:d.highPrice, low:d.lowPrice }
+              : exchange === 'Bybit'
+                ? { price:d.lastPrice, change:toNum(d.price24hPcnt)*100, quoteVolume:d.turnover24h, high:d.highPrice24h, low:d.lowPrice24h }
+                : { price:d.last, change:toNum(d.open24h)>0?(Number(d.last)/Number(d.open24h)-1)*100:0, quoteVolume:d.volCcy24h, high:d.high24h, low:d.low24h };
+            quoteEvent(exchange,marketType,symbol,{price:toNum(normalized.price),changePct:toNum(normalized.change),quoteVolume24h:toNum(normalized.quoteVolume),high24h:toNum(normalized.high),low24h:toNum(normalized.low),quoteMode:'REST fallback'},timestamp);
+          }
+        } else stats.errors++;
+        if (results[1].status === 'fulfilled') {
+          const raw = results[1].value;
+          if (exchange === 'Binance') updateBook(exchange,marketType,symbol,raw.bids||[],raw.asks||[],raw.lastUpdateId||now(),'snapshot');
+          else if (exchange === 'Bybit') {
+            if (raw.retCode !== 0) throw new Error(raw.retMsg || 'Bybit orderbook error');
+            updateBook(exchange,marketType,symbol,raw.result?.b||[],raw.result?.a||[],raw.time||now(),'snapshot');
+          } else {
+            if (raw.code !== '0') throw new Error(raw.msg || 'OKX orderbook error');
+            const row = raw.data?.[0]; if (row) updateBook(exchange,marketType,symbol,row.bids||[],row.asks||[],row.ts||now(),'snapshot');
+          }
+        } else stats.errors++;
+        if (results[2].status === 'fulfilled') {
+          const raw = results[2].value;
+          let candles = [];
+          if (exchange === 'Binance') candles = (raw||[]).filter(x=>Number(x[6]) < now()-1000).map(x=>({ts:Number(x[6]),open:x[1],high:x[2],low:x[3],close:x[4],baseVolume:x[5],quoteVolume:x[7]}));
+          else if (exchange === 'Bybit') {
+            if (raw.retCode !== 0) throw new Error(raw.retMsg || 'Bybit kline error');
+            candles = (raw.result?.list||[]).filter(x=>Number(x[0])+60000 < now()-1000).map(x=>({ts:Number(x[0])+59999,open:x[1],high:x[2],low:x[3],close:x[4],baseVolume:x[5],quoteVolume:x[6]}));
+          } else {
+            if (raw.code !== '0') throw new Error(raw.msg || 'OKX candles error');
+            candles = (raw.data||[]).filter(x=>String(x[8])==='1'||Number(x[0])+60000<now()-1000).map(x=>({ts:Number(x[0])+59999,open:x[1],high:x[2],low:x[3],close:x[4],baseVolume:x[5],quoteVolume:x[7]}));
+          }
+          for (const candle of candles) handleCandle(exchange,marketType,symbol,{...candle,closed:true},candle.ts);
+        } else stats.errors++;
+      })());
     }
+    await Promise.allSettled(jobs);
   }
   function start() {
     if (started) return status();
