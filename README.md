@@ -142,3 +142,5 @@ API Key 僅放後端環境變數；不要提交 .env、Token、券商帳密或�
 ## ANT Ant Colony 全球推廣計畫
 
 ANT 專案的全球自然流量推廣執行計畫已整理於 [ANT Global Growth Plan](./docs/ANT_GLOBAL_GROWTH_PLAN.md)。計畫目標為 10,000 名真實社群會員，採零成本自然流量、科技型品牌定位，包含 90 天執行節奏、內容日曆、社群治理、反詐騙規範、成效指標與公開銷售前置門檻。此文件是執行計畫，不代表社群帳號已建立、活動已發布或會員目標已達成。
+
+- [ANT Creator Revenue & Fair-Launch Policy](./docs/ANT_CREATOR_REVENUE_POLICY.md)：5% 平台佣金、創造者收入、財庫分流、反狙擊公平發行規範與公開銷售前驗收門檻。此為規格文件，不代表銷售已上線。
