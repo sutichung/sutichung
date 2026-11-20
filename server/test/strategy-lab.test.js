@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {runStrategyLab,validateCandles,inferAnnualization}=require('../lib/strategy-lab');
+const {runStrategyLab,validateCandles,validateResearchHistory,inferAnnualization}=require('../lib/strategy-lab');
 const {dailyTrendMap,runMtfStrategy}=require('../lib/mtf-structure-strategy');
 
 function candles(n=240,mode='trend'){
@@ -14,10 +14,28 @@ function candles(n=240,mode='trend'){
 }
 
 test('strategy lab rejects insufficient or malformed OHLCV instead of inventing metrics',()=>{
- assert.equal(runStrategyLab(candles(80)).status,'insufficient_data');
+ assert.equal(runStrategyLab(candles(80),{market:'tw-stock'}).status,'insufficient_data');
  const bad=candles();bad[10].high=1;
  assert.equal(validateCandles(bad).ok,false);
- assert.equal(runStrategyLab(bad).status,'insufficient_data');
+ assert.equal(runStrategyLab(bad,{market:'tw-stock'}).status,'insufficient_data');
+});
+
+
+test('strategy lab requires one exact supported market value',()=>{
+ assert.equal(runStrategyLab(candles(),{}).status,'invalid_market');
+ for(const market of ['TW-STOCK','US','stocks','crypto-futures','']) assert.equal(runStrategyLab(candles(),{market}).status,'invalid_market');
+ for(const market of ['tw-stock','us-stock','crypto']) assert.equal(runStrategyLab(candles(),{market}).status,'ok');
+});
+
+test('research history fails closed on upstream errors, stale timestamps, unknown sources and insufficient candles',()=>{
+ const valid={data:candles(140),source:'official test fixture',asOf:new Date().toISOString()};
+ assert.equal(validateResearchHistory(valid,'tw-stock').ok,true);
+ assert.equal(validateResearchHistory({...valid,error:'upstream timeout'},'tw-stock').status,'upstream_unavailable');
+ assert.equal(validateResearchHistory({...valid,source:'unavailable'},'tw-stock').status,'upstream_unavailable');
+ assert.equal(validateResearchHistory({...valid,data:candles(100)},'tw-stock').status,'insufficient_data');
+ assert.equal(validateResearchHistory({...valid,asOf:'2000-01-01T00:00:00Z'},'tw-stock').status,'stale_data');
+ assert.equal(validateResearchHistory(valid,'crypto',{now:Date.now(),interval:'4h'}).ok,true);
+ assert.equal(validateResearchHistory({...valid,asOf:new Date(Date.now()+10*60*1000).toISOString()},'tw-stock').status,'invalid_data');
 });
 
 test('strategy lab produces separate in-sample and out-of-sample results with explicit costs',()=>{
