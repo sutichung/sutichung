@@ -11,8 +11,8 @@ const { applyFirewall, getTelemetry } = require('./lib/firewall');
 const antColony = require('./lib/ant-colony');
 const { loadMarket: loadUsMarket, getChart: getUsChart, searchSymbols: searchUsSymbols, getUniversePage: getUsUniversePage } = require('./lib/us-market');
 const cryptoMarket = require('./lib/crypto-market');
-const cryptoRealtime = require('./lib/crypto-realtime');
-const cryptoRealtimeFeed = cryptoRealtime.createDefaultCryptoRealtimeFeed();
+const cryptoRealtime = require('./lib/crypto-stream-engine');
+const cryptoRealtimeFeed = cryptoRealtime.createDefaultCryptoStreamEngine();
 const cryptoMicrostructure = require('./lib/crypto-microstructure');
 const { assessMarketRisk } = require('./lib/market-risk');
 const { loadRiskHistory, loadFreshMicrostructure } = require('./lib/crypto-risk-fallback');
@@ -1149,5 +1149,5 @@ server.listen(PORT,()=>{
   cryptoRealtimeFeed.start();
   process.stdout.write('Taiwan stock API listening on '+PORT+'\\n');
 });
-process.once('SIGTERM',()=>{cryptoRealtimeFeed.stop();server.close(()=>process.exit(0));});
-process.once('SIGINT',()=>{cryptoRealtimeFeed.stop();server.close(()=>process.exit(0));});
+process.once('SIGTERM',()=>{cryptoRealtimeFeed.stop().finally(()=>server.close(()=>process.exit(0)));});
+process.once('SIGINT',()=>{cryptoRealtimeFeed.stop().finally(()=>server.close(()=>process.exit(0)));});
