@@ -53,7 +53,7 @@ class CryptoLiveScorer {
     const bid = Number(event.bid);
     const ask = Number(event.ask);
     const changePct = Number(event.changePct);
-    const quoteVolume = Number(event.quoteVolume);
+    const quoteVolume = Number(event.intervalQuoteVolume);
     const sample = {
       timestamp, last,
       quoteVolume: finitePositive(quoteVolume) ? quoteVolume : null
@@ -107,7 +107,7 @@ class CryptoLiveScorer {
       volumeMultiple = sample.quoteVolume / baselineVolume;
       if (volumeMultiple >= this.options.volumeSpikeMultiple) {
         score += 0.8;
-        reasons.push('報價成交額達近期中位數 ' + volumeMultiple.toFixed(2) + ' 倍');
+        reasons.push('單根已完成 K 線成交額達近期中位數 ' + volumeMultiple.toFixed(2) + ' 倍');
       }
     }
 
