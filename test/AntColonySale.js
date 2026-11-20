@@ -17,6 +17,21 @@ describe("AntColonySale", function () {
     return { admin, buyer, proceeds, fee, usdt, ant, oracle, sale };
   }
 
+
+  it("rejects non-18-decimal ANT and colliding fee/treasury recipients", async function () {
+    const [, , proceeds, fee] = await ethers.getSigners();
+    const Mock = await ethers.getContractFactory("MockERC20");
+    const usdt = await Mock.deploy("Mock USDT", "USDT", 6);
+    const wrongAnt = await Mock.deploy("Wrong ANT", "WANT", 6);
+    const oracle = await (await ethers.getContractFactory("MockAntUsdtOracle")).deploy(10n ** 8n);
+    const Sale = await ethers.getContractFactory("AntColonySale");
+    await expect(Sale.deploy(await usdt.getAddress(), await wrongAnt.getAddress(), await oracle.getAddress(), fee.address, proceeds.address, 3600))
+      .to.be.revertedWithCustomError(Sale, "InvalidAntDecimals");
+    const ant = await Mock.deploy("Ant Colony", "ANT", 18);
+    await expect(Sale.deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), fee.address, fee.address, 3600))
+      .to.be.revertedWithCustomError(Sale, "RecipientCollision");
+  });
+
   it("splits 100 USDT into 5 fee and 95 proceeds, delivering 95 ANT at $1", async function () {
     const { buyer, proceeds, fee, usdt, ant, sale } = await setup();
     await expect(sale.connect(buyer).buy(ethers.parseUnits("100", 18), ethers.parseUnits("95", 18))).to.emit(sale, "AntPurchased");
