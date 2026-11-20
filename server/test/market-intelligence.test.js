@@ -17,3 +17,15 @@ test('whale data is explicitly unavailable without a configured licensed provide
  delete process.env.WHALE_ALERT_API_URL;delete process.env.WHALE_ALERT_API_KEY;
  try {const out=await loadWhales();assert.equal(out.status,'not_configured');assert.deepEqual(out.items,[]);} finally {if(oldUrl!==undefined)process.env.WHALE_ALERT_API_URL=oldUrl;if(oldKey!==undefined)process.env.WHALE_ALERT_API_KEY=oldKey;}
 });
+
+test('Taiwan CBC macro source parser retains official rows and source identity',async()=>{
+ const old=global.fetch, oldKey=process.env.FRED_API_KEY;
+ delete process.env.FRED_API_KEY;
+ global.fetch=async url=>({ok:true,status:200,json:async()=>String(url).includes('worldbank')?[]:{data:{dataSets:[[['2026-01',32.1],['2026-02',32.2]]]}}});
+ try {
+   const {loadMacroOfficial}=require('../lib/market-intelligence');
+   const out=await loadMacroOfficial();
+   assert.equal(out.sources.find(x=>x.id==='taiwan-cbc').status,'connected');
+   assert.ok(out.data.some(x=>x.country==='TWN'&&x.indicator==='BP01D01'&&x.value===32.1));
+ } finally {global.fetch=old;if(oldKey!==undefined)process.env.FRED_API_KEY=oldKey;}
+});

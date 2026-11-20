@@ -6,7 +6,7 @@
 - **Public social signals:** Reddit r/CryptoCurrency and r/investing plus public Bluesky search API. This is platform-limited public content, not a representative poll, not a measure of the whole population, and not a personal-psychology assessment. X/Twitter and some other platforms require paid/authorized API access and are not scraped around access controls.
 - **Order books:** Binance, OKX, Kraken and Coinbase Exchange public REST depth snapshots. These are per-venue snapshots, not a consolidated order book or executed trades. REST snapshots are not WebSocket streaming.
 - **On-chain whale transfers:** disabled until an authorized provider URL and key are configured. Blockchain explorers alone do not reliably identify whale owners; unknown wallets remain unknown and transfer direction remains unknown.
-- **Macro/central banks:** World Bank public country indicators; FRED observations when FRED_API_KEY is configured. The central-bank policy/news feeds above are source documents, not numeric time series. More country-specific numeric series can be added only against each central bank's documented public API and terms.
+- **Macro/central banks:** World Bank public country indicators; Taiwan Central Bank Statistical Database API (exchange rates, central-bank rates, money/financial indicators, FX and balance-of-payments series); FRED observations when FRED_API_KEY is configured. The central-bank policy/news feeds above are source documents, not numeric time series. More country-specific numeric series can be added only against each central bank's documented public API and terms.
 
 ## Runtime
 
