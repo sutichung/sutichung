@@ -112,11 +112,14 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
         const issuedAt = new Date().toISOString();
         const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
         const message = buildWalletMessage({ domain, wallet: normalized, nonce, issuedAt, expiresAt });
-        await db('ant_wallet_nonces', { method: 'POST', body: {
+        const saved = await db('ant_wallet_nonces', { method: 'POST', body: {
           user_id: user.id, chain_id: CHAIN_ID, wallet_address: normalized.toLowerCase(),
           nonce, domain, issued_at: issuedAt, expires_at: expiresAt
-        }, prefer: 'return=minimal' });
-        json(res, 201, { nonce, message, expiresAt, chainId: CHAIN_ID });
+        } });
+        const stored = saved[0];
+        if (!stored) throw new Error('wallet_nonce_persistence_failed');
+        const canonicalMessage = buildWalletMessage({ domain, wallet: normalized, nonce, issuedAt: stored.issued_at, expiresAt: stored.expires_at });
+        json(res, 201, { nonce, message: canonicalMessage, expiresAt: stored.expires_at, chainId: CHAIN_ID });
       } catch (error) { json(res, error.status || 503, { error: error.message }); }
       return true;
     }
