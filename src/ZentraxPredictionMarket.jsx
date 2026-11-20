@@ -67,8 +67,8 @@ export default function ZentraxPredictionMarket() {
         <div style={{display:'flex',justifyContent:'space-between',gap:8}}><b>{m.title}</b><span style={{fontSize:10,color:'#86efac',whiteSpace:'nowrap'}}>開放中</span></div>
         <div style={{display:'flex',gap:14,flexWrap:'wrap',marginTop:10,fontSize:11,color:'#b8b1a2'}}><span>參考價：{fmt(m.reference_price,2)} USDT</span><span>目標：{fmt(m.strike_price,2)} USDT</span></div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:12}}>
-          <div style={{background:'#13271d',border:'1px solid #285d40',borderRadius:9,padding:10}}><small style={{color:'#86efac'}}>YES 機率</small><div style={{fontSize:23,fontWeight:900,color:'#86efac'}}>{fmt(Number(m.yesPrice)*100,1)}%</div></div>
-          <div style={{background:'#2c1b1d',border:'1px solid #63343a',borderRadius:9,padding:10}}><small style={{color:'#fda4af'}}>NO 機率</small><div style={{fontSize:23,fontWeight:900,color:'#fda4af'}}>{fmt(Number(m.noPrice)*100,1)}%</div></div>
+          <div style={{background:'#13271d',border:'1px solid #285d40',borderRadius:9,padding:10}}><small style={{color:'#86efac'}}>YES 參考價</small><div style={{fontSize:23,fontWeight:900,color:'#86efac'}}>{fmt(Number(m.yesPrice)*100,1)}%</div></div>
+          <div style={{background:'#2c1b1d',border:'1px solid #63343a',borderRadius:9,padding:10}}><small style={{color:'#fda4af'}}>NO 參考價</small><div style={{fontSize:23,fontWeight:900,color:'#fda4af'}}>{fmt(Number(m.noPrice)*100,1)}%</div></div>
         </div>
         <div style={{...styles.muted,marginTop:9}}>截止：{new Date(m.close_at).toLocaleString('zh-TW',{timeZone:'UTC'})} UTC · YES 池 {fmt(m.yes_pool,2)} · NO 池 {fmt(m.no_pool,2)}</div>
         <div style={{display:'flex',gap:7,alignItems:'center',marginTop:10,flexWrap:'wrap'}}>
