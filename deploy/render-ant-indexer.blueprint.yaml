@@ -1,0 +1,40 @@
+services:
+  - type: worker
+    name: ant-bsc-testnet-indexer
+    runtime: docker
+    plan: starter
+    region: oregon
+    dockerContext: .
+    dockerfilePath: ./Dockerfile
+    dockerCommand: node server/jobs/ant-chain-indexer.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: BSC_TESTNET_RPC_URL
+        sync: false
+      - key: BSC_TESTNET_RPC_URL_SECONDARY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: ANT_SALE_CONTRACT
+        sync: false
+      - key: ANT_USDT_CONTRACT
+        sync: false
+      - key: ANT_TOKEN_CONTRACT
+        sync: false
+      - key: ANT_FEE_WALLET
+        sync: false
+      - key: ANT_TREASURY_WALLET
+        sync: false
+      - key: ANT_USDT_DECIMALS
+        value: "18"
+      - key: ANT_INDEXER_START_BLOCK
+        sync: false
+      - key: ANT_INDEXER_CONFIRMATIONS
+        value: "12"
+      - key: ANT_INDEXER_BLOCK_RANGE
+        value: "500"
+      - key: ANT_INDEXER_POLL_MS
+        value: "15000"
