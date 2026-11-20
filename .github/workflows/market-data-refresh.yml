@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 6
     concurrency:
-      group: market-quote-refresh
+      group: market-quote-refresh-${{ github.event.schedule || 'manual' }}
       cancel-in-progress: false
     steps:
       - name: Refresh Taiwan, crypto and US quote snapshots independently
