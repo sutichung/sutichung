@@ -2,38 +2,38 @@ name: Market data refresh
 
 on:
   schedule:
-    # Five staggered worker slots: one fresh runner is scheduled each minute.
-    # GitHub may delay scheduled events; this is not a hard real-time guarantee.
+    # Five staggered workers provide best-effort quote refresh slots across each minute.
+    # GitHub scheduled events can be delayed or dropped; this is not hard real-time.
     - cron: "0-59/5 * * * *"
     - cron: "1-59/5 * * * *"
     - cron: "2-59/5 * * * *"
     - cron: "3-59/5 * * * *"
     - cron: "4-59/5 * * * *"
+    # Heavy technical scan runs separately every 15 minutes.
+    - cron: "0,15,30,45 * * * *"
   workflow_dispatch:
 
 permissions:
   contents: read
   id-token: write
 
-concurrency:
-  # Keep the five offset schedules independent; a shared group would coalesce pending runs.
-  group: market-data-refresh-${{ github.event.schedule || 'manual' }}
-  cancel-in-progress: false
-
 jobs:
-  refresh:
+  refresh-quotes:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 6
+    concurrency:
+      group: market-quote-refresh
+      cancel-in-progress: false
     steps:
-      - name: Rotating worker refreshes all market feeds and verifies results
+      - name: Refresh Taiwan, crypto and US quote snapshots independently
         env:
           MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
           WORKER_SLOT: ${{ github.event.schedule || 'manual' }}
         shell: bash
         run: |
           set -uo pipefail
-          echo "=== rotating market worker slot: $WORKER_SLOT at $(date -u +%FT%TZ) ==="
-          rm -f /tmp/tw-market.json /tmp/tw-scan.json /tmp/crypto-market.json /tmp/us-market.json
+          echo "=== quote refresh worker: $WORKER_SLOT at $(date -u +%FT%TZ) ==="
+          rm -f /tmp/tw-market.json /tmp/crypto-market.json /tmp/us-market.json
 
           OIDC_TOKEN=$(curl --fail --silent --show-error --get \
             --data-urlencode "audience=taiwan-stock-hunter-automation" \
@@ -46,11 +46,10 @@ jobs:
           echo "::add-mask::$OIDC_TOKEN"
           AUTH_HEADER="Authorization: Bearer $OIDC_TOKEN"
 
-          # Retry transient network/server failures; each market remains independent.
           request_with_retry() {
             local url="$1" output="$2" attempt
             for attempt in 1 2 3; do
-              if curl --fail --silent --show-error --connect-timeout 10 --max-time 75 \
+              if curl --fail --silent --show-error --connect-timeout 10 --max-time 60 \
                 -H "$AUTH_HEADER" "$url" -o "$output"; then
                 return 0
               fi
@@ -62,44 +61,108 @@ jobs:
 
           request_with_retry "$MARKET_APP_URL/api/market/snapshot" /tmp/tw-market.json &
           TW_PID=$!
-          request_with_retry "$MARKET_APP_URL/api/market/scan" /tmp/tw-scan.json &
-          SCAN_PID=$!
           request_with_retry "$MARKET_APP_URL/api/crypto/market" /tmp/crypto-market.json &
           CRYPTO_PID=$!
           request_with_retry "$MARKET_APP_URL/api/us/market" /tmp/us-market.json &
           US_PID=$!
 
-          TW_OK=0; SCAN_OK=0; CRYPTO_OK=0; US_OK=0
+          TW_OK=0; CRYPTO_OK=0; US_OK=0
           wait "$TW_PID" && TW_OK=1 || echo "::error::Taiwan quote worker failed"
-          wait "$SCAN_PID" && SCAN_OK=1 || echo "::error::Taiwan technical-analysis worker failed"
-          wait "$CRYPTO_PID" && CRYPTO_OK=1 || echo "::warning::Crypto feed unavailable"
-          wait "$US_PID" && US_OK=1 || echo "::warning::US market feed unavailable"
+          wait "$CRYPTO_PID" && CRYPTO_OK=1 || echo "::warning::Crypto feed request failed"
+          wait "$US_PID" && US_OK=1 || echo "::warning::US feed request failed"
 
-          TW_OK="$TW_OK" SCAN_OK="$SCAN_OK" CRYPTO_OK="$CRYPTO_OK" US_OK="$US_OK" node - <<'NODE'
+          TW_OK="$TW_OK" CRYPTO_OK="$CRYPTO_OK" US_OK="$US_OK" node - <<'NODE'
           const fs = require('node:fs');
           function read(path) {
             try { return JSON.parse(fs.readFileSync(path, 'utf8')); }
             catch (error) { return { error: error.message }; }
           }
           const tw = read('/tmp/tw-market.json');
-          const scan = read('/tmp/tw-scan.json');
           const crypto = read('/tmp/crypto-market.json');
           const us = read('/tmp/us-market.json');
           const twCount = Number(tw.quoteCount ?? Object.keys(tw.data || {}).length);
-          const scanCount = Number(scan.scannedCount ?? Object.keys(scan.data || {}).length);
           const cryptoCount = Array.isArray(crypto.markets) ? crypto.markets.length : 0;
           const usCount = Object.keys(us.data || {}).length;
           const result = {
-            worker: process.env.WORKER_SLOT || 'scheduled',
+            worker: process.env.WORKER_SLOT || 'manual',
             generatedAt: new Date().toISOString(),
-            taiwan: { requestOk: process.env.TW_OK === '1', count: twCount, source: tw.source || null, dataMode: tw.dataMode || null, asOf: tw.timestamp || null, error: tw.error || null },
-            taiwanTechnicalScan: { requestOk: process.env.SCAN_OK === '1', count: scanCount, source: scan.source || null, historyAsOf: scan.historyAsOf || null, error: scan.error || null },
-            crypto: { requestOk: process.env.CRYPTO_OK === '1', count: cryptoCount, status: crypto.status || null, licenseRequiredProviders: crypto.licenseRequiredProviders || [], error: crypto.error || null },
-            us: { requestOk: process.env.US_OK === '1', count: usCount, source: us.source || null, timestamp: us.timestamp || null, error: us.error || null }
+            taiwan: {
+              requestOk: process.env.TW_OK === '1',
+              count: twCount,
+              markets: tw.markets || tw.coverage || null,
+              source: tw.source || null,
+              dataMode: tw.dataMode || null,
+              asOf: tw.timestamp || null,
+              error: tw.error || null
+            },
+            crypto: {
+              requestOk: process.env.CRYPTO_OK === '1',
+              count: cryptoCount,
+              status: crypto.status || null,
+              licenseRequiredProviders: crypto.licenseRequiredProviders || [],
+              error: crypto.error || null
+            },
+            us: {
+              requestOk: process.env.US_OK === '1',
+              count: usCount,
+              source: us.source || null,
+              timestamp: us.timestamp || null,
+              error: us.error || null
+            }
           };
           console.log(JSON.stringify(result, null, 2));
-          if (!result.taiwan.requestOk || twCount < 1) throw new Error('No valid Taiwan daily quotes');
-          if (!result.taiwanTechnicalScan.requestOk || scanCount < 1) throw new Error('Taiwan technical scan returned no symbols');
-          if (!result.us.requestOk || usCount < 1) console.warn('US watchlist unavailable in this worker cycle');
-          if (cryptoCount < 1) console.warn('Crypto data remains gated pending display/redistribution rights; no license gate bypassed.');
+          if (!result.taiwan.requestOk || twCount < 1) throw new Error('No valid Taiwan official daily quotes');
+          if (!result.crypto.requestOk && crypto.status !== 'license_required') console.warn('Crypto snapshot unavailable; license gate remains enabled.');
+          if (cryptoCount < 1 && crypto.status === 'license_required') console.warn('Crypto quotes are blocked pending provider display/redistribution rights; no license gate bypassed.');
+          if (!result.us.requestOk || usCount < 1) console.warn('US watchlist unavailable in this refresh; any Yahoo data remains explicitly non-official.');
+          NODE
+
+  technical-scan:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0,15,30,45 * * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: market-technical-scan
+      cancel-in-progress: false
+    steps:
+      - name: Refresh and validate the slower Taiwan technical scan
+        env:
+          MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== technical scan worker at $(date -u +%FT%TZ) ==="
+          OIDC_TOKEN=$(curl --fail --silent --show-error --get \
+            --data-urlencode "audience=taiwan-stock-hunter-automation" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL" \
+            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r '.value')
+          test -n "$OIDC_TOKEN" && test "$OIDC_TOKEN" != "null"
+          echo "::add-mask::$OIDC_TOKEN"
+          AUTH_HEADER="Authorization: Bearer $OIDC_TOKEN"
+
+          for attempt in 1 2; do
+            if curl --fail --silent --show-error --connect-timeout 10 --max-time 240 \
+              -H "$AUTH_HEADER" "$MARKET_APP_URL/api/market/scan" -o /tmp/tw-scan.json; then
+              break
+            fi
+            if [ "$attempt" -eq 2 ]; then
+              echo "::error::Taiwan technical scan failed after retry"
+              exit 1
+            fi
+            echo "::warning::Technical scan timed out or failed; retrying once"
+            sleep 10
+          done
+
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const scan = JSON.parse(fs.readFileSync('/tmp/tw-scan.json', 'utf8'));
+          const count = Number(scan.scannedCount ?? Object.keys(scan.data || {}).length);
+          console.log(JSON.stringify({
+            generatedAt: new Date().toISOString(),
+            count,
+            source: scan.source || null,
+            historyAsOf: scan.historyAsOf || null,
+            error: scan.error || null
+          }, null, 2));
+          if (count < 1 || scan.error) throw new Error('Taiwan technical scan returned no validated symbols');
           NODE
