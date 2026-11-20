@@ -20,7 +20,7 @@ function createCryptoStreamEngine(options = {}) {
   const staleMs = Number(options.staleMs || process.env.CRYPTO_WS_STALE_MS) || 30000;
   const storage = options.storage || createCryptoEventStorage();
   const scorer = new CryptoLiveScorer({ maxAgeMs: staleMs });
-  const sockets = new Map(), timers = new Set(), quotes = new Map(), books = new Map(), funding = new Map();
+  const sockets = new Map(), timers = new Set(), quotes = new Map(), books = new Map(), depthBooks = new Map(), funding = new Map();
   const buckets = new Map(), alertCooldown = new Map(), stats = { messages: 0, reconnects: 0, errors: 0, persistedEvents: 0, persistErrors: 0, alerts: 0 };
   let started = false, stopping = false, flushTimer = null, fundingTimer = null, statusTimer = null, lastPersistAt = null;
   const startedAt = new Date(now()).toISOString();
@@ -30,6 +30,7 @@ function createCryptoStreamEngine(options = {}) {
     return suffix ? { baseAsset: symbol.slice(0, -suffix.length), quoteAsset: suffix } : { baseAsset: symbol, quoteAsset: null };
   };
   function emit(exchange, marketType, symbol, eventType, payload, sourceTimestamp) {
+    if (!storage.configured) return;
     const timestamp = iso(sourceTimestamp) || new Date(now()).toISOString();
     const minute = timestamp.slice(0, 16);
     const id = key(exchange, marketType, symbol) + ':' + minute;
@@ -56,7 +57,7 @@ function createCryptoStreamEngine(options = {}) {
     }
   }
   function maybeAlert(quote, score) {
-    if (score.score < Number(process.env.CRYPTO_ALERT_SCORE || 2.0)) return;
+    if (!quote || now() - (quote.receivedAtMs || 0) > staleMs || score.score < Number(process.env.CRYPTO_ALERT_SCORE || 2.0)) return;
     const k = key(quote.exchange, quote.marketType, quote.symbol);
     const prior = alertCooldown.get(k) || 0;
     if (now() - prior < (Number(process.env.CRYPTO_ALERT_COOLDOWN_MS) || 900000)) return;
@@ -76,18 +77,31 @@ function createCryptoStreamEngine(options = {}) {
     });
     if (!response.ok) throw new Error('telegram_http_' + response.status);
   }
-  function updateBook(exchange, marketType, symbol, bids, asks, sourceTimestamp) {
-    const bestBid = Array.isArray(bids) && bids.length ? toNum(Array.isArray(bids[0]) ? bids[0][0] : bids[0].price) : null;
-    const bestAsk = Array.isArray(asks) && asks.length ? toNum(Array.isArray(asks[0]) ? asks[0][0] : asks[0].price) : null;
-    const bidQty = Array.isArray(bids) ? bids.slice(0, 20).reduce((s,x)=>s+(toNum(Array.isArray(x)?x[1]:x.size)||0),0) : 0;
-    const askQty = Array.isArray(asks) ? asks.slice(0, 20).reduce((s,x)=>s+(toNum(Array.isArray(x)?x[1]:x.size)||0),0) : 0;
-    const total = bidQty + askQty;
-    const imbalance = total > 0 ? (bidQty - askQty) / total : null;
-    const book = { bestBid, bestAsk, bidQty, askQty, imbalance, spreadBps: bestBid > 0 && bestAsk >= bestBid ? (bestAsk-bestBid)/((bestAsk+bestBid)/2)*10000 : null };
-    books.set(key(exchange, marketType, symbol), book);
-    const q = quotes.get(key(exchange, marketType, symbol));
+  function updateBook(exchange, marketType, symbol, bids, asks, sourceTimestamp, mode = 'snapshot') {
+    const id = key(exchange, marketType, symbol);
+    let depth = depthBooks.get(id);
+    if (!depth || mode === 'snapshot') depth = { bids: new Map(), asks: new Map() };
+    const apply = (target, rows) => {
+      for (const row of rows || []) {
+        const price = toNum(Array.isArray(row) ? row[0] : row.price);
+        const size = toNum(Array.isArray(row) ? row[1] : row.size);
+        if (!(price > 0) || size === null) continue;
+        if (size <= 0) target.delete(price); else target.set(price, size);
+      }
+    };
+    apply(depth.bids, bids); apply(depth.asks, asks);
+    depthBooks.set(id, depth);
+    const bidRows = [...depth.bids.entries()].sort((a,b)=>b[0]-a[0]).slice(0,20);
+    const askRows = [...depth.asks.entries()].sort((a,b)=>a[0]-b[0]).slice(0,20);
+    const bestBid = bidRows[0]?.[0] ?? null, bestAsk = askRows[0]?.[0] ?? null;
+    const bidQty = bidRows.reduce((s,x)=>s+x[1],0), askQty = askRows.reduce((s,x)=>s+x[1],0);
+    const total = bidQty + askQty, imbalance = total > 0 ? (bidQty - askQty) / total : null;
+    const book = { bestBid, bestAsk, bidQty, askQty, imbalance, spreadBps: bestBid > 0 && bestAsk >= bestBid ? (bestAsk-bestBid)/((bestAsk+bestBid)/2)*10000 : null, depthLevels: bidRows.length + askRows.length, updateMode: mode };
+    books.set(id, book);
+    const q = quotes.get(id);
     if (q) { q.bid = bestBid; q.ask = bestAsk; }
     emit(exchange, marketType, symbol, 'orderbook_summary', book, sourceTimestamp);
+    if (q && Math.abs(imbalance || 0) >= 0.8) maybeAlert(q, { eligible: true, score: 2.1, reasons: ['前 20 檔委託量失衡 ' + (imbalance * 100).toFixed(1) + '%'] });
   }
   function handleTrade(exchange, marketType, symbol, trade, timestamp) {
     const price = toNum(trade.price), size = toNum(trade.size);
@@ -153,7 +167,7 @@ function createCryptoStreamEngine(options = {}) {
         quoteEvent(exchange, marketType, symbol, { price: toNum(d.lastPrice), bid: toNum(d.bid1Price), ask: toNum(d.ask1Price), changePct: toNum(d.price24hPcnt) === null ? null : toNum(d.price24hPcnt) * 100, quoteVolume24h: toNum(d.turnover24h) }, ts);
       } else if (type === 'orderbook') {
         const d = data;
-        updateBook(exchange, marketType, symbol, d.b || [], d.a || [], ts);
+        updateBook(exchange, marketType, symbol, d.b || [], d.a || [], ts, message.type || 'snapshot');
       } else if (type === 'publicTrade') {
         for (const x of data) handleTrade(exchange, marketType, symbol, { price: x.p, size: x.v, side: x.S }, x.T || ts);
       } else if (type === 'kline') {
