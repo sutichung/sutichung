@@ -13,7 +13,7 @@ const iface = new ethers.Interface(EVENT_ABI);
 const transferIface = new ethers.Interface(['event Transfer(address indexed from,address indexed to,uint256 value)']);
 const SALE_CONFIG_ABI = ['function usdt() view returns (address)', 'function ant() view returns (address)', 'function feeRecipient() view returns (address)', 'function proceedsRecipient() view returns (address)'];
 const topic = iface.getEvent('AntPurchased').topicHash;
-const transferIface = new ethers.Interface(['event Transfer(address indexed from,address indexed to,uint256 value)']);
+
 
 
 function required(name) {
@@ -60,30 +60,6 @@ async function db(cfg, table, { method = 'GET', query = '', body, prefer } = {})
   try { data = raw ? JSON.parse(raw) : []; } catch (_) { throw new Error('supabase_invalid_json_' + table); }
   if (!response.ok) throw new Error('supabase_' + response.status + '_' + table + ':' + raw.slice(0, 300));
   return data;
-}
-function verifyTransferLogs(receipt, cfg, event) {
-  const transfers = [];
-  for (const log of receipt.logs || []) {
-    if (![cfg.usdt.toLowerCase(), cfg.ant.toLowerCase()].includes(String(log.address).toLowerCase())) continue;
-    try {
-      const parsed = transferIface.parseLog({ topics: log.topics, data: log.data });
-      if (parsed) transfers.push({
-        token: String(log.address).toLowerCase(),
-        from: parsed.args.from.toLowerCase(), to: parsed.args.to.toLowerCase(),
-        value: parsed.args.value.toString()
-      });
-    } catch (_) { /* unrelated token log */ }
-  }
-  const has = (token, from, to, amount) => transfers.some(x =>
-    x.token === token.toLowerCase() && x.from === from.toLowerCase() &&
-    x.to === to.toLowerCase() && x.value === String(amount)
-  );
-  if (!has(cfg.usdt, event.buyer, cfg.feeWallet, event.feeUsdtRaw) ||
-      !has(cfg.usdt, event.buyer, cfg.treasuryWallet, event.netUsdtRaw) ||
-      !has(cfg.ant, cfg.sale, event.buyer, event.antOutRaw)) {
-    throw new Error('token_transfer_reconciliation_failed');
-  }
-  return true;
 }
 async function verifyContractConfiguration(provider, cfg) {
   const sale = new ethers.Contract(cfg.sale, SALE_CONFIG_ABI, provider);
@@ -212,16 +188,44 @@ async function recordFinalEvent(cfg, providers, log, head) {
   });
   process.stdout.write('ANT order delivered and reconciled: ' + event.idempotencyKey + '\n');
 }
-async function getCheckpoint(cfg) {
-  const rows = await db(cfg, 'ant_indexer_state', { query: 'select=last_block&worker_key=eq.' + WORKER_KEY + '&limit=1' });
-  if (rows.length) return Number(rows[0].last_block);
+async function getCheckpoint(cfg, providers) {
+  const rows = await db(cfg, 'ant_indexer_state', {
+    query: 'select=last_block,last_block_hash&worker_key=eq.' + WORKER_KEY + '&limit=1'
+  });
   const start = Number(required('ANT_INDEXER_START_BLOCK'));
-  if (!Number.isSafeInteger(start) || start < 0) throw new Error('invalid_ANT_INDEXER_START_BLOCK');
-  await db(cfg, 'ant_indexer_state', { method: 'POST', body: { worker_key: WORKER_KEY, chain_id: CHAIN_ID, last_block: start - 1 }, prefer: 'resolution=ignore-duplicates,return=minimal' });
-  return start - 1;
+  if (!Number.isSafeInteger(start) || start < 1) throw new Error('invalid_ANT_INDEXER_START_BLOCK');
+  if (!rows.length) {
+    await db(cfg, 'ant_indexer_state', {
+      method: 'POST',
+      body: { worker_key: WORKER_KEY, chain_id: CHAIN_ID, last_block: start - 1, last_block_hash: null },
+      prefer: 'resolution=ignore-duplicates,return=minimal'
+    });
+    return start - 1;
+  }
+  let lastBlock = Number(rows[0].last_block);
+  const savedHash = rows[0].last_block_hash;
+  if (savedHash && lastBlock >= start) {
+    const [a,b] = await Promise.all([providers[0].getBlock(lastBlock), providers[1].getBlock(lastBlock)]);
+    if (!a || !b || a.hash !== b.hash || a.hash !== savedHash) {
+      lastBlock = Math.max(start - 1, lastBlock - REORG_LOOKBACK);
+      let rewindHash = null;
+      if (lastBlock >= start) {
+        const [ra,rb] = await Promise.all([providers[0].getBlock(lastBlock), providers[1].getBlock(lastBlock)]);
+        if (!ra || !rb || ra.hash !== rb.hash) throw new Error('rpc_reorg_rewind_block_disagreement');
+        rewindHash = ra.hash;
+      }
+      await setCheckpoint(cfg, lastBlock, rewindHash);
+      process.stderr.write('ANT indexer checkpoint rewound after canonical block hash mismatch to ' + lastBlock + '\n');
+    }
+  }
+  return lastBlock;
 }
-async function setCheckpoint(cfg, block) {
-  await db(cfg, 'ant_indexer_state', { method: 'PATCH', query: 'worker_key=eq.' + WORKER_KEY, body: { last_block: block, updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
+async function setCheckpoint(cfg, block, blockHash) {
+  await db(cfg, 'ant_indexer_state', {
+    method: 'PATCH', query: 'worker_key=eq.' + WORKER_KEY,
+    body: { last_block: block, last_block_hash: blockHash || null, updated_at: new Date().toISOString() },
+    prefer: 'return=minimal'
+  });
 }
 async function reconcileUnlinked(cfg, providers, head) {
   const pending = await db(cfg, 'ant_payment_chain_events', {
@@ -326,7 +330,9 @@ async function cycle(cfg, providers, cursor) {
   const fingerprint = logs => logs.map(x => [x.transactionHash, x.index, x.blockHash].join(':')).sort().join('|');
   if (fingerprint(logsA) !== fingerprint(logsB)) throw new Error('rpc_log_disagreement');
   for (const log of logsA) await recordFinalEvent(cfg, providers, log, Math.min(headA, headB));
-  const [checkpointA, checkpointB] = await Promise.all([providers[0].getBlock(toBlock), providers[1].getBlock(toBlock)]);\n  if (!checkpointA || !checkpointB || checkpointA.hash !== checkpointB.hash) throw new Error('rpc_checkpoint_block_disagreement');\n  await setCheckpoint(cfg, toBlock, checkpointA.hash);
+  const [checkpointA, checkpointB] = await Promise.all([providers[0].getBlock(toBlock), providers[1].getBlock(toBlock)]);
+  if (!checkpointA || !checkpointB || checkpointA.hash !== checkpointB.hash) throw new Error('rpc_checkpoint_block_disagreement');
+  await setCheckpoint(cfg, toBlock, checkpointA.hash);
   process.stdout.write('ANT indexer checkpoint ' + toBlock + ', logs ' + logsA.length + '\n');
   return toBlock;
 }
@@ -336,27 +342,35 @@ async function main() {
     new ethers.JsonRpcProvider(cfg.rpcA, CHAIN_ID, { staticNetwork: true }),
     new ethers.JsonRpcProvider(cfg.rpcB, CHAIN_ID, { staticNetwork: true })
   ];
-  await verifyContractConfiguration(providers[0], cfg);
-  await verifyContractConfiguration(providers[1], cfg);
-  let cursor = await getCheckpoint(cfg, providers);
-  process.stdout.write('ANT BSC testnet indexer starting at ' + (cursor + 1) + '\n');
-  let stopping = false;
-  const stop = () => { stopping = true; };
-  process.once('SIGTERM', stop); process.once('SIGINT', stop);
-  if (process.env.ANT_INDEXER_ONESHOT === 'true') {
-    try {
+  try {
+    await verifyContractConfiguration(providers[0], cfg);
+    await verifyContractConfiguration(providers[1], cfg);
+    let cursor = await getCheckpoint(cfg, providers);
+    process.stdout.write('ANT BSC testnet indexer starting at ' + (cursor + 1) + '\n');
+    if (process.env.ANT_INDEXER_ONESHOT === 'true') {
       cursor = await cycle(cfg, providers, cursor);
       const head = Math.min(await providers[0].getBlockNumber(), await providers[1].getBlockNumber());
-      await reconcileRecentCanonical(cfg, providers, head);\n      await reconcileRecentCanonical(cfg, providers, head); await reconcileUnlinked(cfg, providers, head);
-    } finally { await Promise.all(providers.map(provider => provider.destroy())); }
-    return;
+      await reconcileRecentCanonical(cfg, providers, head);
+      await reconcileUnlinked(cfg, providers, head);
+      return;
+    }
+    let stopping = false;
+    const stop = () => { stopping = true; };
+    process.once('SIGTERM', stop); process.once('SIGINT', stop);
+    while (!stopping) {
+      try {
+        cursor = await cycle(cfg, providers, cursor);
+        const head = Math.min(await providers[0].getBlockNumber(), await providers[1].getBlockNumber());
+        await reconcileRecentCanonical(cfg, providers, head);
+        await reconcileUnlinked(cfg, providers, head);
+      } catch (error) {
+        process.stderr.write('ANT indexer fail-closed: ' + error.message + '\n');
+      }
+      await new Promise(resolve => setTimeout(resolve, POLL_MS));
+    }
+  } finally {
+    await Promise.all(providers.map(provider => provider.destroy()));
   }
-  while (!stopping) {
-    try { cursor = await cycle(cfg, providers, cursor); const head = Math.min(await providers[0].getBlockNumber(), await providers[1].getBlockNumber()); await reconcileUnlinked(cfg, providers, head); }
-    catch (error) { process.stderr.write('ANT indexer fail-closed: ' + error.message + '\n'); }
-    await new Promise(resolve => setTimeout(resolve, POLL_MS));
-  }
-  await Promise.all(providers.map(provider => provider.destroy()));
 }
 if (require.main === module) main().catch(error => { process.stderr.write(error.stack || String(error)); process.exitCode = 1; });
-module.exports = { config, decodeEvent, ledgerRows, verifyPurchaseReceipt, cycle, recordFinalEvent, reconcileRecentCanonical, reconcileUnlinked, getCheckpoint, setCheckpoint };
+module.exports = { config, decodeEvent, ledgerRows, verifyPurchaseReceipt, verifyContractConfiguration, cycle, recordFinalEvent, reconcileRecentCanonical, reconcileUnlinked, getCheckpoint, setCheckpoint };
