@@ -300,17 +300,24 @@ function createCryptoStreamEngine(options = {}) {
     try { await Promise.allSettled(tasks); } finally { fundingInFlight = false; }
   }
   async function flush() {
-    if (!storage.configured || flushInFlight) return;
-    flushInFlight = true;
-    const currentMinute = new Date(now()).toISOString().slice(0,16);
-    const ready = [];
-    for (const [id,batch] of buckets) if (batch.minute.slice(0,16) < currentMinute || stopping) { ready.push(batch); buckets.delete(id); }
-    for (const batch of ready) {
-      try { const result = await storage.saveMinuteBatch(batch); if (result.stored) stats.persistedEvents += result.count; lastPersistAt = new Date(now()).toISOString(); }
-      catch (e) { stats.persistErrors++; batch.events.length = Math.min(batch.events.length,250); buckets.set(key(batch.exchange,batch.marketType,batch.symbol)+':'+batch.minute.slice(0,16),batch); }
-    }
-    try { await storage.saveStatus(status()); } catch (_) { stats.persistErrors++; }
-    flushInFlight = false;
+    if (!storage.configured) return;
+    if (flushPromise) return flushPromise;
+    flushPromise = (async () => {
+      const currentMinute = new Date(now()).toISOString().slice(0,16);
+      const ready = [];
+      for (const [id,batch] of buckets) if (batch.minute.slice(0,16) < currentMinute || stopping) { ready.push(batch); buckets.delete(id); }
+      for (const batch of ready) {
+        try { const result = await storage.saveMinuteBatch(batch); if (result.stored) stats.persistedEvents += result.count; lastPersistAt = new Date(now()).toISOString(); }
+        catch (e) {
+          stats.persistErrors++;
+          const id = key(batch.exchange,batch.marketType,batch.symbol)+':'+batch.minute.slice(0,16);
+          if (buckets.size < 500) buckets.set(id,batch);
+          else stats.droppedEvents += batch.events.length;
+        }
+      }
+      try { await storage.saveStatus(status()); } catch (_) { stats.persistErrors++; }
+    })();
+    try { return await flushPromise; } finally { flushPromise = null; }
   }
   function status() {
     const feeds = [...sockets.entries()].map(([id,x]) => ({ id, state:x.state||'idle', connected:x.state==='connected', reconnectAttempts:x.attempts||0, lastMessageAt:iso(x.lastMessageAt), lastError:x.lastError||null, nextReconnectAt:x.nextReconnectAt||null }));
