@@ -622,6 +622,10 @@ async function route(req,res){
     catch(e){return json(res,503,{configured:cryptoEventStorage.configured,status:'unavailable',error:e.message});}
   }
   if(u.pathname==='/api/crypto/realtime/quotes'){
+    if(process.env.CRYPTO_STREAM_EMBEDDED==='false'){
+      try{const status=await cryptoEventStorage.readStatus();return json(res,200,{quotes:status.latestQuotes||[],status,timestamp:now()});}
+      catch(e){return json(res,503,{quotes:[],status:'unavailable',error:e.message,timestamp:now()});}
+    }
     return json(res,200,{quotes:cryptoRealtimeFeed.getQuotes(),status:cryptoRealtimeFeed.status(),timestamp:now()});
   }
   if(u.pathname==='/api/crypto/market'){
