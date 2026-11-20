@@ -86,3 +86,19 @@ test('rejects receipt when fee transfer or ANT delivery is inconsistent', () => 
   wrongAnt.logs[3] = transfer(cfg.ant, cfg.sale, buyer, 1);
   assert.throws(() => verifyPurchaseReceipt(wrongAnt, source, event, cfg), /receipt_ant_delivery_reconciliation_failed/);
 });
+
+test('requires both USDT recipient transfers and the atomic ANT delivery log', () => {
+  const event = decodeEvent(log(), cfg);
+  const transfer = new ethers.Interface(['event Transfer(address indexed from,address indexed to,uint256 value)']);
+  const encode = (token, from, to, value) => {
+    const x = transfer.encodeEventLog(transfer.getEvent('Transfer'), [from, to, value]);
+    return { address: token, topics: x.topics, data: x.data };
+  };
+  const receipt = { logs: [
+    encode(cfg.usdt,buyer,cfg.feeWallet,'50'),
+    encode(cfg.usdt,buyer,cfg.treasuryWallet,'950'),
+    encode(cfg.ant,cfg.sale,buyer,'100000000000000000000')
+  ]};
+  assert.equal(verifyTransferLogs(receipt,cfg,event),true);
+  assert.throws(()=>verifyTransferLogs({logs:receipt.logs.slice(0,2)},cfg,event),/token_transfer_reconciliation_failed/);
+});
