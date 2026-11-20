@@ -5,7 +5,6 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/market-data-refresh.yml'
-      - 'server/lib/github-oidc.js'
   schedule:
     # Five staggered workers provide best-effort quote refresh slots across each minute.
     # GitHub scheduled events can be delayed or dropped; this is not hard real-time.
