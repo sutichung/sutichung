@@ -98,8 +98,17 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
     const oracle = String(process.env.ANT_ORACLE_CONTRACT || '');
     const fee = String(process.env.ANT_FEE_WALLET || '');
     const treasury = String(process.env.ANT_TREASURY_WALLET || '');
-    if (![sale, usdt, ant, oracle, fee, treasury].every(value => ADDRESS_RE.test(value) && value !== ethers.ZeroAddress)) throw new Error('ant_testnet_contracts_or_recipients_not_configured');
-    return { sale: ethers.getAddress(sale), usdt: ethers.getAddress(usdt), ant: ethers.getAddress(ant), oracle: ethers.getAddress(oracle), fee: ethers.getAddress(fee), treasury: ethers.getAddress(treasury) };
+    const usdtDecimals = Number(process.env.ANT_USDT_DECIMALS);
+    const maxAge = Number(process.env.ANT_MAX_ORACLE_AGE || 3600);
+    if (![sale, usdt, ant, oracle, fee, treasury].every(value => ADDRESS_RE.test(value) && value.toLowerCase() !== ethers.ZeroAddress.toLowerCase())) throw new Error('ant_testnet_contracts_or_recipients_not_configured');
+    if (fee.toLowerCase() === treasury.toLowerCase()) throw new Error('fee_and_treasury_must_be_separate');
+    if (!Number.isInteger(usdtDecimals) || usdtDecimals < 0 || usdtDecimals > 18) throw new Error('invalid_ANT_USDT_DECIMALS');
+    if (!Number.isSafeInteger(maxAge) || maxAge < 60) throw new Error('invalid_ANT_MAX_ORACLE_AGE');
+    return {
+      sale: ethers.getAddress(sale), usdt: ethers.getAddress(usdt), ant: ethers.getAddress(ant),
+      oracle: ethers.getAddress(oracle), fee: ethers.getAddress(fee), treasury: ethers.getAddress(treasury),
+      usdtDecimals, maxAge
+    };
   }
   async function providerForTestnet() {
     const rpc = String(process.env.BSC_TESTNET_RPC_URL || '');
@@ -109,14 +118,49 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
     if (Number(network.chainId) !== CHAIN_ID) throw new Error('wrong_testnet_chain');
     return provider;
   }
+  async function verifySaleConfiguration(provider, contracts) {
+    const addresses = [contracts.sale, contracts.usdt, contracts.ant, contracts.oracle, contracts.fee, contracts.treasury];
+    const code = await Promise.all(addresses.map(address => provider.getCode(address)));
+    if (code.some(value => value === '0x')) throw new Error('sale_or_token_or_oracle_or_safe_not_deployed');
+    const sale = new ethers.Contract(contracts.sale, SALE_ABI, provider);
+    const [usdt, ant, oracle, fee, treasury, decimals, maxAge] = await Promise.all([
+      sale.usdt(), sale.ant(), sale.oracle(), sale.feeRecipient(), sale.proceedsRecipient(), sale.usdtDecimals(), sale.maxOracleAge()
+    ]);
+    if (usdt.toLowerCase() !== contracts.usdt.toLowerCase() ||
+        ant.toLowerCase() !== contracts.ant.toLowerCase() ||
+        oracle.toLowerCase() !== contracts.oracle.toLowerCase() ||
+        fee.toLowerCase() !== contracts.fee.toLowerCase() ||
+        treasury.toLowerCase() !== contracts.treasury.toLowerCase() ||
+        Number(decimals) !== contracts.usdtDecimals || Number(maxAge) !== contracts.maxAge) {
+      throw new Error('sale_contract_configuration_mismatch');
+    }
+    const metadata = new ethers.Contract(contracts.usdt, ['function decimals() view returns(uint8)'], provider);
+    const antMetadata = new ethers.Contract(contracts.ant, ['function decimals() view returns(uint8)'], provider);
+    const [actualUsdtDecimals, actualAntDecimals] = await Promise.all([metadata.decimals(), antMetadata.decimals()]);
+    if (Number(actualUsdtDecimals) !== contracts.usdtDecimals || Number(actualAntDecimals) !== 18) throw new Error('token_decimals_mismatch');
+    const safeAbi = ['function getThreshold() view returns(uint256)', 'function getOwners() view returns(address[])'];
+    for (const address of [contracts.fee, contracts.treasury]) {
+      const safe = new ethers.Contract(address, safeAbi, provider);
+      const [threshold, owners] = await Promise.all([safe.getThreshold(), safe.getOwners()]);
+      if (threshold < 2n || owners.length < 3) throw new Error('sale_recipient_safe_threshold_invalid');
+    }
+    await sale.quote(10n ** BigInt(contracts.usdtDecimals));
+    return sale;
+  }
   async function handle(req, res, url) {
     const pathname = url.pathname;
     if (pathname === '/api/ant/status' && req.method === 'GET') {
+      let saleConfigured = false;
+      try {
+        const contracts = saleConfig();
+        const provider = await providerForTestnet();
+        try { await verifySaleConfiguration(provider, contracts); saleConfigured = true; }
+        finally { await provider.destroy(); }
+      } catch (_) { saleConfigured = false; }
       return json(res, 200, {
         enabled: true, network: 'BSC Testnet', chainId: CHAIN_ID, feeBps: 500,
         walletLinkConfigured: !!(base && anonKey && serviceKey && process.env.ANT_WALLET_DOMAIN),
-        saleConfigured: !!(process.env.ANT_SALE_CONTRACT && process.env.ANT_USDT_CONTRACT && process.env.ANT_TOKEN_CONTRACT && process.env.ANT_ORACLE_CONTRACT && process.env.ANT_FEE_WALLET && process.env.ANT_TREASURY_WALLET),
-        usdtDecimals: Number(process.env.ANT_USDT_DECIMALS || 18), mainnetEnabled: false
+        saleConfigured, usdtDecimals: Number(process.env.ANT_USDT_DECIMALS || 18), mainnetEnabled: false
       }), true;
     }
     if (!pathname.startsWith('/api/ant/')) return false;
@@ -213,17 +257,7 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
         const contracts = saleConfig();
         const provider = await providerForTestnet();
         try {
-          const sale = new ethers.Contract(contracts.sale, SALE_ABI, provider);
-          const [onchainUsdt, onchainAnt, onchainFee, onchainTreasury, onchainDecimals, onchainOracle, onchainMaxAge] = await Promise.all([
-            sale.usdt(), sale.ant(), sale.feeRecipient(), sale.proceedsRecipient(), sale.usdtDecimals(), sale.oracle(), sale.maxOracleAge()
-          ]);
-          if (onchainUsdt.toLowerCase() !== contracts.usdt.toLowerCase() ||
-              onchainAnt.toLowerCase() !== contracts.ant.toLowerCase() ||
-              onchainOracle.toLowerCase() !== contracts.oracle.toLowerCase() ||
-              onchainFee.toLowerCase() !== contracts.fee.toLowerCase() ||
-              onchainTreasury.toLowerCase() !== contracts.treasury.toLowerCase() || Number(onchainDecimals) !== Number(process.env.ANT_USDT_DECIMALS) || Number(onchainMaxAge) !== contracts.maxAge || onchainOracle.toLowerCase() !== contracts.oracle.toLowerCase() || Number(onchainMaxAge) !== Number(process.env.ANT_MAX_ORACLE_AGE || 3600)) {
-            json(res, 503, { error: 'sale_contract_configuration_mismatch' }); return true;
-          }
+          const sale = await verifySaleConfiguration(provider, contracts);
           const quote = await sale.quote(gross);
           const fee = quote.feeUsdt, net = quote.netUsdt, antOut = quote.antOut, price = quote.price;
           if (fee + net !== BigInt(gross) || antOut <= 0n) { json(res, 503, { error: 'invalid_onchain_quote' }); return true; }
@@ -323,4 +357,4 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
   }
   return false;
 }
-module.exports = { createAntApi, buildWalletMessage, parseRaw, assuranceLevel };
+module.exports = { createAntApi, buildWalletMessage, parseRaw, assuranceLevel, verifySaleConfiguration };
