@@ -191,3 +191,9 @@ Monthly report:
 
 ---
 **Status note:** This document is the execution plan. It does not mean social accounts have been created, a campaign has been published, a token has been deployed, an audit has been completed, or 10,000 members have been acquired.
+
+
+## Verified project baseline (2026-11-20)
+- GitHub Actions run `44747104678` completed successfully: `compile-and-test` job passed `npm install`, `npm run compile:token`, and `npm run test:token`.
+- This CI result validates compilation and automated tests only. It does not establish a deployed token, verified explorer source, live website marketing changes, completed audit, deployed USDT sale flow, or live social accounts.
+- The deployment script requires BSC Testnet chain ID 97 and `ANT_MULTISIG_ADDRESS`; deployment remains unconfirmed until a transaction hash, contract address, multisig address, and explorer verification are independently checked.
