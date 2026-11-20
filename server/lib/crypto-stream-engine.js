@@ -12,8 +12,15 @@ function createCryptoStreamEngine(options = {}) {
   const WebSocketImpl = options.WebSocketImpl || require('ws');
   const fetchImpl = options.fetchImpl || fetch;
   const now = options.now || Date.now;
-  const symbols = [...new Set((options.symbols || process.env.CRYPTO_WS_SYMBOLS || DEFAULT_SYMBOLS.join(',')).split(',').map(x => x.trim().toUpperCase()).filter(x => /^[A-Z0-9]{4,20}$/.test(x)))].slice(0, 30);
-  const requestedExchanges = (options.exchanges || process.env.CRYPTO_WS_EXCHANGES || 'Binance,Bybit,OKX').split(',').map(x => x.trim()).filter(x => ['Binance','Bybit','OKX'].includes(x));
+  const toList = (value, fallback) => {
+    const source = value === undefined || value === null ? fallback : value;
+    return (Array.isArray(source) ? source : String(source).split(','))
+      .map(item => String(item).trim()).filter(Boolean);
+  };
+  const symbols = [...new Set(toList(options.symbols ?? process.env.CRYPTO_WS_SYMBOLS, DEFAULT_SYMBOLS.join(','))
+    .map(x => x.toUpperCase()).filter(x => /^[A-Z0-9]{4,20}$/.test(x)))].slice(0, 30);
+  const requestedExchanges = toList(options.exchanges ?? process.env.CRYPTO_WS_EXCHANGES, 'Binance,Bybit,OKX')
+    .filter(x => ['Binance','Bybit','OKX'].includes(x));
   const exchanges = options.skipLicenseCheck ? requestedExchanges : requestedExchanges.filter(x => isMarketDataLicensed(x));
   const unlicensedProviders = requestedExchanges.filter(x => !exchanges.includes(x));
   const enableFutures = options.enableFutures ?? process.env.CRYPTO_WS_ENABLE_FUTURES !== 'false';
