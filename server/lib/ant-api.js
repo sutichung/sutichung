@@ -5,7 +5,7 @@ const CHAIN_ID = 97;
 const SALE_ABI = [
   'function quote(uint256 grossUsdt) view returns (uint256 antOut,uint256 feeUsdt,uint256 netUsdt,uint256 price)',
   'function usdt() view returns (address)', 'function ant() view returns (address)',
-  'function feeRecipient() view returns (address)', 'function proceedsRecipient() view returns (address)', 'function usdtDecimals() view returns (uint8)',
+  'function feeRecipient() view returns (address)', 'function proceedsRecipient() view returns (address)', 'function usdtDecimals() view returns (uint8)', 'function oracle() view returns (address)', 'function maxOracleAge() view returns (uint256)',
   'function buy(uint256 grossUsdt,uint256 minAntOut) returns (uint256 antOut)'
 ];
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
@@ -84,10 +84,11 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
     const sale = String(process.env.ANT_SALE_CONTRACT || '');
     const usdt = String(process.env.ANT_USDT_CONTRACT || '');
     const ant = String(process.env.ANT_TOKEN_CONTRACT || '');
+    const oracle = String(process.env.ANT_ORACLE_CONTRACT || '');
     const fee = String(process.env.ANT_FEE_WALLET || '');
     const treasury = String(process.env.ANT_TREASURY_WALLET || '');
-    if (![sale, usdt, ant, fee, treasury].every(value => ADDRESS_RE.test(value) && value !== ethers.ZeroAddress)) throw new Error('ant_testnet_contracts_or_recipients_not_configured');
-    return { sale: ethers.getAddress(sale), usdt: ethers.getAddress(usdt), ant: ethers.getAddress(ant), fee: ethers.getAddress(fee), treasury: ethers.getAddress(treasury) };
+    if (![sale, usdt, ant, oracle, fee, treasury].every(value => ADDRESS_RE.test(value) && value !== ethers.ZeroAddress)) throw new Error('ant_testnet_contracts_or_recipients_not_configured');
+    return { sale: ethers.getAddress(sale), usdt: ethers.getAddress(usdt), ant: ethers.getAddress(ant), oracle: ethers.getAddress(oracle), fee: ethers.getAddress(fee), treasury: ethers.getAddress(treasury) };
   }
   async function providerForTestnet() {
     const rpc = String(process.env.BSC_TESTNET_RPC_URL || '');
@@ -103,7 +104,7 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
       return json(res, 200, {
         enabled: true, network: 'BSC Testnet', chainId: CHAIN_ID, feeBps: 500,
         walletLinkConfigured: !!(base && anonKey && serviceKey && process.env.ANT_WALLET_DOMAIN),
-        saleConfigured: !!(process.env.ANT_SALE_CONTRACT && process.env.ANT_USDT_CONTRACT && process.env.ANT_TOKEN_CONTRACT && process.env.ANT_FEE_WALLET && process.env.ANT_TREASURY_WALLET),
+        saleConfigured: !!(process.env.ANT_SALE_CONTRACT && process.env.ANT_USDT_CONTRACT && process.env.ANT_TOKEN_CONTRACT && process.env.ANT_ORACLE_CONTRACT && process.env.ANT_FEE_WALLET && process.env.ANT_TREASURY_WALLET),
         usdtDecimals: Number(process.env.ANT_USDT_DECIMALS || 18), mainnetEnabled: false
       }), true;
     }
@@ -202,13 +203,13 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
         const provider = await providerForTestnet();
         try {
           const sale = new ethers.Contract(contracts.sale, SALE_ABI, provider);
-          const [onchainUsdt, onchainAnt, onchainFee, onchainTreasury, onchainDecimals] = await Promise.all([
-            sale.usdt(), sale.ant(), sale.feeRecipient(), sale.proceedsRecipient(), sale.usdtDecimals()
+          const [onchainUsdt, onchainAnt, onchainFee, onchainTreasury, onchainDecimals, onchainOracle, onchainMaxAge] = await Promise.all([
+            sale.usdt(), sale.ant(), sale.feeRecipient(), sale.proceedsRecipient(), sale.usdtDecimals(), sale.oracle(), sale.maxOracleAge()
           ]);
           if (onchainUsdt.toLowerCase() !== contracts.usdt.toLowerCase() ||
               onchainAnt.toLowerCase() !== contracts.ant.toLowerCase() ||
               onchainFee.toLowerCase() !== contracts.fee.toLowerCase() ||
-              onchainTreasury.toLowerCase() !== contracts.treasury.toLowerCase() || Number(onchainDecimals) !== Number(process.env.ANT_USDT_DECIMALS || 18)) {
+              onchainTreasury.toLowerCase() !== contracts.treasury.toLowerCase() || Number(onchainDecimals) !== Number(process.env.ANT_USDT_DECIMALS || 18) || onchainOracle.toLowerCase() !== contracts.oracle.toLowerCase() || Number(onchainMaxAge) !== Number(process.env.ANT_MAX_ORACLE_AGE || 3600)) {
             json(res, 503, { error: 'sale_contract_configuration_mismatch' }); return true;
           }
           const quote = await sale.quote(gross);
