@@ -15,7 +15,6 @@ function localMinuteValue(date) {
   const d = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
   return d.toISOString().slice(0,16);
 }
-export default 
 export default function ZentraxPredictionMarket() {
   const [markets,setMarkets]=useState([]), [account,setAccount]=useState(null), [positions,setPositions]=useState([]), [orders,setOrders]=useState([]);
   const [amount,setAmount]=useState('25'), [loading,setLoading]=useState(true), [busy,setBusy]=useState(''), [error,setError]=useState(''), [message,setMessage]=useState('');
