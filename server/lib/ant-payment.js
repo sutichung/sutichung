@@ -1,6 +1,6 @@
 'use strict';
 const FEE_BPS=500n,BPS=10000n,ADDRESS_RE=/^0x[a-fA-F0-9]{40}$/,TX_RE=/^0x[a-fA-F0-9]{64}$/;
-function positiveInteger(value,field){let n;try{n=BigInt(value);}catch(_){throw new Error('invalid_'+field);}if(n<=0n)throw new Error('invalid_'+field);return n;}
+function nonNegativeInteger(value,field){let n;try{n=BigInt(value);}catch(_){throw new Error('invalid_'+field);}if(n<0n)throw new Error('invalid_'+field);return n;}\nfunction positiveInteger(value,field){const n=nonNegativeInteger(value,field);if(n===0n)throw new Error('invalid_'+field);return n;}
 function calculateUsdtSplit(raw){const gross=positiveInteger(raw,'gross_usdt'),fee=gross*FEE_BPS/BPS,net=gross-fee;if(net<=0n)throw new Error('payment_below_minimum');return{grossRaw:gross.toString(),feeRaw:fee.toString(),netRaw:net.toString(),feeBps:Number(FEE_BPS)};}
 function validateSaleEvent(e,x){
  if(!e||typeof e!=='object')throw new Error('invalid_event');if(!x||typeof x!=='object')throw new Error('missing_expected_config');
@@ -10,7 +10,7 @@ function validateSaleEvent(e,x){
  if(!TX_RE.test(String(e.transactionHash||'')))throw new Error('invalid_transaction_hash');
  if(!Number.isSafeInteger(Number(e.logIndex))||Number(e.logIndex)<0)throw new Error('invalid_log_index');
  if(!Number.isSafeInteger(Number(e.blockNumber))||Number(e.blockNumber)<=0)throw new Error('invalid_block_number');
- const s=calculateUsdtSplit(e.grossUsdt),fee=positiveInteger(e.feeUsdt,'fee_usdt'),net=positiveInteger(e.netUsdt,'net_usdt');
+ const s=calculateUsdtSplit(e.grossUsdt),fee=nonNegativeInteger(e.feeUsdt,'fee_usdt'),net=positiveInteger(e.netUsdt,'net_usdt');
  const ant=positiveInteger(e.antOut,'ant_out'),price=positiveInteger(e.priceUsdtPerAnt,'oracle_price');
  if(fee.toString()!==s.feeRaw||net.toString()!==s.netRaw)throw new Error('fee_split_mismatch');
  if(fee+net!==BigInt(s.grossRaw))throw new Error('gross_split_mismatch');
