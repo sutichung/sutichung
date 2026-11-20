@@ -31,6 +31,25 @@ function address(name) {
   if (!ethers.isAddress(value) || value === ethers.ZeroAddress) throw new Error('invalid_' + name);
   return ethers.getAddress(value);
 }
+function validateRpcEndpoints(rpcA, rpcB) {
+  let primary;
+  let secondary;
+  try {
+    primary = new URL(String(rpcA));
+    secondary = new URL(String(rpcB));
+  } catch (_) {
+    throw new Error('invalid_rpc_url');
+  }
+  for (const endpoint of [primary, secondary]) {
+    const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(endpoint.hostname);
+    if (!['https:', ...(loopback ? ['http:'] : [])].includes(endpoint.protocol) ||
+        endpoint.username || endpoint.password || endpoint.hash) {
+      throw new Error('insecure_or_invalid_rpc_url');
+    }
+  }
+  if (primary.origin === secondary.origin) throw new Error('rpc_providers_must_be_independent');
+  return true;
+}
 function config() {
   const cfg = {
     rpcA: required('BSC_TESTNET_RPC_URL'),
@@ -47,6 +66,7 @@ function config() {
     usdtDecimals: Number(required('ANT_USDT_DECIMALS')),
     antDecimals: 18
   };
+  validateRpcEndpoints(cfg.rpcA, cfg.rpcB);
   if (!Number.isInteger(cfg.usdtDecimals) || cfg.usdtDecimals < 0 || cfg.usdtDecimals > 18) throw new Error('invalid_ANT_USDT_DECIMALS');
   if (!Number.isSafeInteger(cfg.maxOracleAge) || cfg.maxOracleAge < 60) throw new Error('invalid_ANT_MAX_ORACLE_AGE');
   return cfg;
@@ -384,4 +404,4 @@ async function main() {
   }
 }
 if (require.main === module) main().catch(error => { process.stderr.write(error.stack || String(error)); process.exitCode = 1; });
-module.exports = { config, decodeEvent, ledgerRows, verifyPurchaseReceipt, verifyContractConfiguration, cycle, recordFinalEvent, reconcileRecentCanonical, reconcileUnlinked, getCheckpoint, setCheckpoint };
+module.exports = { config, validateRpcEndpoints, decodeEvent, ledgerRows, verifyPurchaseReceipt, verifyContractConfiguration, cycle, recordFinalEvent, reconcileRecentCanonical, reconcileUnlinked, getCheckpoint, setCheckpoint };
