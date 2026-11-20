@@ -16,6 +16,14 @@ function parseRaw(value, field) {
   if (!RAW_RE.test(raw) || BigInt(raw) <= 0n) throw new Error('invalid_' + field);
   return raw;
 }
+function requireConditionalUpdate(rows, errorCode) {
+  if (!Array.isArray(rows) || rows.length !== 1) {
+    const error = new Error(errorCode);
+    error.status = 409;
+    throw error;
+  }
+  return rows[0];
+}
 function buildWalletMessage({ domain, wallet, nonce, issuedAt, expiresAt }) {
   return `${domain} wants you to sign in with your BNB Smart Chain wallet:
 ${wallet}
@@ -313,11 +321,12 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
             decoded.args[1].toString() !== String(order.min_ant_raw)) {
           json(res, 400, { error: 'transaction_call_data_mismatch' }); return true;
         }
-        await db('ant_payment_orders', {
+        const updated = await db('ant_payment_orders', {
           method: 'PATCH', query: 'id=eq.' + order.id + '&status=eq.created',
           body: { status: 'submitted', tx_hash: txHash.toLowerCase(), updated_at: new Date().toISOString() },
-          prefer: 'return=minimal'
+          prefer: 'return=representation'
         });
+        requireConditionalUpdate(updated, 'order_already_submitted');
         json(res, 202, { ok: true, orderId: order.id, txHash: txHash.toLowerCase(), status: 'submitted' });
       } catch (error) { json(res, error.status || 400, { error: error.message }); }
       finally { if (provider) await provider.destroy(); }
@@ -360,4 +369,4 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
   }
   return false;
 }
-module.exports = { createAntApi, buildWalletMessage, parseRaw, assuranceLevel };
+module.exports = { createAntApi, buildWalletMessage, parseRaw, assuranceLevel, requireConditionalUpdate };
