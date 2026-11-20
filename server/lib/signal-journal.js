@@ -2,16 +2,17 @@
 const crypto=require('node:crypto');
 const ACTIONS=new Set(['ALERT_BULLISH','ALERT_BEARISH','HOLD']);
 const HORIZONS=new Set(['1h','1d','5d','20d']);
+const MARKETS=new Set(['tw-stock','us-stock','crypto']);
 const MAX_FUTURE_SKEW_MS=5*60*1000;
 function error(code,message){const e=new Error(message||code);e.code=code;return e;}
 function timestamp(v,label){const n=Date.parse(v||'');if(!Number.isFinite(n))throw error('invalid_'+label,label+' must be a valid timestamp');if(n>Date.now()+MAX_FUTURE_SKEW_MS)throw error('future_'+label,label+' must not be in the future');return new Date(n).toISOString();}
 function positive(v,label){const n=Number(v);if(!Number.isFinite(n)||n<=0)throw error('invalid_'+label,label+' must be positive');return n;}
 function normalizeSignal(x={}){
- const symbol=String(x.symbol||'').trim().toUpperCase(),market=String(x.market||'').trim().toUpperCase();
+ const symbol=String(x.symbol||'').trim().toUpperCase(),market=String(x.market||'').trim();
  const timeframe=String(x.timeframe||''),action=String(x.action||'').toUpperCase();
  const price=positive(x.price,'price'),asOf=timestamp(x.asOf,'as_of'),source=String(x.source||'').trim().slice(0,160),confidence=Number(x.confidence);
  if(!/^[A-Z0-9._:-]{1,40}$/.test(symbol))throw error('invalid_symbol');
- if(!/^[A-Z0-9_-]{2,24}$/.test(market))throw error('invalid_market');
+ if(!MARKETS.has(market))throw error('invalid_market','market must be tw-stock, us-stock or crypto');
  if(!HORIZONS.has(timeframe))throw error('invalid_timeframe');
  if(!ACTIONS.has(action))throw error('invalid_action');
  if(!source)throw error('source_required','A verifiable market data source is required');
