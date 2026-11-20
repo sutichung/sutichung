@@ -117,6 +117,10 @@ function createCryptoStreamEngine(options = {}) {
     const price = toNum(trade.price), size = toNum(trade.size);
     if (!(price > 0 && size > 0)) return;
     const notional = price * size;
+    if (exchange === 'OKX' && marketType === 'perpetual') {
+      emit(exchange, marketType, symbol, 'trade_contract_size', { side:String(trade.side||'').toLowerCase(), price, contractSize:size, notional:null, whaleClassificationAvailable:false, note:'OKX 合約張數需合約面值 metadata 才能換算名目額' }, timestamp);
+      return;
+    }
     const threshold = Number(process.env.CRYPTO_WHALE_THRESHOLD_USD || 50000);
     const side = String(trade.side || '').toLowerCase();
     if (notional >= threshold) {
@@ -195,7 +199,7 @@ function createCryptoStreamEngine(options = {}) {
       if (!symbols.includes(symbol)) return;
       for (const d of message.data || []) {
         const ts = d.ts || now();
-        if (channel === 'tickers') quoteEvent(exchange, marketType, symbol, { price: toNum(d.last), bid: toNum(d.bidPx), ask: toNum(d.askPx), changePct: toNum(d.open24h) > 0 ? (Number(d.last)/Number(d.open24h)-1)*100 : null, quoteVolume24h: toNum(d.volCcy24h) }, ts);
+        if (channel === 'tickers') quoteEvent(exchange, marketType, symbol, { price: toNum(d.last), bid: toNum(d.bidPx), ask: toNum(d.askPx), changePct: toNum(d.open24h) > 0 ? (Number(d.last)/Number(d.open24h)-1)*100 : null, quoteVolume24h: marketType === 'spot' && toNum(d.volCcy24h) !== null ? toNum(d.volCcy24h) * (toNum(d.last) || 0) : null }, ts);
         else if (channel === 'books5') updateBook(exchange, marketType, symbol, d.bids || [], d.asks || [], ts);
         else if (channel === 'trades') handleTrade(exchange, marketType, symbol, { price: d.px, size: d.sz, side: d.side }, ts);
         else if (channel === 'candle1m') handleCandle(exchange, marketType, symbol, { closed: String(d[8]) === '1', open: d[1], high: d[2], low: d[3], close: d[4], baseVolume: d[5], quoteVolume: d[7] }, d[0]);
@@ -381,7 +385,7 @@ function createCryptoStreamEngine(options = {}) {
               ? { price:d.lastPrice, change:d.priceChangePercent, quoteVolume:d.quoteVolume, high:d.highPrice, low:d.lowPrice }
               : exchange === 'Bybit'
                 ? { price:d.lastPrice, change:toNum(d.price24hPcnt)*100, quoteVolume:d.turnover24h, high:d.highPrice24h, low:d.lowPrice24h }
-                : { price:d.last, change:toNum(d.open24h)>0?(Number(d.last)/Number(d.open24h)-1)*100:0, quoteVolume:d.volCcy24h, high:d.high24h, low:d.low24h };
+                : { price:d.last, change:toNum(d.open24h)>0?(Number(d.last)/Number(d.open24h)-1)*100:0, quoteVolume:marketType==='spot'&&toNum(d.volCcy24h)!==null?toNum(d.volCcy24h)*(toNum(d.last)||0):null, high:d.high24h, low:d.low24h };
             quoteEvent(exchange,marketType,symbol,{price:toNum(normalized.price),changePct:toNum(normalized.change),quoteVolume24h:toNum(normalized.quoteVolume),high24h:toNum(normalized.high),low24h:toNum(normalized.low),quoteMode:'REST fallback'},timestamp);
           }
         } else stats.errors++;
