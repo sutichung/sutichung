@@ -53,12 +53,14 @@ create table if not exists public.prediction_paper_orders (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete restrict,
   market_id uuid not null references public.prediction_markets(id) on delete restrict,
+  client_order_id uuid not null,
   side text not null check (side in ('YES','NO')),
   stake numeric(30,8) not null check (stake > 0),
   shares numeric(30,8) not null check (shares > 0),
   price numeric(12,10) not null check (price >= 0.05 and price <= 0.95),
   created_at timestamptz not null default now()
 );
+create unique index if not exists prediction_paper_orders_client_id_uidx on public.prediction_paper_orders(user_id, client_order_id);
 create index if not exists prediction_paper_orders_user_idx on public.prediction_paper_orders(user_id, created_at desc);
 create index if not exists prediction_paper_orders_market_idx on public.prediction_paper_orders(market_id, created_at);
 
@@ -98,7 +100,7 @@ begin
   return a;
 end $$;
 
-create or replace function public.place_prediction_paper_order(p_user_id uuid, p_market_id uuid, p_side text, p_stake numeric)
+create or replace function public.place_prediction_paper_order(p_user_id uuid, p_market_id uuid, p_side text, p_stake numeric, p_client_order_id uuid)
 returns jsonb
 language plpgsql security definer set search_path = public
 as $$
@@ -109,6 +111,11 @@ begin
     raise exception 'invalid_prediction_order';
   end if;
   perform public.ensure_prediction_paper_account(p_user_id);
+  select * into order_row from public.prediction_paper_orders where user_id=p_user_id and client_order_id=p_client_order_id;
+  if found then
+    select * into a from public.prediction_paper_accounts where user_id=p_user_id;
+    return jsonb_build_object('orderId',order_row.id,'side',order_row.side,'stake',order_row.stake,'shares',order_row.shares,'price',order_row.price,'balance',a.balance,'duplicate',true);
+  end if;
   select * into m from public.prediction_markets where id = p_market_id for update;
   if not found or m.status <> 'open' or m.close_at <= now() then raise exception 'prediction_market_not_open'; end if;
   select * into a from public.prediction_paper_accounts where user_id = p_user_id for update;
@@ -129,8 +136,8 @@ begin
     yes_cost = prediction_paper_positions.yes_cost + excluded.yes_cost,
     no_cost = prediction_paper_positions.no_cost + excluded.no_cost,
     updated_at = now();
-  insert into public.prediction_paper_orders(user_id, market_id, side, stake, shares, price)
-  values (p_user_id, p_market_id, p_side, p_stake, shares, px) returning * into order_row;
+  insert into public.prediction_paper_orders(user_id, market_id, client_order_id, side, stake, shares, price)
+  values (p_user_id, p_market_id, p_client_order_id, p_side, p_stake, shares, px) returning * into order_row;
   insert into public.prediction_paper_ledger(user_id, market_id, order_id, entry_type, amount, idempotency_key)
   values (p_user_id, p_market_id, order_row.id, 'order_stake', -p_stake, 'order:' || order_row.id::text);
   select * into a from public.prediction_paper_accounts where user_id = p_user_id;
@@ -175,7 +182,7 @@ begin
 end $$;
 
 revoke all on function public.ensure_prediction_paper_account(uuid) from public, anon, authenticated;
-revoke all on function public.place_prediction_paper_order(uuid,uuid,text,numeric) from public, anon, authenticated;
+revoke all on function public.place_prediction_paper_order(uuid,uuid,text,numeric,uuid) from public, anon, authenticated;
 revoke all on function public.settle_prediction_market(uuid,boolean,numeric,text,timestamptz) from public, anon, authenticated;
 grant execute on function public.ensure_prediction_paper_account(uuid) to service_role;
 grant execute on function public.place_prediction_paper_order(uuid,uuid,text,numeric) to service_role;
