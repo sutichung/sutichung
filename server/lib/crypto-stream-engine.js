@@ -66,7 +66,8 @@ function createCryptoStreamEngine(options = {}) {
     }
   }
   function maybeAlert(quote, score) {
-    if (!quote || now() - (quote.receivedAtMs || 0) > staleMs || score.score < Number(process.env.CRYPTO_ALERT_SCORE || 2.0)) return;
+    const sourceAge = quote?.sourceTimestamp ? now() - Date.parse(quote.sourceTimestamp) : Infinity;
+    if (!quote || now() - (quote.receivedAtMs || 0) > staleMs || sourceAge > staleMs || sourceAge < -60000 || score.score < Number(process.env.CRYPTO_ALERT_SCORE || 2.0)) return;
     const k = key(quote.exchange, quote.marketType, quote.symbol);
     const prior = alertCooldown.get(k) || 0;
     if (now() - prior < (Number(process.env.CRYPTO_ALERT_COOLDOWN_MS) || 900000)) return;
