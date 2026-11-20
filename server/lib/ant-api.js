@@ -1,5 +1,6 @@
 'use strict';
 const { ethers } = require('ethers');
+const { calculateCreatorAllocation } = require('./ant-creator-revenue');
 
 const CHAIN_ID = 97;
 const SALE_ABI = [
@@ -349,6 +350,54 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
         json(res, 200, rows[0]);
       } catch (error) { json(res, error.status || 503, { error: error.message }); }
       return true;
+    }
+    if (pathname === '/api/ant/admin/creator-revenue/allocations' && ['GET','POST'].includes(req.method)) {
+      try {
+        const roles = await db('ant_admin_roles', { query: 'select=role&user_id=eq.' + encodeURIComponent(user.id) });
+        if (!Array.isArray(roles) || !roles.some(row => row.role === 'SUPER_ADMIN')) {
+          json(res, 403, { error: 'super_admin_role_required' }); return true;
+        }
+        if (assuranceLevel(req) !== 'aal2') {
+          json(res, 403, { error: 'mfa_required', requiredAssuranceLevel: 'aal2' }); return true;
+        }
+        if (req.method === 'GET') {
+          const [allocations, monthly] = await Promise.all([
+            db('ant_creator_revenue_allocations', { query: 'select=id,source_event_id,revenue_month,fee_usdt_raw,tax_reserve_usdt_raw,distributable_usdt_raw,creator_usdt_raw,product_usdt_raw,security_usdt_raw,reserve_usdt_raw,status,tx_hash,payout_tx_hash,created_at,approved_at,paid_at&order=revenue_month.desc&limit=500' }),
+            db('ant_creator_revenue_monthly_totals', { query: 'select=revenue_month,status,allocation_count,gross_fee_usdt_raw,tax_reserve_usdt_raw,creator_usdt_raw,product_usdt_raw,security_usdt_raw,reserve_usdt_raw&order=revenue_month.desc' })
+          ]);
+          json(res, 200, { network: 'BSC Testnet', chainId: CHAIN_ID, allocations, monthly });
+          return true;
+        }
+        const body = await readJson(req, 4096);
+        const sourceEventId = String(body.sourceEventId || '');
+        if (!/^[0-9a-f-]{36}$/i.test(sourceEventId)) { json(res, 400, { error: 'invalid_source_event_id' }); return true; }
+        const taxReserveRaw = String(body.taxReserveRaw ?? '0');
+        if (!/^\\d{1,78}$/.test(taxReserveRaw)) { json(res, 400, { error: 'invalid_tax_reserve' }); return true; }
+        const eligible = await db('ant_creator_revenue_eligible_events', {
+          query: 'select=source_event_id,chain_id,tx_hash,log_index,revenue_month,fee_usdt_raw&source_event_id=eq.' + encodeURIComponent(sourceEventId) + '&limit=1'
+        });
+        const source = eligible[0];
+        if (!source) { json(res, 409, { error: 'source_event_not_finalized_canonical_or_fee_ledger_mismatch' }); return true; }
+        const split = calculateCreatorAllocation(String(source.fee_usdt_raw), taxReserveRaw);
+        const rows = await db('ant_creator_revenue_allocations', {
+          method: 'POST',
+          body: {
+            source_event_id: source.source_event_id, chain_id: source.chain_id, tx_hash: source.tx_hash,
+            log_index: source.log_index, revenue_month: source.revenue_month, fee_usdt_raw: split.feeRaw,
+            tax_reserve_usdt_raw: split.taxReserveRaw, distributable_usdt_raw: split.distributableRaw,
+            creator_usdt_raw: split.creatorRaw, product_usdt_raw: split.productRaw,
+            security_usdt_raw: split.securityRaw, reserve_usdt_raw: split.reserveRaw,
+            status: 'draft', created_by: user.id
+          }
+        });
+        if (!rows[0]) throw new Error('creator_allocation_persistence_failed');
+        json(res, 201, { allocation: rows[0], note: 'Draft accounting record only; no payout was initiated.' });
+        return true;
+      } catch (error) {
+        const duplicate = error.code === '23505' || /duplicate key/i.test(error.message);
+        json(res, duplicate ? 409 : (error.status || 400), { error: duplicate ? 'allocation_already_exists' : error.message });
+        return true;
+      }
     }
     if (pathname === '/api/ant/admin/finance' && req.method === 'GET') {
       try {
