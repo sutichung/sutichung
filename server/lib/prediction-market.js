@@ -27,12 +27,14 @@ function validateMarketInput(input, now = Date.now()) {
 }
 function validateOrderInput(input) {
   const marketId = String(input && input.marketId || '');
+  const clientOrderId = String(input && input.clientOrderId || '');
   const side = String(input && input.side || '').toUpperCase();
   const amount = Number(input && input.amount);
   if (!/^[0-9a-f-]{36}$/i.test(marketId)) throw new Error('invalid_prediction_market_id');
+  if (!/^[0-9a-f-]{36}$/i.test(clientOrderId)) throw new Error('invalid_prediction_client_order_id');
   if (!['YES', 'NO'].includes(side)) throw new Error('invalid_prediction_side');
   if (!Number.isFinite(amount) || amount < 1 || amount > MAX_ORDER_CREDITS || Math.round(amount * 100) !== amount * 100) throw new Error('invalid_prediction_order_amount');
-  return { marketId, side, amount: amount.toFixed(2) };
+  return { marketId, clientOrderId, side, amount: amount.toFixed(2) };
 }
 function evaluateOutcome(direction, strike, resolutionPrice) {
   const s = Number(strike), p = Number(resolutionPrice);
