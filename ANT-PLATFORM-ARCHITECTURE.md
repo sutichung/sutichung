@@ -70,3 +70,16 @@ Required repository variables: `ANT_INDEXER_ENABLED`, `ANT_INDEXER_START_BLOCK`,
 
 
 **Inventory custody warning:** the sale contract intentionally has no owner, pause, arbitrary withdrawal or rescue method. ANT transferred into it can only be delivered to buyers; unsold inventory is not recoverable. The Safe must retain the majority of the fixed supply and transfer only a specifically approved sale allocation. The API reports the sale as unavailable until the contract has enough ANT inventory for a one-USDT sample quote.
+
+
+### SUPER_ADMIN bootstrap
+
+There is deliberately no public endpoint or browser control that can grant roles. After the intended owner has registered through Supabase Auth, an authorized Supabase operator must verify the account identity, enable TOTP MFA, obtain that user's exact `auth.users.id`, and then run a one-time insert in the correct Supabase project:
+
+```sql
+insert into public.ant_admin_roles (user_id, role)
+values ('REPLACE_WITH_VERIFIED_AUTH_USER_UUID'::uuid, 'SUPER_ADMIN')
+on conflict (user_id, role) do nothing;
+```
+
+Finance access is denied unless the request's verified Supabase access token carries `aal2`. Do not grant SUPER_ADMIN based only on a browser-supplied email or wallet address. The user UUID is intentionally not hard-coded in the repository.
