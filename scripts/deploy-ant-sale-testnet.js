@@ -37,6 +37,8 @@ async function main() {
   const sale = await Sale.deploy(usdtAddress, antAddress, oracleAddress, feeWallet, treasuryWallet, maxAge);
   await sale.waitForDeployment();
   const address = await sale.getAddress();
+  const antToken = new ethers.Contract(antAddress, [\"function balanceOf(address) view returns(uint256)\"], provider);
+  const saleInventory = await antToken.balanceOf(address);
   const [onchainUsdt,onchainAnt,onchainFee,onchainTreasury] = await Promise.all([
     sale.usdt(),sale.ant(),sale.feeRecipient(),sale.proceedsRecipient()
   ]);
@@ -47,6 +49,8 @@ async function main() {
     network:network.name,chainId:97,sale:address,usdt:usdtAddress,usdtDecimals:decimals,
     ant:antAddress,oracle:oracleAddress,feeWallet,treasuryWallet,maxOracleAge:maxAge,
     feeBps:(await sale.FEE_BPS()).toString(),
+    saleInventoryRaw:saleInventory.toString(),
+    activationStatus:saleInventory > 0n ? \"inventory funded; verify API status and test a purchase\" : \"disabled until the Safe funds ANT inventory\",
     warning:"This is a testnet deployment only. Do not use mock oracle or mock stablecoin for production."
   },null,2));
 }
