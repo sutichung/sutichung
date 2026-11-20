@@ -48,7 +48,7 @@ describe("AntColonySale", function () {
   it("enforces minimum output and inventory", async function () {
     const { buyer, sale, ant } = await setup();
     await expect(sale.connect(buyer).buy(ethers.parseUnits("100", 18), ethers.parseUnits("96", 18))).to.be.revertedWithCustomError(sale, "SlippageExceeded");
-    await ant.connect(buyer).transfer(await sale.getAddress(), ethers.parseUnits("99900", 18));
+    await (await ethers.getContractAt("MockAntUsdtOracle", await sale.oracle())).setPrice(1); // quote far exceeds the 100,000 ANT inventory
     await expect(sale.connect(buyer).buy(ethers.parseUnits("100", 18), 0)).to.be.revertedWithCustomError(sale, "InsufficientInventory");
   });
 
