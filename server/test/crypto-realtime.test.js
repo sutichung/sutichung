@@ -3,63 +3,62 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createCryptoRealtimeFeed, normalizeSymbols, splitSymbol, isoTimestamp } = require('../lib/crypto-realtime');
 
+const licenses = {
+  BINANCE_MARKET_DATA_LICENSE_CONFIRMED: 'true',
+  BYBIT_MARKET_DATA_LICENSE_CONFIRMED: 'true',
+  OKX_MARKET_DATA_LICENSE_CONFIRMED: 'true',
+  COINBASE_MARKET_DATA_LICENSE_CONFIRMED: 'true',
+  KRAKEN_MARKET_DATA_LICENSE_CONFIRMED: 'true'
+};
+
 test('symbol configuration is normalized, deduplicated and bounded', () => {
   assert.deepEqual(normalizeSymbols('btcusdt, ETHUSDT,btcusdt,invalid!'), ['BTCUSDT', 'ETHUSDT']);
   assert.deepEqual(splitSymbol('BTCUSDT'), { baseAsset: 'BTC', quoteAsset: 'USDT' });
   assert.equal(isoTimestamp(0), null);
   assert.equal(isoTimestamp(1700000000000), new Date(1700000000000).toISOString());
 });
-
-test('Binance ticker and bookTicker messages combine into one normalized live quote', () => {
-  let clock = 1700000005000;
-  const feed = createCryptoRealtimeFeed({ symbols: ['BTCUSDT'], now: () => clock });
-  const eventTime = 1700000004000;
-  assert.equal(feed.applyEvent('spot', JSON.stringify({ stream: 'btcusdt@ticker', data: {
-    e: '24hrTicker', E: eventTime, s: 'BTCUSDT', c: '65000.5', P: '1.25', q: '123456',
-    v: '12.5', h: '66000', l: '64000'
-  }})), true);
-  assert.equal(feed.applyEvent('spot', JSON.stringify({ stream: 'btcusdt@bookTicker', data: {
-    e: 'bookTicker', E: eventTime + 1, s: 'BTCUSDT', b: '65000', B: '0.5', a: '65001', A: '0.4'
-  }})), true);
-  const quote = feed.getQuotes()[0];
-  assert.equal(quote.price, 65000.5);
-  assert.equal(quote.changePct, 1.25);
-  assert.equal(quote.bid, 65000);
-  assert.equal(quote.ask, 65001);
-  assert.equal(quote.bidSize, 0.5);
-  assert.equal(quote.askSize, 0.4);
-  assert.equal(quote.sourceTimestamp, new Date(eventTime).toISOString());
-  assert.equal(quote.marketType, 'spot');
-  clock += 31000;
+test('all five exchanges normalize genuine timestamped ticker messages', () => {
+  const now = Date.parse('2026-11-20T00:00:05.000Z');
+  const feed = createCryptoRealtimeFeed({ symbols: ['BTCUSDT'], now: () => now, env: licenses });
+  const cases = [
+    ['binance', { e: '24hrTicker', E: now - 1000, s: 'BTCUSDT', c: '65000', P: '1.2' }],
+    ['bybit', { topic: 'tickers.BTCUSDT', ts: now - 1000, data: { symbol: 'BTCUSDT', lastPrice: '65001', price24hPcnt: '0.01', bid1Price: '65000', ask1Price: '65002' } }],
+    ['okx', { arg: { channel: 'tickers' }, data: [{ instId: 'BTC-USDT', last: '65002', ts: String(now - 1000), bidPx: '65001', askPx: '65003' }] }],
+    ['coinbase', { type: 'ticker', product_id: 'BTC-USD', price: '65003', time: new Date(now - 1000).toISOString(), best_bid: '65002', best_ask: '65004' }],
+    ['kraken', { channel: 'ticker', data: [{ symbol: 'BTC/USD', last: 65004, timestamp: new Date(now - 1000).toISOString(), bid: 65003, ask: 65005 }] }]
+  ];
+  for (const [exchange, event] of cases) assert.equal(feed.applyEvent(exchange, event), true, exchange);
+  const rows = feed.getQuotes();
+  assert.equal(rows.length, 5);
+  assert.deepEqual(new Set(rows.map(x => x.exchange)), new Set(['Binance', 'Bybit', 'OKX', 'Coinbase', 'Kraken']));
+  assert.ok(rows.every(x => x.price > 0 && x.sourceTimestamp && x.sourceAgeMs < 5000));
+});
+test('unlicensed exchanges cannot publish websocket quotes into the shared snapshot', () => {
+  const feed = createCryptoRealtimeFeed({ symbols: ['BTCUSDT'], env: {} });
+  assert.equal(feed.applyEvent('binance', { e: '24hrTicker', E: Date.now(), s: 'BTCUSDT', c: '65000' }), false);
   assert.equal(feed.getQuotes().length, 0);
 });
-
-test('WebSocket quotes overlay only matching Binance instruments and preserve REST fallback', () => {
-  const now = 1700000005000;
-  const feed = createCryptoRealtimeFeed({ symbols: ['BTCUSDT'], now: () => now });
-  feed.applyEvent('spot', JSON.stringify({ e: '24hrTicker', E: now - 500, s: 'BTCUSDT', c: '65000', P: '2', q: '1000', v: '1' }));
-  const original = {
-    markets: [
-      { id: 'Binance:spot:BTCUSDT', exchange: 'Binance', marketType: 'spot', symbol: 'BTCUSDT', nativeSymbol: 'BTCUSDT', price: 64000 },
-      { id: 'OKX:spot:BTC-USDT', exchange: 'OKX', marketType: 'spot', symbol: 'BTC-USDT', price: 65000 }
-    ],
-    exchanges: [{ name: 'Binance', quoteMode: 'REST snapshot polling' }],
-    summary: { total: 2 },
-    quoteMode: 'REST snapshot polling'
-  };
+test('websocket snapshots only overwrite the exact exchange and instrument while preserving REST fallback', () => {
+  const now = Date.now();
+  const feed = createCryptoRealtimeFeed({ symbols: ['BTCUSDT'], now: () => now, env: licenses });
+  feed.applyEvent('okx', { arg: { channel: 'tickers' }, data: [{ instId: 'BTC-USDT', last: '65000', ts: String(now - 1000) }] });
+  const original = { markets: [
+    { exchange: 'OKX', marketType: 'spot', nativeSymbol: 'BTC-USDT', price: 64900 },
+    { exchange: 'Binance', marketType: 'spot', nativeSymbol: 'BTCUSDT', price: 64800 }
+  ], exchanges: [{ name: 'OKX' }, { name: 'Binance' }], summary: { total: 2 } };
   const merged = feed.mergeMarket(original);
   assert.equal(merged.markets[0].price, 65000);
   assert.equal(merged.markets[0].quoteMode, 'WebSocket push');
   assert.equal(merged.markets[0].signalEligible, true);
-  assert.equal(merged.markets[1].price, 65000);
-  assert.equal(merged.markets[1].quoteMode, undefined);
+  assert.equal(merged.markets[1].price, 64800);
   assert.equal(merged.summary.websocketQuoteCount, 1);
-  assert.match(merged.quoteMode, /REST fallback/);
 });
-
-test('invalid and unrelated WebSocket messages are safely ignored', () => {
-  const feed = createCryptoRealtimeFeed({ symbols: ['BTCUSDT'] });
-  assert.equal(feed.applyEvent('spot', 'not-json'), false);
-  assert.equal(feed.applyEvent('spot', JSON.stringify({ e: '24hrTicker', s: 'ETHUSDT', c: '3000' })), false);
+test('stale, future-dated, invalid and unconfigured quote events are rejected', () => {
+  const now = Date.parse('2026-11-20T00:00:05.000Z');
+  const feed = createCryptoRealtimeFeed({ symbols: ['BTCUSDT'], now: () => now, staleAfterMs: 10000, env: licenses });
+  assert.equal(feed.applyEvent('binance', { e: '24hrTicker', E: now - 20000, s: 'BTCUSDT', c: '65000' }), false);
+  assert.equal(feed.applyEvent('binance', { e: '24hrTicker', E: now + 120000, s: 'BTCUSDT', c: '65000' }), false);
+  assert.equal(feed.applyEvent('binance', { e: '24hrTicker', E: now, s: 'ETHUSDT', c: '3000' }), false);
+  assert.equal(feed.applyEvent('binance', { e: '24hrTicker', E: now, s: 'BTCUSDT', c: '0' }), false);
   assert.equal(feed.getQuotes().length, 0);
 });
