@@ -64,7 +64,7 @@ function createPredictionApi({ supabaseUrl, anonKey, serviceKey, json, readJson 
     if (!path.startsWith('/api/prediction/')) return false;
     try {
       if (path === '/api/prediction/status' && req.method === 'GET') {
-        return json(res, 200, { enabled: true, mode: 'virtual-credits-only', realMoneyEnabled: false, network: 'off-chain paper simulation', supportedSymbols: Object.keys(SYMBOLS), settlement: 'Binance Spot 1m kline close' }), true;
+        return json(res, 200, { enabled: true, mode: 'virtual-credits-only', realMoneyEnabled: false, databaseConfigured: !!(base && anonKey && serviceKey), resolverConfigured: !!process.env.ZENTRAX_PREDICTION_JOB_TOKEN, network: 'off-chain paper simulation', supportedSymbols: Object.keys(SYMBOLS), settlement: 'Binance Spot 1m kline close' }), true;
       }
       if (path === '/api/prediction/markets' && req.method === 'GET') {
         const rows = await db('prediction_markets', { query: 'select=id,slug,title,symbol,direction,strike_price,reference_price,reference_source,reference_as_of,close_at,resolve_after,status,yes_pool,no_pool,resolved_outcome,resolution_price,resolution_source,resolved_at,created_at&order=close_at.asc&limit=100' });
