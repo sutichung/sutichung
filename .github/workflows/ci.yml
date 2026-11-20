@@ -16,6 +16,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Install project dependencies before tests
+        run: npm install --no-audit --no-fund
       - run: node --check server/index.js
       - run: node --check server/lib/indicators.js
       - run: node --check server/lib/scoring.js
@@ -27,7 +29,6 @@ jobs:
             node --check "$file"
           done
       - run: npm run test:server
-      - run: npm install --no-audit --no-fund
       - name: Generate temporary lockfile for dependency audit
         if: always()
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
