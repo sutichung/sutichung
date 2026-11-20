@@ -28,7 +28,7 @@ Apply migrations in timestamp order to the intended **test** Supabase project:
 3. `supabase/migrations/202611220001_ant_indexer_state.sql`
 4. `supabase/migrations/202611230001_ant_order_submission_and_ledger_totals.sql`
 
-The earlier global-finance and market-journal migrations may already be part of the existing project; check migration history before applying. Do not apply blindly to production. The new tables use RLS and deny client writes; only the server/service role can ingest orders, chain events, ledgers and checkpoints. After applying, test member A, member B, support, finance viewer and super admin with separate identities. Seed the initial super-admin role through a reviewed SQL operation in the intended project; do not expose a public bootstrap endpoint.
+The earlier global-finance and market-journal migrations may already be part of the existing project; check migration history before applying. Do not apply blindly to production. The new tables use RLS and deny client writes; only the server/service role can ingest orders, chain events, ledgers and checkpoints. After applying, test member A, member B, support, finance viewer and super admin with separate identities. Seed the initial super-admin role through `supabase/manual/seed-ant-super-admin.example.sql` after replacing the owner email and verifying the project ref; do not expose a public bootstrap endpoint.
 
 **No Supabase connector is currently available to this execution, so the SQL files have not been applied and RLS has not been runtime-tested.**
 
