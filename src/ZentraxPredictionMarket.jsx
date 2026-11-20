@@ -16,7 +16,7 @@ function localMinuteValue(date) {
   return d.toISOString().slice(0,16);
 }
 export default 
-export default function Zentr axPredictionMarket() {
+export default function ZentraxPredictionMarket() {
   const [markets,setMarkets]=useState([]), [account,setAccount]=useState(null), [positions,setPositions]=useState([]), [orders,setOrders]=useState([]);
   const [amount,setAmount]=useState('25'), [loading,setLoading]=useState(true), [busy,setBusy]=useState(''), [error,setError]=useState(''), [message,setMessage]=useState('');
   const [admin,setAdmin]=useState({symbol:'BTCUSDT',direction:'ABOVE',strikePrice:'',closeAt:localMinuteValue(new Date(Date.now()+24*60*60*1000))});
@@ -25,7 +25,7 @@ export default function Zentr axPredictionMarket() {
     try {
       const m=await request('/api/prediction/markets'); setMarkets(m.markets||[]);
       if(token()) {
-        const a=await request('/api/prediction/account'); setAccount(a.account); setPositions(a.positions||[]); setOrders(a.orders||[]);
+        const a=await request('/api/prediction/account'); setAccount(a.account ? {...a.account,isSuperAdmin:a.isSuperAdmin,assurance:a.assurance} : null); setPositions(a.positions||[]); setOrders(a.orders||[]);
         if(a.isSuperAdmin && a.assurance!=='aal2') setMessage('管理員帳號已辨識；請完成 MFA 二次驗證後建立市場。');
       } else { setAccount(null); setPositions([]); setOrders([]); }
     } catch(e) { setError(e.message); }
