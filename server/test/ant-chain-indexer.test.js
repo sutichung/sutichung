@@ -27,7 +27,7 @@ function transfer(token, from, to, amount) {
 }
 function receiptFor(eventLog) {
   return {
-    status: 1, to: cfg.sale, transactionHash: eventLog.transactionHash,
+    status: 1, from: buyer, to: cfg.sale, transactionHash: eventLog.transactionHash,
     blockNumber: eventLog.blockNumber, blockHash: eventLog.blockHash,
     logs: [
       { ...eventLog },
@@ -78,4 +78,29 @@ test('rejects receipt when fee transfer or ANT delivery is inconsistent', () => 
   const wrongAnt = receiptFor(source);
   wrongAnt.logs[3] = transfer(cfg.ant, cfg.sale, buyer, 1);
   assert.throws(() => verifyPurchaseReceipt(wrongAnt, source, event, cfg), /receipt_ant_delivery_reconciliation_failed/);
+});
+
+test('rejects a receipt whose transaction sender differs from the indexed buyer', () => {
+  const source = log();
+  const event = decodeEvent(source, cfg);
+  const receipt = receiptFor(source);
+  receipt.from = '0x7777777777777777777777777777777777777777';
+  assert.throws(() => verifyPurchaseReceipt(receipt, source, event, cfg), /receipt_not_successful_or_wrong_target_or_buyer/);
+});
+
+test('accepts the contract zero-fee transfer path only when both USDT transfers are present', () => {
+  const source = log('19', '0', '19');
+  const event = decodeEvent(source, cfg);
+  const receipt = {
+    ...receiptFor(source),
+    logs: [
+      { ...source },
+      transfer(cfg.usdt, buyer, cfg.feeWallet, 0),
+      transfer(cfg.usdt, buyer, cfg.treasuryWallet, 19),
+      transfer(cfg.ant, cfg.sale, buyer, '100000000000000000000')
+    ]
+  };
+  assert.equal(verifyPurchaseReceipt(receipt, source, event, cfg), true);
+  receipt.logs.splice(1, 1);
+  assert.throws(() => verifyPurchaseReceipt(receipt, source, event, cfg), /receipt_usdt_transfer_reconciliation_failed/);
 });
