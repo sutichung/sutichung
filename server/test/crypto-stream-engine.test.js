@@ -69,3 +69,11 @@ test('event buffering is disabled when durable Supabase storage is not configure
   assert.equal(x.instance.status().storage.pendingBatches,0);
   assert.equal(x.instance.status().storage.configured,false);
 });
+
+test('OKX SWAP instrument IDs normalize to the dashboard symbol when merging live quotes', () => {
+  const x = engine();
+  x.instance.ingest('OKX','perpetual',JSON.stringify({arg:{channel:'tickers',instId:'BTC-USDT-SWAP'},data:[{last:'100',bidPx:'99.9',askPx:'100.1',open24h:'99',volCcy24h:'1000',ts:String(BASE)}]}));
+  const merged=x.instance.mergeMarket({markets:[{exchange:'OKX',marketType:'perpetual',nativeSymbol:'BTC-USDT-SWAP',symbol:'BTCUSDT',price:99}]});
+  assert.equal(merged.markets[0].price,100);
+  assert.equal(merged.markets[0].quoteMode,'WebSocket push');
+});
