@@ -11,15 +11,20 @@ concurrency:
 
 jobs:
   index:
-    if: ${{ vars.ANT_INDEXER_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Indexer disabled
+        if: ${{ vars.ANT_INDEXER_ENABLED != 'true' }}
+        run: echo "ANT indexer is disabled until verified testnet contracts and the Supabase migration are configured."
       - uses: actions/checkout@v4
+        if: ${{ vars.ANT_INDEXER_ENABLED == 'true' }}
       - uses: actions/setup-node@v4
+        if: ${{ vars.ANT_INDEXER_ENABLED == 'true' }}
         with:
           node-version: 20
       - name: Verify indexer configuration
+        if: ${{ vars.ANT_INDEXER_ENABLED == 'true' }}
         env:
           ANT_INDEXER_ENABLED: ${{ vars.ANT_INDEXER_ENABLED }}
           ANT_INDEXER_CHAIN_ID: ${{ vars.ANT_INDEXER_CHAIN_ID }}
@@ -37,6 +42,7 @@ jobs:
         run: |
           node -e "const {parseConfig}=require('./server/jobs/ant-sale-indexer'); const c=parseConfig(process.env); console.log(JSON.stringify({chainId:c.chainId,confirmations:c.confirmations,startBlock:c.startBlock,rpcCount:c.rpcUrls.length,saleContract:c.saleContract}));"
       - name: Index confirmed ANT purchases and reconcile receipts
+        if: ${{ vars.ANT_INDEXER_ENABLED == 'true' }}
         env:
           ANT_INDEXER_ENABLED: ${{ vars.ANT_INDEXER_ENABLED }}
           ANT_INDEXER_CHAIN_ID: ${{ vars.ANT_INDEXER_CHAIN_ID }}
@@ -54,7 +60,3 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: npm run ant:indexer
-    steps:
-      - name: Indexer disabled
-        if: ${{ vars.ANT_INDEXER_ENABLED != 'true' }}
-        run: echo "ANT indexer is disabled until verified testnet contracts and Supabase migration are configured."
