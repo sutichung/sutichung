@@ -1,0 +1,34 @@
+services:
+  - type: worker
+    name: taiwan-stock-crypto-stream
+    runtime: docker
+    plan: starter
+    region: oregon
+    dockerContext: .
+    dockerfilePath: ./Dockerfile
+    dockerCommand: npm run crypto:worker
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CRYPTO_STREAM_EMBEDDED
+        value: "false"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: CRYPTO_WS_SYMBOLS
+        value: BTCUSDT,ETHUSDT,SOLUSDT
+      - key: CRYPTO_WS_EXCHANGES
+        value: Binance,Bybit,OKX
+      - key: CRYPTO_WS_ENABLE_FUTURES
+        value: "true"
+      - key: BINANCE_MARKET_DATA_LICENSE_CONFIRMED
+        sync: false
+      - key: BYBIT_MARKET_DATA_LICENSE_CONFIRMED
+        sync: false
+      - key: OKX_MARKET_DATA_LICENSE_CONFIRMED
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
