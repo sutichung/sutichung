@@ -95,7 +95,7 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
         enabled: true, network: 'BSC Testnet', chainId: CHAIN_ID, feeBps: 500,
         walletLinkConfigured: !!(base && anonKey && serviceKey && process.env.ANT_WALLET_DOMAIN),
         saleConfigured: !!(process.env.ANT_SALE_CONTRACT && process.env.ANT_USDT_CONTRACT && process.env.ANT_TOKEN_CONTRACT),
-        mainnetEnabled: false
+        usdtDecimals: Number(process.env.ANT_USDT_DECIMALS || 18), mainnetEnabled: false
       }), true;
     }
     if (!pathname.startsWith('/api/ant/')) return false;
