@@ -374,7 +374,7 @@ function createCryptoStreamEngine(options = {}) {
         } else stats.errors++;
         if (results[1].status === 'fulfilled') {
           const raw = results[1].value;
-          if (exchange === 'Binance') updateBook(exchange,marketType,symbol,raw.bids||[],raw.asks||[],raw.lastUpdateId||now(),'snapshot');
+          if (exchange === 'Binance') updateBook(exchange,marketType,symbol,raw.bids||[],raw.asks||[],now(),'snapshot');
           else if (exchange === 'Bybit') {
             if (raw.retCode !== 0) throw new Error(raw.retMsg || 'Bybit orderbook error');
             updateBook(exchange,marketType,symbol,raw.result?.b||[],raw.result?.a||[],raw.time||now(),'snapshot');
