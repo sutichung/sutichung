@@ -21,3 +21,15 @@ Only BSC testnet (chain 97) canonical `AntPurchased` events with a matching cano
 - The MFA-gated Super Admin API supports listing monthly allocations (`GET /api/ant/admin/creator-revenue/allocations`) and creating draft rows from eligible finalized events (`POST` with `sourceEventId` and `taxReserveRaw`). Approval and payout transitions are intentionally not exposed yet. This migration is not applied to Supabase by this commit.
 - No automatic wallet payout, no claim of earned/withdrawable balance, and no mainnet enablement.
 - Tax, legal, and accounting treatment must be confirmed by qualified local professionals before real funds are accepted.
+
+
+## Applying the Supabase migration
+
+A manual GitHub Actions workflow is available at `.github/workflows/apply-ant-supabase-migrations.yml`. Before running it:
+
+1. Add the Supabase direct database connection string as the repository Actions secret `SUPABASE_DB_URL`. Use the Supabase project database connection string (prefer the direct connection or supported session pooler format) and keep it out of source code and chat.
+2. Confirm the secret points to the intended project and that a recent database backup exists.
+3. Open Actions → Apply ANT Supabase migrations → Run workflow and type `APPLY`.
+4. Verify the workflow succeeds and inspect the migration history and tables in Supabase.
+
+The workflow is manual-only and does not run on pushes. It will fail closed if the secret is missing. The migration has not been applied merely by adding this workflow.
