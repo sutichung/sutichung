@@ -43,3 +43,17 @@ Independent smart-contract audit; verify official BSC USDT contract and decimals
 
 ## Unit tests
 Run npm install, npm run compile:token and npm run test:token. Mock oracle and mock ERC20 are test-only, not production price sources or stablecoins.
+
+
+## Persistent platform schema (migration committed, not yet applied)
+
+The ANT branch now includes `supabase/migrations/202611210001_ant_platform_ledger.sql` with:
+- `ant_admin_roles`: explicit SUPER_ADMIN / FINANCE_VIEWER / SUPPORT assignments.
+- `ant_wallets` and `ant_wallet_nonces`: verified wallet association and one-time challenge storage.
+- `ant_sale_events`: idempotent chain event ledger with unique (chain_id, tx_hash, log_index), raw integer token amounts, confirmation status and reconciliation metadata.
+- `ant_admin_audit_log`: append-only administrative audit records.
+- `ant_listing_metric_snapshots`: dated metrics with source, evidence hash, methodology, freshness and quality status.
+
+The migration enables RLS. Client writes are intentionally not granted; trusted ingestion and nonce consumption must use the server/service role. Members can read only their own wallet and sale rows. Finance viewers and super admins can read the financial ledger; only super admins can read the admin audit log. Role assignment remains service-role-only.
+
+**Activation is still pending:** review and apply the migration in the correct Supabase project, verify RLS with separate member / finance / support / super-admin test identities, then implement and test the server-side nonce signer, chain log indexer and finance endpoints. The migration alone does not create a working wallet connection or transaction indexer. Do not claim the database is live until Supabase confirms the migration and policy tests pass.
