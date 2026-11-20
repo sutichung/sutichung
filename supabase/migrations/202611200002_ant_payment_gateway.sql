@@ -29,7 +29,7 @@ create table if not exists public.ant_payment_orders (
   constraint ant_payment_orders_tx_log_requires_hash check (tx_log_index is null or tx_hash is not null)
 );
 create unique index if not exists ant_payment_orders_chain_tx_uidx
-  on public.ant_payment_orders(chain_id, tx_hash, tx_log_index) where tx_hash is not null;
+  on public.ant_payment_orders(chain_id, tx_hash) where tx_hash is not null;
 create index if not exists ant_payment_orders_user_created_idx
   on public.ant_payment_orders(user_id, created_at desc);
 create index if not exists ant_payment_orders_status_created_idx
@@ -124,3 +124,13 @@ grant select, insert, update on public.ant_payment_orders to service_role;
 grant select, insert, update on public.ant_payment_chain_events to service_role;
 grant select, insert, update on public.ant_financial_ledger to service_role;
 grant select, insert on public.ant_payment_audit_log to service_role;
+
+-- Server-side aggregate view used by the finance API. Only canonical ledger rows
+-- contribute to financial totals; orphaned/reorged entries remain auditable.
+create or replace view public.ant_financial_ledger_totals
+with (security_invoker = true) as
+select entry_type, sum(amount_raw)::numeric(78,0) as amount_raw, count(*)::bigint as entry_count
+from public.ant_financial_ledger
+where canonical = true
+group by entry_type;
+grant select on public.ant_financial_ledger_totals to service_role;
