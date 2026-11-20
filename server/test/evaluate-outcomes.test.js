@@ -149,3 +149,19 @@ test('malformed official EOD dates are excluded',()=>{
  assert.equal(report.evaluatedCount,0);
  assert.equal(report.excluded[0].reason,'invalid_eod_date');
 });
+
+test('rejects impossible official EOD calendar dates instead of normalizing them into another month',()=>{
+ const fixedNow=Date.parse('2026-03-03T14:00:00+08:00');
+ for (const asOf of ['2026-02-29','2026-02-31','2026-13-01','2026-04-31']) {
+  const report=evaluateOutcomes(eodPrevious(),eodSnapshot(officialDailyQuote({asOf})),{horizon:'1d',sessions:1,now:fixedNow});
+  assert.equal(report.evaluatedCount,0,asOf);
+  assert.equal(report.excluded[0].reason,'invalid_eod_date',asOf);
+ }
+});
+
+test('accepts a valid leap-day official EOD observation',()=>{
+ const fixedNow=Date.parse('2024-02-29T14:00:00+08:00');
+ const report=evaluateOutcomes(eodPrevious('2024-02-28T13:40:00+08:00'),eodSnapshot(officialDailyQuote({asOf:'2024-02-29'})),{horizon:'1d',sessions:1,now:fixedNow});
+ assert.equal(report.evaluatedCount,1);
+ assert.equal(report.results[0].observationMode,'END_OF_DAY');
+});
