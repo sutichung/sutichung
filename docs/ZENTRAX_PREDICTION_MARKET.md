@@ -25,7 +25,7 @@ The first market types are:
 
 1. Review and apply `supabase/migrations/202611240001_zentrax_prediction_market.sql` to the intended Supabase project. It is not applied automatically by a Git commit.
 2. Confirm the existing `ant_admin_roles` table is present from the ANT platform migration.
-3. Assign `SUPER_ADMIN` to the correct authenticated user using the Supabase SQL editor. Do not guess the user ID or email:
+3. The server also recognizes the exact `SUPABASE_ADMIN_EMAIL` allowlist already used by the platform. Otherwise, assign `SUPER_ADMIN` to the correct authenticated user using the Supabase SQL editor. Do not guess the user ID or email:
 
 ```sql
 -- Replace with the exact auth.users.id of the intended administrator.
