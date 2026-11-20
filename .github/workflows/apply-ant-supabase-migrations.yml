@@ -1,0 +1,44 @@
+name: Apply ANT Supabase migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type APPLY to apply all pending migrations to the configured Supabase database
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ant-supabase-migrations
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: ${{ inputs.confirm == 'APPLY' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Require database secret
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::Repository secret SUPABASE_DB_URL is not configured."
+            exit 1
+          fi
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Apply pending migrations
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: supabase db push --db-url "$SUPABASE_DB_URL" --yes
