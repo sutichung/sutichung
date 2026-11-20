@@ -91,8 +91,9 @@ begin
   p_snapshot->>'probability_semantics',(p_snapshot->>'reference_price')::numeric,(p_snapshot->>'reference_as_of')::timestamptz,
   coalesce(p_snapshot->'source_consensus','{}'::jsonb),(p_snapshot->>'source_spread_bps')::numeric,'VERIFIED',
   coalesce(p_snapshot->'feature_snapshot','{}'::jsonb)
- ) on conflict(prediction_key) do update set prediction_key=excluded.prediction_key
+ ) on conflict(prediction_key) do nothing
  returning id into v_id;
+ if v_id is null then select id into v_id from public.market_prediction_snapshots where prediction_key=p_snapshot->>'prediction_key'; end if;
  for v_obs in select * from jsonb_array_elements(p_observations) loop
   insert into public.market_prediction_source_observations(snapshot_id,provider,source_class,price,observed_at,data_mode,authorized,region,latency_ms)
   values(v_id,v_obs->>'provider',v_obs->>'source_class',(v_obs->>'price')::numeric,(v_obs->>'observed_at')::timestamptz,
@@ -108,5 +109,17 @@ begin
 end; $$;
 revoke all on function public.record_prediction_snapshot(jsonb,jsonb,jsonb) from public,anon,authenticated;
 grant execute on function public.record_prediction_snapshot(jsonb,jsonb,jsonb) to service_role;
+create or replace function public.reject_prediction_evidence_mutation()
+returns trigger language plpgsql as $
+begin
+ raise exception 'prediction evidence is append-only' using errcode='55000';
+end; $;
+drop trigger if exists trg_prediction_snapshot_immutable on public.market_prediction_snapshots;
+create trigger trg_prediction_snapshot_immutable before update or delete on public.market_prediction_snapshots
+for each row execute function public.reject_prediction_evidence_mutation();
+drop trigger if exists trg_prediction_source_immutable on public.market_prediction_source_observations;
+create trigger trg_prediction_source_immutable before update or delete on public.market_prediction_source_observations
+for each row execute function public.reject_prediction_evidence_mutation();
 revoke all on public.market_prediction_snapshots,public.market_prediction_source_observations,public.market_prediction_outcomes,public.market_model_calibration from anon,authenticated;
-grant select,insert,update on public.market_prediction_snapshots,public.market_prediction_source_observations,public.market_prediction_outcomes,public.market_model_calibration to service_role;
+grant select,insert on public.market_prediction_snapshots,public.market_prediction_source_observations to service_role;
+grant select,insert,update on public.market_prediction_outcomes,public.market_model_calibration to service_role;
