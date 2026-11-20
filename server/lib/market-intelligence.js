@@ -8,7 +8,9 @@ const SOURCES = {
     {id:'eu-commission',label:'European Commission press releases',url:'https://ec.europa.eu/commission/presscorner/api/rss?language=en'},
     {id:'taiwan-executive-yuan',label:'Taiwan Executive Yuan open data',url:'https://www.ey.gov.tw/NewOpenData/JSON/154'},
     {id:'taiwan-president',label:'Taiwan Presidential Office news releases',url:'https://english.president.gov.tw/RSSNEWS.aspx'},
-    {id:'ecb',label:'European Central Bank RSS',url:'https://www.ecb.europa.eu/rss/press.html'}
+    {id:'ecb',label:'European Central Bank RSS',url:'https://www.ecb.europa.eu/rss/press.html'},
+    {id:'boj',label:'Bank of Japan official RSS',url:'https://www.boj.or.jp/en/rss/whatsnew.xml'},
+    {id:'boe',label:'Bank of England official RSS',url:'https://www.bankofengland.co.uk/rss/news'}
   ],
   social: [
     {id:'reddit-cryptocurrency',label:'Reddit r/CryptoCurrency public feed',url:'https://www.reddit.com/r/CryptoCurrency/hot.json?limit=50'},
