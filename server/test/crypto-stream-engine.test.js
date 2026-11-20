@@ -1,0 +1,71 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { createCryptoStreamEngine } = require('../lib/crypto-stream-engine');
+
+const BASE = Date.parse('2026-11-20T06:00:00.000Z');
+function makeStorage(configured = true) {
+  const saved = [];
+  return { configured, saved, saveMinuteBatch: async x => { saved.push(x); return { stored:true, count:x.events.length }; }, saveStatus: async () => ({ stored:true }) };
+}
+function engine(extra = {}) {
+  const storage = extra.storage || makeStorage();
+  let clock = BASE;
+  const instance = createCryptoStreamEngine({
+    symbols:['BTCUSDT'], exchanges:['Binance','Bybit','OKX'], skipLicenseCheck:true,
+    enableFutures:true, now:()=>clock, storage, ...extra
+  });
+  return { instance, storage, advance(ms=1000) { clock += ms; return clock; } };
+}
+
+test('Binance ticker websocket message is normalized with source and receive time', () => {
+  const x = engine();
+  x.instance.ingest('Binance','spot',JSON.stringify({stream:'btcusdt@ticker',data:{e:'24hrTicker',E:BASE,s:'BTCUSDT',c:'100',P:'1.25',q:'123456',h:'105',l:'95'}}));
+  const q = x.instance.getQuotes()[0];
+  assert.equal(q.exchange,'Binance');
+  assert.equal(q.price,100);
+  assert.equal(q.changePct,1.25);
+  assert.equal(q.freshnessStatus,'fresh');
+});
+
+test('Bybit ticker and orderbook snapshot/delta maintain top levels and imbalance', () => {
+  const x = engine();
+  x.instance.ingest('Bybit','spot',JSON.stringify({topic:'tickers.BTCUSDT',ts:BASE,data:{s:'BTCUSDT',lastPrice:'100',bid1Price:'99',ask1Price:'101',price24hPcnt:'0.01',turnover24h:'5000'}}));
+  x.instance.ingest('Bybit','spot',JSON.stringify({topic:'orderbook.50.BTCUSDT',type:'snapshot',ts:BASE,data:{s:'BTCUSDT',b:[['100','5'],['99','5']],a:[['101','4'],['102','4']]}}));
+  x.instance.ingest('Bybit','spot',JSON.stringify({topic:'orderbook.50.BTCUSDT',type:'delta',ts:BASE+1000,data:{s:'BTCUSDT',b:[['100','2'],['99','0'],['98','5']],a:[]}}));
+  const q=x.instance.getQuotes().find(x=>x.exchange==='Bybit');
+  assert.equal(q.bid,100);
+  assert.equal(q.ask,101);
+  assert.ok(q.liveSignal);
+});
+
+test('stale source timestamps are not marked as fresh', () => {
+  const x = engine();
+  x.instance.ingest('Binance','spot',JSON.stringify({data:{e:'24hrTicker',E:BASE-120000,s:'BTCUSDT',c:'100',P:'0',q:'1'}}));
+  assert.equal(x.instance.getQuotes()[0].freshnessStatus,'stale');
+});
+
+test('closed Bybit one-minute candles are persisted; unconfirmed candles are ignored', async () => {
+  const x = engine();
+  x.instance.ingest('Bybit','spot',JSON.stringify({topic:'kline.1.BTCUSDT',ts:BASE,data:[{start:BASE,end:BASE+59999,confirm:false,open:'100',high:'101',low:'99',close:'100',volume:'10',turnover:'1000'}]}));
+  x.instance.ingest('Bybit','spot',JSON.stringify({topic:'kline.1.BTCUSDT',ts:BASE+60000,data:[{start:BASE,end:BASE+59999,confirm:true,open:'100',high:'101',low:'99',close:'100',volume:'10',turnover:'1000'}]}));
+  await x.instance.stop();
+  const rows=x.storage.saved.flatMap(batch=>batch.events);
+  assert.equal(rows.filter(row=>row.eventType==='closed_1m_candle').length,1);
+});
+
+test('OKX candle close flag is honored and funding is not confused with ticker data', async () => {
+  const x = engine();
+  x.instance.ingest('OKX','spot',JSON.stringify({arg:{channel:'candle1m',instId:'BTC-USDT'},data:[['1763618400000','100','101','99','100','10','1000','1000','0']]}));
+  x.instance.ingest('OKX','spot',JSON.stringify({arg:{channel:'candle1m',instId:'BTC-USDT'},data:[['1763618460000','100','102','99','101','12','1200','1200','1']]}));
+  await x.instance.stop();
+  const rows=x.storage.saved.flatMap(batch=>batch.events);
+  assert.equal(rows.filter(row=>row.eventType==='closed_1m_candle').length,1);
+});
+
+test('event buffering is disabled when durable Supabase storage is not configured', () => {
+  const x = engine({storage:makeStorage(false)});
+  x.instance.ingest('Binance','spot',JSON.stringify({data:{e:'24hrTicker',E:BASE,s:'BTCUSDT',c:'100',P:'0',q:'1'}}));
+  assert.equal(x.instance.status().storage.pendingBatches,0);
+  assert.equal(x.instance.status().storage.configured,false);
+});
