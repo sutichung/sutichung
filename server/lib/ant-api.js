@@ -24,6 +24,12 @@ function requireConditionalUpdate(rows, errorCode) {
   }
   return rows[0];
 }
+function hasFinanceAccess(user, roles, configuredAdminEmail) {
+  const email = String(user && user.email || '').trim().toLowerCase();
+  const configured = String(configuredAdminEmail || '').trim().toLowerCase();
+  const roleAllowed = Array.isArray(roles) && roles.some(row => ['SUPER_ADMIN', 'FINANCE_VIEWER'].includes(row.role));
+  return roleAllowed || (!!email && !!configured && email === configured);
+}
 function buildWalletMessage({ domain, wallet, nonce, issuedAt, expiresAt }) {
   return `${domain} wants you to sign in with your BNB Smart Chain wallet:
 ${wallet}
@@ -349,7 +355,7 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
         const roles = await db('ant_admin_roles', {
           query: 'select=role&user_id=eq.' + encodeURIComponent(user.id)
         });
-        if (!roles.some(row => ['SUPER_ADMIN', 'FINANCE_VIEWER'].includes(row.role))) { json(res, 403, { error: 'finance_role_required' }); return true; }
+        if (!hasFinanceAccess(user, roles, process.env.SUPABASE_ADMIN_EMAIL)) { json(res, 403, { error: 'finance_role_required' }); return true; }
         if (assuranceLevel(req) !== 'aal2') { json(res, 403, { error: 'mfa_required', requiredAssuranceLevel: 'aal2' }); return true; }
         const [orders, ledger, totalsRows] = await Promise.all([
           db('ant_payment_orders', { query: 'select=id,buyer_wallet,gross_usdt_raw,fee_usdt_raw,net_usdt_raw,quoted_ant_raw,status,tx_hash,created_at&order=created_at.desc&limit=200' }),
@@ -369,4 +375,4 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
   }
   return false;
 }
-module.exports = { createAntApi, buildWalletMessage, parseRaw, assuranceLevel, requireConditionalUpdate };
+module.exports = { createAntApi, buildWalletMessage, parseRaw, assuranceLevel, requireConditionalUpdate, hasFinanceAccess };
