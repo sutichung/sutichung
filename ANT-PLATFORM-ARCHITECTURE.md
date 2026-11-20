@@ -67,3 +67,6 @@ RLS is enabled. Members can read only their own orders/events/ledger rows and li
 Required repository variables: `ANT_INDEXER_ENABLED`, `ANT_INDEXER_START_BLOCK`, `ANT_INDEXER_CONFIRMATIONS` (minimum 12), `ANT_INDEXER_BLOCK_RANGE`, `ANT_INDEXER_REORG_LOOKBACK`, `ANT_USDT_DECIMALS`, `ANT_SALE_CONTRACT`, `ANT_USDT_CONTRACT`, `ANT_TOKEN_CONTRACT`, `ANT_FEE_WALLET`, `ANT_TREASURY_WALLET`. Required secrets: `BSC_TESTNET_RPC_URL`, `BSC_TESTNET_RPC_URL_SECONDARY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`. The member API also requires `SUPABASE_ANON_KEY` and `ANT_WALLET_DOMAIN` on the backend service.
 
 **Not active yet:** the migrations must be applied, testnet token and sale contracts must be deployed and verified, Safe recipients and exact USDT decimals must be checked, the required secrets/variables must be configured, and the first indexer run must pass end-to-end reconciliation. Keep the indexer disabled until then.
+
+
+**Inventory custody warning:** the sale contract intentionally has no owner, pause, arbitrary withdrawal or rescue method. ANT transferred into it can only be delivered to buyers; unsold inventory is not recoverable. The Safe must retain the majority of the fixed supply and transfer only a specifically approved sale allocation. The API reports the sale as unavailable until the contract has enough ANT inventory for a one-USDT sample quote.
