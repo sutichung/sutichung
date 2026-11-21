@@ -3,8 +3,8 @@
 **ZENTRAX** 是整合 AI 市場情報、量化研究、全球市場監控與區塊鏈生態的金融科技平台。平台品牌採黑金視覺；ANT 仍是原有代幣名稱與代號，不因品牌改版而變更合約或代幣經濟。\n\n此 repository 包含 React 前端與 Node.js 後端 API 骨架。系統採「資料不足就不判斷」原則；沒有授權即時行情、全市場指標掃描、法人籌碼或台指期來源時，相關欄位會明確顯示缺資料，不會用假數字補齊。
 
 ## 專案技術
-- 前端：Create React App / React 18（不是 Vite）。
-- 後端：Node.js 18+ 原生 HTTP 與 fetch，無額外伺服器依賴。
+- 前端：Vite 6 + React 18。
+- 後端：Node.js 20+ 原生 HTTP 與 fetch，無額外伺服器依賴。
 - 指標：EMA 5/20/60、RSI(14)、MACD、KD-K、ATR、20 日支撐壓力、量比。
 - 風控工具：資料時間戳檢查、OHLC 合法性檢查、信心門檻、樣本外交易筆數與最大回撤門檻。
 - 測試：Node.js 內建 node:test。
@@ -12,7 +12,7 @@
 ## 啟動
 1. 安裝 Node.js 20 或更新版本。
 2. 複製環境設定：`cp .env.example .env`，填入可用資料供應商設定。
-3. 安裝前端依賴：`npm install`。
+3. 安裝依賴：`npm install`（目前 repository 尚未提交 lockfile，依賴版本尚非完全可重現；補齊 lockfile 後應改用 `npm ci`）。
 4. 終端機 A 啟動後端：`npm run server`（預設 http://localhost:8787）。
 5. 終端機 B 啟動前端：`npm start`（Vite dev server 透過 vite.config.js proxy 連後端）。
 6. 測試：`npm run test:server`；正式前端建置：`npm run build`。
