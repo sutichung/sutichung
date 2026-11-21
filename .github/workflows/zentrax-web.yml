@@ -9,6 +9,8 @@ on:
       - "package.json"
       - "package-lock.json"
       - "server/**"
+      - "Dockerfile"
+      - "render.yaml"
       - ".github/workflows/zentrax-web.yml"
   pull_request:
     paths:
@@ -43,5 +45,26 @@ jobs:
         run: test -s build/index.html
       - name: Build production Docker image
         run: docker build -t zentrax-testnet-ci .
+      - name: Smoke-test production container and static frontend
+        run: |
+          docker run -d --name zentrax-testnet-ci -p 8787:8787 -e NODE_ENV=production -e CRYPTO_STREAM_EMBEDDED=false zentrax-testnet-ci
+          trap 'docker rm -f zentrax-testnet-ci >/dev/null 2>&1 || true' EXIT
+          health_ok=false
+          for attempt in $(seq 1 20); do
+            if curl --silent --show-error --output /tmp/health.json --write-out '%{http_code}' http://127.0.0.1:8787/api/health | grep -qx '200'; then
+              health_ok=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$health_ok" != true ]; then
+            echo "Health endpoint did not return HTTP 200"
+            docker ps -a
+            docker logs zentrax-testnet-ci || true
+            curl --include --max-time 5 http://127.0.0.1:8787/api/health || true
+            exit 1
+          fi
+          curl --fail --silent --show-error http://127.0.0.1:8787/ -o /tmp/index.html
+          grep -q 'id="root"' /tmp/index.html
       - name: Run backend tests
         run: npm run test:server
