@@ -40,7 +40,7 @@ This stops containers but preserves local keys and data. To reset, stop the netw
 
 ## Automated acceptance
 
-The GitHub Actions workflow `ZENTRAX four-validator devnet` builds the image, starts all four nodes, checks their chain IDs and committed heights, verifies four genesis validators, and calls `eth_chainId` on all four EVM endpoints. CI success is the first actual runtime validation; until it passes, this harness is only code committed for testing.
+The GitHub Actions workflow `ZENTRAX four-validator devnet` builds the image, starts all four nodes, checks their chain IDs and committed heights, waits for block height to advance on all four validators, verifies four genesis validators, and calls `eth_chainId` on all four EVM endpoints. The init logic lives in `init.sh` rather than an interpolated Compose command so shell variables are evaluated by `/bin/sh`, not Compose. CI success is the first actual runtime validation; until it passes, this harness is only code committed for testing.
 
 ## Scope and security boundary
 
