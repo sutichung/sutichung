@@ -1,28 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
 <defs>
-  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#070B13"/><stop offset=".55" stop-color="#0B1728"/><stop offset="1" stop-color="#102D4B"/></linearGradient>
-  <linearGradient id="line" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#36D399"/><stop offset="1" stop-color="#60A5FA"/></linearGradient>
-  <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#142B43" stop-opacity=".92"/><stop offset="1" stop-color="#0B1A2B" stop-opacity=".78"/></linearGradient>
-  <filter id="glow"><feGaussianBlur stdDeviation="12"/></filter>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#050505"/><stop offset=".58" stop-color="#11100D"/><stop offset="1" stop-color="#211A0D"/></linearGradient>
+  <linearGradient id="gold" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#8D7442"/><stop offset=".48" stop-color="#D6B56D"/><stop offset="1" stop-color="#F2D99A"/></linearGradient>
+  <filter id="glow"><feGaussianBlur stdDeviation="14"/></filter>
 </defs>
 <rect width="1200" height="630" fill="url(#bg)"/>
-<circle cx="1030" cy="90" r="250" fill="#2563EB" opacity=".13"/>
-<circle cx="130" cy="570" r="230" fill="#10B981" opacity=".08"/>
-<path d="M0 470 C210 420 300 510 470 390 S760 280 900 330 S1080 210 1200 160" fill="none" stroke="#38BDF8" stroke-width="2" opacity=".12"/>
-<rect x="64" y="58" width="1072" height="514" rx="30" fill="url(#panel)" stroke="#29445F" stroke-opacity=".72"/>
-<rect x="96" y="92" width="54" height="54" rx="16" fill="#123A50" stroke="#3B82F6" stroke-opacity=".65"/>
-<path d="M108 126 L120 114 L130 121 L140 105" fill="none" stroke="url(#line)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-<text x="170" y="127" fill="#DCEBFA" font-size="24" font-family="Arial,sans-serif" font-weight="700" letter-spacing="2">TAIWAN STOCK HUNTER</text>
-<text x="96" y="230" fill="#F8FAFC" font-size="62" font-family="Arial,sans-serif" font-weight="700">MARKET</text>
-<text x="96" y="302" fill="#F8FAFC" font-size="62" font-family="Arial,sans-serif" font-weight="700">INTELLIGENCE</text>
-<text x="100" y="350" fill="#9FB6CC" font-size="23" font-family="Arial,sans-serif" letter-spacing="1.2">LIVE MARKET DATA  /  AI ANALYSIS  /  RISK SCENARIOS</text>
-<path d="M100 470 L220 430 L320 450 L430 360 L535 390 L645 300 L750 330 L865 220 L965 260 L1080 175" fill="none" stroke="#36D399" stroke-width="15" opacity=".16" filter="url(#glow)" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M100 470 L220 430 L320 450 L430 360 L535 390 L645 300 L750 330 L865 220 L965 260 L1080 175" fill="none" stroke="url(#line)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M100 470 L220 430 L320 450 L430 360 L535 390 L645 300 L750 330 L865 220 L965 260 L1080 175 L1080 510 L100 510Z" fill="#38BDF8" opacity=".07"/>
-<g font-family="Arial,sans-serif" font-size="15" font-weight="700" letter-spacing="1">
-<rect x="100" y="520" width="210" height="30" rx="8" fill="#123B31" stroke="#238B68"/><text x="205" y="540" fill="#9AE6C5" text-anchor="middle">MARKET SCAN</text>
-<rect x="326" y="520" width="210" height="30" rx="8" fill="#142F50" stroke="#3676B8"/><text x="431" y="540" fill="#B9D8FA" text-anchor="middle">AI COMMITTEE</text>
-<rect x="552" y="520" width="210" height="30" rx="8" fill="#382D1A" stroke="#A87931"/><text x="657" y="540" fill="#F6D99A" text-anchor="middle">RISK CONTROL</text>
-</g>
-<text x="1090" y="548" fill="#68839D" font-size="13" text-anchor="end" font-family="Arial,sans-serif" letter-spacing="2">TAIWAN MARKETS</text>
+<circle cx="1000" cy="95" r="270" fill="#D6B56D" opacity=".07"/>
+<circle cx="160" cy="580" r="240" fill="#D6B56D" opacity=".045"/>
+<path d="M0 480 L220 430 L360 458 L500 360 L650 390 L790 285 L930 310 L1080 175 L1200 195" fill="none" stroke="#D6B56D" stroke-width="2" opacity=".15"/>
+<rect x="64" y="58" width="1072" height="514" rx="30" fill="#0B0B0D" fill-opacity=".88" stroke="#D6B56D" stroke-opacity=".38"/>
+<path d="M100 105 L130 75 L160 105 L160 145 L130 175 L100 145Z" fill="none" stroke="url(#gold)" stroke-width="4"/>
+<path d="M116 128 L130 100 L144 128 L130 150Z" fill="url(#gold)" opacity=".92"/>
+<text x="188" y="132" fill="#E8D5A5" font-size="26" font-family="Arial,sans-serif" font-weight="700" letter-spacing="5">ZENTRAX</text>
+<text x="96" y="260" fill="#F5F1E8" font-size="66" font-family="Arial,sans-serif" font-weight="700" letter-spacing="1">NEXT-GEN</text>
+<text x="96" y="337" fill="#F5F1E8" font-size="66" font-family="Arial,sans-serif" font-weight="700" letter-spacing="1">FINANCIAL TECHNOLOGY</text>
+<text x="100" y="390" fill="#B8B1A2" font-size="22" font-family="Arial,sans-serif" letter-spacing="1.4">AI INTELLIGENCE  /  QUANT RESEARCH  /  BLOCKCHAIN</text>
+<path d="M100 490 L220 455 L320 468 L430 402 L535 420 L645 365 L750 378 L865 300 L965 320 L1080 248" fill="none" stroke="#D6B56D" stroke-width="18" opacity=".16" filter="url(#glow)" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M100 490 L220 455 L320 468 L430 402 L535 420 L645 365 L750 378 L865 300 L965 320 L1080 248" fill="none" stroke="url(#gold)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1090" y="540" fill="#8D7442" font-size="14" text-anchor="end" font-family="Arial,sans-serif" letter-spacing="3">ANT ECOSYSTEM</text>
 </svg>

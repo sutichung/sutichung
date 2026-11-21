@@ -1,0 +1,84 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+
+interface IAntUsdtPriceOracle {
+    function latestPrice() external view returns (uint256 price, uint256 updatedAt);
+}
+
+/// @notice Fixed 5% USDT fee sale. Oracle price is USDT per ANT, 8 decimals.
+contract AntColonySale is ReentrancyGuard {
+    using SafeERC20 for IERC20;
+    uint256 public constant FEE_BPS = 500;
+    uint256 private constant BPS = 10_000;
+    uint256 private constant PRICE_SCALE = 1e8;
+    uint256 private constant ANT_SCALE = 1e18;
+
+    IERC20 public immutable usdt;
+    IERC20 public immutable ant;
+    IAntUsdtPriceOracle public immutable oracle;
+    address public immutable feeRecipient;
+    address public immutable proceedsRecipient;
+    uint8 public immutable usdtDecimals;
+    uint256 public immutable maxOracleAge;
+
+    error InvalidAddress();
+    error InvalidOracleAge();
+    error InvalidUsdtDecimals();
+    error InvalidAntDecimals();
+    error RecipientCollision();
+    error InvalidPrice();
+    error StalePrice();
+    error InvalidAmount();
+    error ZeroAntOutput();
+    error SlippageExceeded(uint256 actual, uint256 minimum);
+    error InsufficientInventory(uint256 available, uint256 required);
+
+    event AntPurchased(address indexed buyer, uint256 grossUsdt, uint256 feeUsdt, uint256 netUsdt, uint256 antOut, uint256 priceUsdtPerAnt);
+
+    constructor(address usdt_, address ant_, address oracle_, address feeRecipient_, address proceedsRecipient_, uint256 maxOracleAge_) {
+        if (usdt_ == address(0) || ant_ == address(0) || oracle_ == address(0) || feeRecipient_ == address(0) || proceedsRecipient_ == address(0) || usdt_ == ant_) revert InvalidAddress();
+        if (feeRecipient_ == proceedsRecipient_) revert RecipientCollision();
+        if (maxOracleAge_ == 0) revert InvalidOracleAge();
+        uint8 d = IERC20Metadata(usdt_).decimals();
+        if (d > 18) revert InvalidUsdtDecimals();
+        if (IERC20Metadata(ant_).decimals() != 18) revert InvalidAntDecimals();
+        usdt = IERC20(usdt_);
+        ant = IERC20(ant_);
+        oracle = IAntUsdtPriceOracle(oracle_);
+        feeRecipient = feeRecipient_;
+        proceedsRecipient = proceedsRecipient_;
+        usdtDecimals = d;
+        maxOracleAge = maxOracleAge_;
+    }
+
+    function quote(uint256 grossUsdt) public view returns (uint256 antOut, uint256 feeUsdt, uint256 netUsdt, uint256 price) {
+        if (grossUsdt == 0) revert InvalidAmount();
+        uint256 updatedAt;
+        (price, updatedAt) = oracle.latestPrice();
+        if (price == 0 || updatedAt > block.timestamp) revert InvalidPrice();
+        if (block.timestamp - updatedAt > maxOracleAge) revert StalePrice();
+        feeUsdt = Math.mulDiv(grossUsdt, FEE_BPS, BPS);
+        netUsdt = grossUsdt - feeUsdt;
+        antOut = Math.mulDiv(netUsdt, ANT_SCALE * PRICE_SCALE, price * (10 ** usdtDecimals));
+        if (antOut == 0) revert ZeroAntOutput();
+    }
+
+    function buy(uint256 grossUsdt, uint256 minAntOut) external nonReentrant returns (uint256 antOut) {
+        uint256 feeUsdt;
+        uint256 netUsdt;
+        uint256 price;
+        (antOut, feeUsdt, netUsdt, price) = quote(grossUsdt);
+        if (antOut < minAntOut) revert SlippageExceeded(antOut, minAntOut);
+        uint256 inventory = ant.balanceOf(address(this));
+        if (inventory < antOut) revert InsufficientInventory(inventory, antOut);
+        usdt.safeTransferFrom(msg.sender, feeRecipient, feeUsdt);
+        usdt.safeTransferFrom(msg.sender, proceedsRecipient, netUsdt);
+        ant.safeTransfer(msg.sender, antOut);
+        emit AntPurchased(msg.sender, grossUsdt, feeUsdt, netUsdt, antOut, price);
+    }
+}

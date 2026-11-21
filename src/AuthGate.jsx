@@ -75,8 +75,8 @@ export default function AuthGate({children}){
   const toggleMember=async(member)=>{setMemberBusy(true);setError('');try{await request('/admin/members/'+member.id+'/'+(member.banned_until?'enable':'disable'),{method:'POST'});await loadMembers();}catch(err){setError(err.message);}finally{setMemberBusy(false);}};
   if(busy&&!user)return <div style={styles.center}>正在安全連線會員服務…</div>;
   if(!user)return <div style={styles.page}><style>{responsiveCss}</style><div className="auth-card" style={styles.card}>
-    <div style={styles.mark}>TS</div><div style={styles.eyebrow}>TAIWAN STOCK HUNTER</div>
-    <h1 style={styles.heading}>台股 AI 智慧操盤中樞</h1><p style={styles.sub}>會員登入與安全註冊</p>
+    <div style={styles.mark}>ZX</div><div style={styles.eyebrow}>ZENTRAX ECOSYSTEM</div>
+    <h1 style={styles.heading}>ZENTRAX 安全會員入口</h1><p style={styles.sub}>全球市場情報與 ANT 生態系會員登入</p>
     <div style={styles.tabs}><button style={mode==='login'?styles.activeTab:styles.tab} onClick={()=>{setMode('login');setError('');setNotice('');}}>會員登入</button><button style={mode==='signup'?styles.activeTab:styles.tab} disabled={config?.registrationEnabled===false} onClick={()=>{setMode('signup');setError('');setNotice('');}}>建立帳號</button></div>
     <form onSubmit={submit} style={{display:'grid',gap:13}}>
       <label style={styles.label}>Email<input style={styles.input} type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} required placeholder="name@example.com"/></label>
@@ -113,21 +113,21 @@ export default function AuthGate({children}){
 }
 const responsiveCss="\n  html[data-device=\"phone\"] .auth-userbar{position:sticky!important;top:0!important;right:auto!important;left:auto!important;width:100%;max-width:100%;justify-content:flex-end;flex-wrap:wrap;margin:0 0 9px;padding:8px;box-sizing:border-box}\n  html[data-device=\"phone\"] .auth-userbar span{flex:1 0 100%;overflow-wrap:anywhere}\n  html[data-device=\"phone\"] .auth-userbar button{min-height:40px;flex:1 1 auto}\n  html[data-device=\"phone\"] .auth-modal{max-height:calc(100dvh - 24px)!important;padding:14px!important;overflow:auto}\n  html[data-device=\"phone\"] .auth-create-form{grid-template-columns:minmax(0,1fr)!important}\n  html[data-device=\"phone\"] .auth-member{align-items:flex-start!important;flex-wrap:wrap}\n  html[data-device=\"phone\"] .auth-member>div{min-width:0;overflow-wrap:anywhere}\n  html[data-device=\"phone\"] .auth-member button{min-height:40px}\n  html[data-device=\"phone\"] .auth-modal input{min-height:44px;font-size:16px!important}\n  html[data-device=\"phone\"] .auth-modal button{min-height:42px}\n  html[data-device=\"phone\"] .auth-modal h2{font-size:19px}\n  html[data-device=\"tablet\"] .auth-create-form{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}\n  html[data-device=\"tablet\"] .auth-create-form button{grid-column:1/-1}\n  @media(max-width:420px){.auth-userbar{gap:5px!important}.auth-userbar button{font-size:10px!important;padding:7px 8px!important}}\n";
 const styles={
-  page:{minHeight:'100vh',background:'radial-gradient(circle at 20% 15%,#142b48 0,#080d18 42%,#050912 100%)',display:'grid',placeItems:'center',padding:20,boxSizing:'border-box',fontFamily:'Inter,system-ui,sans-serif',color:'#e8eef8'},
+  page:{minHeight:'100vh',background:'radial-gradient(circle at 20% 15%,#302413 0,#090807 42%,#050505 100%)',display:'grid',placeItems:'center',padding:20,boxSizing:'border-box',fontFamily:'Inter,system-ui,sans-serif',color:'#e8eef8'},
   center:{minHeight:'100vh',display:'grid',placeItems:'center',background:'#080d18',color:'#cbd5e1',fontFamily:'system-ui'},
-  card:{width:'min(100%,430px)',boxSizing:'border-box',background:'rgba(17,26,43,.96)',border:'1px solid #293951',borderRadius:22,padding:'30px 26px',boxShadow:'0 24px 80px #0008'},
-  mark:{width:54,height:54,borderRadius:16,display:'grid',placeItems:'center',background:'linear-gradient(135deg,#2563eb,#10b981)',fontWeight:900,fontSize:22},
-  eyebrow:{fontSize:10,letterSpacing:3,color:'#60a5fa',marginTop:18},heading:{fontSize:24,margin:'8px 0',color:'#f8fafc'},sub:{fontSize:13,color:'#94a3b8',marginTop:0},
+  card:{width:'min(100%,430px)',boxSizing:'border-box',background:'linear-gradient(145deg,#17140f,#0d0c0a)',border:'1px solid rgba(214,181,109,.35)',borderRadius:22,padding:'30px 26px',boxShadow:'0 24px 80px #0008'},
+  mark:{width:54,height:54,borderRadius:16,display:'grid',placeItems:'center',background:'linear-gradient(135deg,#D6B56D,#6f5427)',fontWeight:900,fontSize:22},
+  eyebrow:{fontSize:10,letterSpacing:3,color:'#D6B56D',marginTop:18},heading:{fontSize:24,margin:'8px 0',color:'#f8fafc'},sub:{fontSize:13,color:'#94a3b8',marginTop:0},
   tabs:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,padding:5,background:'#0b1422',borderRadius:11,margin:'22px 0 18px'},
-  tab:{border:0,background:'transparent',color:'#94a3b8',padding:11,borderRadius:8,cursor:'pointer'},activeTab:{border:0,background:'#1d3556',color:'#bfdbfe',padding:11,borderRadius:8,fontWeight:700,cursor:'pointer'},
-  label:{display:'grid',gap:7,fontSize:12,color:'#cbd5e1'},input:{width:'100%',boxSizing:'border-box',padding:'13px 12px',borderRadius:10,border:'1px solid #344761',background:'#0b1422',color:'#f8fafc',fontSize:15,outline:'none'},
-  submit:{border:0,borderRadius:10,padding:14,background:'linear-gradient(90deg,#2563eb,#0f9f83)',color:'white',fontWeight:800,fontSize:14,cursor:'pointer'},
-  socialBtn:{border:'1px solid #3b526e',borderRadius:10,padding:12,background:'#172338',color:'#f8fafc',fontWeight:700,fontSize:13,cursor:'pointer'},
+  tab:{border:0,background:'transparent',color:'#b8b1a2',padding:11,borderRadius:8,cursor:'pointer'},activeTab:{border:0,background:'#382b17',color:'#f1d79a',padding:11,borderRadius:8,fontWeight:700,cursor:'pointer'},
+  label:{display:'grid',gap:7,fontSize:12,color:'#cbd5e1'},input:{width:'100%',boxSizing:'border-box',padding:'13px 12px',borderRadius:10,border:'1px solid #344761',background:'#080808',color:'#f5f1e8',fontSize:15,outline:'none'},
+  submit:{border:'1px solid #8d7442',borderRadius:10,padding:14,background:'linear-gradient(90deg,#8d7442,#b18b45)',color:'white',fontWeight:800,fontSize:14,cursor:'pointer'},
+  socialBtn:{border:'1px solid #594728',borderRadius:10,padding:12,background:'#1b1710',color:'#f8fafc',fontWeight:700,fontSize:13,cursor:'pointer'},
   error:{marginTop:13,padding:10,borderRadius:9,background:'#451f2a',color:'#fecdd3',fontSize:12},notice:{marginTop:13,padding:10,borderRadius:9,background:'#123b35',color:'#a7f3d0',fontSize:12},
   foot:{marginTop:20,paddingTop:14,borderTop:'1px solid #293951',fontSize:11,color:'#8293aa',lineHeight:1.7},
-  userbar:{position:'fixed',zIndex:1000,top:9,right:12,display:'flex',alignItems:'center',gap:7,padding:'6px 8px 6px 12px',border:'1px solid #344761',borderRadius:12,background:'#0b1422ee',color:'#cbd5e1',fontSize:11,boxShadow:'0 4px 20px #0005'},
-  smallBtn:{border:'1px solid #3b526e',borderRadius:8,background:'#172338',color:'#dbeafe',padding:'7px 10px',fontSize:11,cursor:'pointer'},
+  userbar:{position:'fixed',zIndex:1000,top:9,right:12,display:'flex',alignItems:'center',gap:7,padding:'6px 8px 6px 12px',border:'1px solid #594728',borderRadius:12,background:'#0d0c0aee',color:'#f1d79a',fontSize:11,boxShadow:'0 4px 20px #0005'},
+  smallBtn:{border:'1px solid #594728',borderRadius:8,background:'#1b1710',color:'#f1d79a',padding:'7px 10px',fontSize:11,cursor:'pointer'},
   overlay:{position:'fixed',zIndex:1100,inset:0,background:'#020617cc',display:'grid',placeItems:'center',padding:12},
-  modal:{width:'min(100%,650px)',maxHeight:'90vh',overflowY:'auto',boxSizing:'border-box',padding:20,borderRadius:16,background:'#111a2b',border:'1px solid #344761',color:'#e8eef8'},
+  modal:{width:'min(100%,650px)',maxHeight:'90vh',overflowY:'auto',boxSizing:'border-box',padding:20,borderRadius:16,background:'linear-gradient(145deg,#17140f,#0d0c0a)',border:'1px solid rgba(214,181,109,.35)',color:'#f5f1e8'},
   createForm:{display:'grid',gridTemplateColumns:'1fr 1fr auto',gap:8,marginTop:16},member:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,padding:'10px 0',borderBottom:'1px solid #293951',fontSize:12}
 };
