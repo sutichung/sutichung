@@ -808,12 +808,12 @@ async function route(req,res){
   }
   if(u.pathname==='/api/diagnostics/analysis'){
     const [history,flows,listed]=await Promise.all([
-      Promise.resolve({data:{},error:'官方全市場歷史資料庫尚未建立；不使用第三方歷史庫',historyDateCount:0,historyCount:0}),
+      safeLoad('official-market-history-diagnostics',30*60*1000,()=>loadOfficialMarketHistory(120),e=>({data:{},error:e.message,historyDateCount:0,historyCount:0})),
       safeLoad('flows',TTL.flows,()=>twseInstitutionalFlows(),e=>({data:{},error:e.message})),
       safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],error:e.message}))
     ]);
     const flowRows=Object.values(flows.data||{});
-    return json(res,200,{ok:!history.error&&history.historyCount>0,source:history.source||'official-history-not-configured',historyAsOf:history.historyAsOf,historyDays:history.historyDateCount||0,historyStocks:history.historyCount||0,listedCount:listed.data?.length||0,institutionalStocks:flowRows.filter(x=>x.institutionalNet!=null).length,marginStocks:flowRows.filter(x=>x.marginChange!=null||x.shortChange!=null).length,tdccStocks:flowRows.filter(x=>x.largeHolderPct!=null).length,institutionalAsOf:flows.asOf||null,marginAsOf:flows.marginAsOf||null,tdccAsOf:flows.tdccAsOf||null,errors:[history.error,flows.error,listed.error].filter(Boolean),serverTime:now()});
+    return json(res,200,{ok:!history.error&&history.historyCount>0,source:history.error?'official-history-not-configured':'TWSE／TPEx 官方日K Supabase 歷史資料庫',historyAsOf:history.historyAsOf,historyDays:history.historyDateCount||0,historyStocks:history.historyCount||0,listedCount:listed.data?.length||0,institutionalStocks:flowRows.filter(x=>x.institutionalNet!=null).length,marginStocks:flowRows.filter(x=>x.marginChange!=null||x.shortChange!=null).length,tdccStocks:flowRows.filter(x=>x.largeHolderPct!=null).length,institutionalAsOf:flows.asOf||null,marginAsOf:flows.marginAsOf||null,tdccAsOf:flows.tdccAsOf||null,errors:[history.error,flows.error,listed.error].filter(Boolean),serverTime:now()});
   }
   if(u.pathname==='/api/market/scan'){
     const result=await safeLoad('scan',TTL.scan,async()=>{
@@ -950,7 +950,14 @@ async function route(req,res){
     return json(res,200,result);
   }
   if(u.pathname==='/api/market/sentiment'){
-    return json(res,200,{data:null,source:'official-history-not-ready',timestamp:now(),error:'官方歷史日行情快照尚未累積足夠交易日，暫不計算市場廣度；不以第三方情緒指數代替。'});
+    const result=await safeLoad('sentiment',TTL.sentiment,async()=>{
+      const base=await loadOfficialMarketHistory(120);
+      if(base.historyDateCount<60||base.historyCount<1)return {data:null,source:'official-history-not-ready',timestamp:now(),error:'官方歷史日行情快照目前只有 '+base.historyDateCount+' 個有效交易日；至少需要 60 日才計算市場廣度。'};
+      const returns=Object.values(base.data||{}).map(row=>Number(row.return5dPct)).filter(Number.isFinite);
+      const adv=returns.filter(value=>value>0).length,dec=returns.filter(value=>value<0).length;
+      return {data:{advanceDecline:adv/Math.max(1,dec),advancers:adv,decliners:dec,asOf:base.historyAsOf,label:'全市場官方日K近五日漲跌家數比'},source:'TWSE／TPEx 官方日K歷史資料',timestamp:now()};
+    },error=>({data:null,source:'unavailable',timestamp:now(),error:String(error.message||error).slice(0,220)}));
+    return json(res,200,result);
   }
   if(u.pathname==='/api/market/news'){
     const result=await safeLoad('news',TTL.news,async()=>{
