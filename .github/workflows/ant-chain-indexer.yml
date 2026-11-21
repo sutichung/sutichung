@@ -5,29 +5,26 @@ on:
   schedule:
     - cron: "*/5 * * * *"
 
+permissions:
+  contents: read
+
 concurrency:
   group: ant-bsc-testnet-payment-indexer
   cancel-in-progress: false
 
 jobs:
   index:
+    if: ${{ vars.ANT_INDEXER_ENABLED == 'true' && vars.ANT_DB_ENVIRONMENT == 'bsc-testnet' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Indexer disabled
-        if: ${{ vars.ANT_INDEXER_ENABLED != 'true' }}
-        run: echo "ANT indexer is disabled. Configure and verify testnet contracts and Supabase migration before enabling it."
       - uses: actions/checkout@v4
-        if: ${{ vars.ANT_INDEXER_ENABLED == 'true' }}
       - uses: actions/setup-node@v4
-        if: ${{ vars.ANT_INDEXER_ENABLED == 'true' }}
         with:
           node-version: 20
       - name: Install production dependencies
-        if: ${{ vars.ANT_INDEXER_ENABLED == 'true' }}
         run: npm install --omit=dev --no-audit --no-fund
       - name: Verify configuration and reconcile one bounded cycle
-        if: ${{ vars.ANT_INDEXER_ENABLED == 'true' }}
         env:
           ANT_INDEXER_ONESHOT: "true"
           ANT_INDEXER_START_BLOCK: ${{ vars.ANT_INDEXER_START_BLOCK }}
@@ -38,8 +35,8 @@ jobs:
           ANT_MAX_ORACLE_AGE: ${{ vars.ANT_MAX_ORACLE_AGE }}
           BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL }}
           BSC_TESTNET_RPC_URL_SECONDARY: ${{ secrets.BSC_TESTNET_RPC_URL_SECONDARY }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_TESTNET_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_TESTNET_SERVICE_ROLE_KEY }}
           ANT_SALE_CONTRACT: ${{ vars.ANT_SALE_CONTRACT }}
           ANT_USDT_CONTRACT: ${{ vars.ANT_USDT_CONTRACT }}
           ANT_TOKEN_CONTRACT: ${{ vars.ANT_TOKEN_CONTRACT }}
