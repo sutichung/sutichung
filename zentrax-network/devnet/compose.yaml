@@ -45,7 +45,80 @@ services:
               node_id="$$(evmd comet show-node-id --home "/data/node$$j/evmd")"
               peers="$${peers:+$$peers,}$$node_id@node$$j:26656"
             done
-            sed -i "s|^persistent_peers = .*|persistent_peers = \"$$peers\"|" "/data/node$$i/evmd/config/config.toml"
+            sed -i "s|^persistent_peers = .*|persistent_peers = \"$peers\"|" "/data/node$i/evmd/config/config.toml"
+            # Cosmos EVM requires the CometBFT application mempool.
+            sed -i 's/^type = "flood"$/type = "app/' "/data/node$i/evmd/config/config.toml"
+            grep -q '^type = "app"
+          done
+        else
+          echo "Existing local devnet genesis found; preserving node keys and state."
+        fi
+    networks:
+      zentrax:
+        ipv4_address: 172.30.0.9
+
+  node0:
+    <<: *node-common
+    environment: { NODE_INDEX: "0", HOME: /data }
+    ports:
+      - "127.0.0.1:26657:26657"
+      - "127.0.0.1:8545:8545"
+      - "127.0.0.1:1317:1317"
+    networks:
+      zentrax:
+        ipv4_address: 172.30.0.10
+    depends_on:
+      init:
+        condition: service_completed_successfully
+
+  node1:
+    <<: *node-common
+    environment: { NODE_INDEX: "1", HOME: /data }
+    ports:
+      - "127.0.0.1:26667:26657"
+      - "127.0.0.1:8555:8545"
+      - "127.0.0.1:1327:1317"
+    networks:
+      zentrax:
+        ipv4_address: 172.30.0.11
+    depends_on:
+      init:
+        condition: service_completed_successfully
+
+  node2:
+    <<: *node-common
+    environment: { NODE_INDEX: "2", HOME: /data }
+    ports:
+      - "127.0.0.1:26677:26657"
+      - "127.0.0.1:8565:8545"
+      - "127.0.0.1:1337:1317"
+    networks:
+      zentrax:
+        ipv4_address: 172.30.0.12
+    depends_on:
+      init:
+        condition: service_completed_successfully
+
+  node3:
+    <<: *node-common
+    environment: { NODE_INDEX: "3", HOME: /data }
+    ports:
+      - "127.0.0.1:26687:26657"
+      - "127.0.0.1:8575:8545"
+      - "127.0.0.1:1347:1317"
+    networks:
+      zentrax:
+        ipv4_address: 172.30.0.13
+    depends_on:
+      init:
+        condition: service_completed_successfully
+
+networks:
+  zentrax:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+ "/data/node$i/evmd/config/config.toml" || { echo "Failed to configure app mempool for node $i" >&2; exit 1; }
           done
         else
           echo "Existing local devnet genesis found; preserving node keys and state."
