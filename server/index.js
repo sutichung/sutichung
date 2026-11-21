@@ -345,7 +345,7 @@ function isAdminUser(user){return !!(user&&user.email&&SUPABASE_ADMIN_EMAIL&&Str
 
 async function route(req,res){
   const u=new URL(req.url,'http://localhost');
-  // Keep liveness probes independent of ANT, auth, and optional provider handlers.
+  // Keep liveness probes independent of auth and optional provider handlers.
   if(req.method==='GET'&&['/api/health/live','/api/health'].includes(u.pathname))return json(res,200,buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}));
   if(req.method==='POST'&&u.pathname==='/api/automation/research/outcomes'){
     if(!await verifyGitHubActionsToken(bearerToken(req)))return json(res,401,{error:'automation_authentication_required'});
