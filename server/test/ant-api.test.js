@@ -62,3 +62,21 @@ test('order history query is scoped to the authenticated user and bounded', () =
   assert.match(query, /limit=100/);
   assert.doesNotMatch(query, /user_id=eq\.undefined/);
 });
+
+test('ANT API factory returns a callable handler and passes through unrelated routes', async () => {
+  const { createAntApi } = require('../lib/ant-api');
+  const handler = createAntApi({
+    supabaseUrl: '',
+    anonKey: '',
+    serviceKey: '',
+    json: () => { throw new Error('unexpected_response'); },
+    readJson: async () => ({})
+  });
+  assert.equal(typeof handler, 'function');
+  const handled = await handler(
+    { method: 'GET', headers: {} },
+    {},
+    new URL('http://localhost/api/health')
+  );
+  assert.equal(handled, false);
+});
