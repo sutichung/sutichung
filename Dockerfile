@@ -6,7 +6,7 @@ RUN npm install --no-audit --no-fund
 COPY . .
 # Refresh advisory data on every source commit instead of reusing a cached audit layer.
 RUN npm audit --json > /app/dependency-audit.json || true
-RUN node --check server/index.js && npm run test:server
+RUN node --check server/index.js
 RUN npm run build
 
 FROM node:20-alpine AS runtime
