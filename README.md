@@ -164,3 +164,11 @@ ZENTRAX Network 的鏈工程工作區與既有 ANT 應用／BNB Smart Chain 測�
 - [節點營運規範](./zentrax-network/docs/OPERATIONS.md)
 
 執行 `npm run zentrax:check` 可檢查工作區必要文件及安全狀態；GitHub Actions 的 ZENTRAX Network workflow 會在相關檔案變更時自動執行。通過這項檢查只代表規格骨架完整，不代表鏈核心已編譯、共識已運作或測試網已部署。
+
+
+### 本地四驗證者 Devnet
+
+- [四節點 Devnet 操作與驗收](./zentrax-network/devnet/README.md)：以 Docker Compose 啟動四個獨立驗證者，提供 CometBFT RPC 與 EVM JSON-RPC。
+- 啟動：進入 `zentrax-network/devnet` 後執行 `sh up.sh`；驗證執行 `sh verify.sh`；停止執行 `sh down.sh`。
+- 這是以 Cosmos EVM 上游範例鏈建立的本機參考測試網，不是已完成的 ZENTRAX 客製鏈，不是公開測試網，也不可用於真實資產。
+- GitHub Actions `ZENTRAX four-validator devnet` 會建置映像、啟動四節點並驗證共識高度、驗證者數量及 EVM RPC。必須等 CI 真正通過，才可稱本機四節點驗收通過。
