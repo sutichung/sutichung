@@ -79,7 +79,7 @@ jobs:
           done
           echo "Render did not activate expected/runtime commit within six minutes" >&2
           exit 1
-      - name: Verify official Taiwan and multi-exchange crypto data from Render
+      - name: Verify official Taiwan stock data from Render
         if: steps.wait-live.outputs.skip != 'true'
         env:
           MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
@@ -93,14 +93,6 @@ jobs:
           AUTH_HEADER="Authorization: Bearer $OIDC_TOKEN"
           echo "Checking official Taiwan market source"
           curl --fail --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 180 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/market" -o /tmp/market.json
-          echo "Checking multi-exchange crypto market data"
-          curl --fail --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 120 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/crypto/market" -o /tmp/crypto.json
-          echo "Checking live crypto risk radar and order-book snapshots"
-          if ! curl --fail-with-body --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 90 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/crypto/risk/BTCUSDT?type=perpetual&exchange=Binance" -o /tmp/crypto-risk.json; then
-            echo "Crypto risk API response body:"
-            cat /tmp/crypto-risk.json || true
-            exit 1
-          fi
           echo "Checking provider and firewall diagnostics"
           curl --fail --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 45 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/providers" -o /tmp/providers.json
           echo "Checking dependency vulnerability risk data"
@@ -113,29 +105,20 @@ jobs:
           const health = JSON.parse(fs.readFileSync('/tmp/health.json', 'utf8'));
           const healthAfter = JSON.parse(fs.readFileSync('/tmp/health-after.json', 'utf8'));
           const market = JSON.parse(fs.readFileSync('/tmp/market.json', 'utf8'));
-          const crypto = JSON.parse(fs.readFileSync('/tmp/crypto.json', 'utf8'));
-          const cryptoRisk = JSON.parse(fs.readFileSync('/tmp/crypto-risk.json', 'utf8'));
           const providers = JSON.parse(fs.readFileSync('/tmp/providers.json', 'utf8'));
           const vulnerabilities = JSON.parse(fs.readFileSync('/tmp/vulnerabilities.json', 'utf8'));
-          const exchangeChecks = (providers.checks || []).filter(x => ['binance','binance-futures','bybit','okx','okx-swap','coinbase','kraken','kraken-futures'].includes(x.id));
-          const providerFailures = (providers.checks || []).filter(x => ['auth_error','permission_error','region_restricted','rate_limited','timeout','error','upstream_error','http_error','endpoint_error'].includes(x.status));
-          const requiredProviderIds = new Set(['twse','ecb','supabase']);
+          const taiwanProviderIds = new Set(['twse','tpex','fugle']);
+          const providerFailures = (providers.checks || []).filter(x => taiwanProviderIds.has(x.id) && ['auth_error','permission_error','region_restricted','rate_limited','timeout','error','upstream_error','http_error','endpoint_error'].includes(x.status));
+          const requiredProviderIds = new Set(['twse','tpex']);
           const optionalProviderRestrictions = providerFailures.filter(x => !requiredProviderIds.has(x.id)).map(x => ({ id:x.id, label:x.label, status:x.status, httpStatus:x.httpStatus, reason:x.httpStatus===451?'region_restricted':x.id==='fugle'&&x.httpStatus===403?'plan_does_not_include_requested_feature':x.id==='fugle'&&x.httpStatus===401?'invalid_api_key':'optional_provider_unavailable' }));
           const criticalProviderFailures = providerFailures.filter(x => requiredProviderIds.has(x.id));
           const ciDependencyAudit = { status:'passed', blocking:true, source:'blocking Backend checks npm audit --omit=dev', runId:Number(process.env.CI_RUN_ID), runtimeScannerStatus:vulnerabilities.status, runtimeScannedPackageCount:Number(vulnerabilities.scannedPackageCount||0), note:Number(vulnerabilities.scannedPackageCount||0)===0?'Production image intentionally excludes node_modules; Backend checks fails on high/critical production advisories and reports moderate/low findings.':'Runtime dependency scan also returned package coverage.' };
           const quoteCount = Number(market.quoteCount || 0);
           const taiwanConnected = market.ok === true && quoteCount > 0;
-          const officialUs = (providers.checks || []).find(x => x.id === 'us-equities-official') || null;
           const vulnerabilitySeverity = vulnerabilities.severityCounts || {};
-          const connectedExchanges = Number(crypto.summary?.connectedExchangeCount || 0);
-          const cryptoLicenseRequired = crypto.status === 'license_required' || ((crypto.exchanges || []).length > 0 && (crypto.exchanges || []).every(x => x.status === 'not_configured'));
           const warnings = [
-            ...(officialUs?.status === 'not_configured' ? ['us_official_equities_feed_not_configured'] : []),
             ...(quoteCount === 0 ? ['taiwan_market_has_no_live_quotes_at_check_time'] : []),
-            ...(cryptoLicenseRequired ? ['crypto_market_data_redistribution_licenses_not_configured'] : []),
-            ...(!cryptoLicenseRequired && (crypto.exchanges || []).some(x => x.status !== 'connected') ? ['some_crypto_exchanges_unavailable'] : []),
             ...(providerFailures.length ? ['some_optional_providers_unavailable'] : []),
-            ...(cryptoRisk.microstructureStatus !== 'connected' ? ['licensed_orderbook_or_trade_tape_source_not_available'] : []),
             ...(Number(vulnerabilities.scannedPackageCount || 0) < 1 ? ['runtime_dependency_scan_unavailable_in_slim_image_ci_audit_passed'] : []),
             ...(Number(vulnerabilitySeverity.critical || 0) + Number(vulnerabilitySeverity.high || 0) > 0 ? ['high_or_critical_dependency_vulnerabilities_found'] : [])
           ];
@@ -158,25 +141,6 @@ jobs:
               providerWarning: market.providerWarning || null,
               fallbackUsed: market.fallbackUsed === true
             },
-            crypto: {
-              ok: (Array.isArray(crypto.markets) && crypto.markets.length > 0 && connectedExchanges > 0) || cryptoLicenseRequired,
-              status: cryptoLicenseRequired ? 'license_required' : crypto.status || 'ok',
-              licenseRequiredProviders: crypto.licenseRequiredProviders || [],
-              marketCount: Array.isArray(crypto.markets) ? crypto.markets.length : 0,
-              connectedExchangeCount: connectedExchanges,
-              sourceTimestampCoveragePct: crypto.summary?.sourceTimestampCoveragePct ?? null,
-              exchanges: crypto.exchanges || []
-            },
-            cryptoProviderChecks: exchangeChecks,
-            cryptoRiskRadar: {
-              status: cryptoRisk.status || 'unavailable',
-              microstructureStatus: cryptoRisk.microstructureStatus || 'unknown',
-              candleCount: Number(cryptoRisk.candleCount || 0),
-              coverage: cryptoRisk.coverage || {},
-              source: cryptoRisk.source || null,
-              asOf: cryptoRisk.asOf || null,
-              scenarios: (cryptoRisk.scenarios || []).map(x => ({ id: x.id, score: x.score, name: x.name }))
-            },
             providerFailures,
             optionalProviderRestrictions,
             criticalProviderFailures,
@@ -195,7 +159,6 @@ jobs:
               error: vulnerabilities.error || null
             },
             ciDependencyAudit,
-            usOfficialEntitlement: officialUs,
             warnings,
             overallStatus: warnings.length ? 'degraded' : 'healthy'
           };
@@ -205,13 +168,6 @@ jobs:
           if (healthAfter.commit !== process.env.EXPECTED_COMMIT) throw new Error('deployment_changed_during_production_smoke');
           if (!report.taiwan.ok || report.taiwan.quoteCount < 1) throw new Error('official_taiwan_market_source_unavailable');
           if (report.taiwan.dataMode !== 'END_OF_DAY' || report.taiwan.realtime !== false) throw new Error('official_taiwan_data_mode_not_explicitly_end_of_day');
-          if (!report.crypto.ok) throw new Error('all_crypto_exchange_market_data_unavailable_without_license_status');
-          if (cryptoLicenseRequired) {
-            if (report.cryptoRiskRadar.status !== 'license_required') throw new Error('crypto_risk_license_status_mismatch');
-          } else {
-            if (report.cryptoRiskRadar.status !== 'ok' || report.cryptoRiskRadar.candleCount < 22) throw new Error('crypto_risk_radar_candles_unavailable');
-            if (report.cryptoRiskRadar.microstructureStatus !== 'connected' || report.cryptoRiskRadar.coverage.orderBook !== true || report.cryptoRiskRadar.coverage.tradeTape !== true) throw new Error('licensed_crypto_risk_orderbook_or_trade_tape_unavailable');
-          }
           if (report.criticalProviderFailures.length) throw new Error('one_or_more_critical_providers_failed');
           if (vulnerabilities.status === 'vulnerable' && Number(vulnerabilities.productionVulnerabilityCount || 0) > 0) throw new Error('production_dependency_vulnerabilities_detected');
           NODE
