@@ -107,14 +107,21 @@ async function runAgent(provider, prompt, env) {
       return { provider, status: 'error', message: '原模型 JSON 格式錯誤；OpenRouter 備援失敗：' + fallbackError.message };
     }
   }
-  const score = Number(parsed.score), confidence = Number(parsed.confidence);
+  const score = parsed.score, confidence = parsed.confidence;
   const directions = ['看多', '看空', '中性'];
+  const validNumber = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100;
+  if (!directions.includes(parsed.direction) || !validNumber(score) || !validNumber(confidence) || typeof parsed.summary !== 'string' || !parsed.summary.trim()) {
+    return { provider, status: 'error', model: actualModel, engine, message: 'AI 回覆缺少有效 direction、0–100 score/confidence 或 summary；拒絕產生預設評分' };
+  }
+  if (!parsed.scenarios || !['bullish', 'neutral', 'bearish'].every(key => parsed.scenarios[key] && typeof parsed.scenarios[key] === 'object')) {
+    return { provider, status: 'error', model: actualModel, engine, message: 'AI 回覆缺少完整三種風險劇本；拒絕輸出不完整分析' };
+  }
   const arr = (v, max) => Array.isArray(v) ? v.slice(0, max).map(String) : [];
   return {
     provider, status: 'ok', model: actualModel, engine,
-    direction: directions.includes(parsed.direction) ? parsed.direction : '中性',
-    score: Number.isFinite(score) ? Math.max(0, Math.min(100, Math.round(score))) : 50,
-    confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(100, Math.round(confidence))) : 0,
+    direction: parsed.direction,
+    score: Math.round(score),
+    confidence: Math.round(confidence),
     summary: String(parsed.summary || ''),
     bullReasons: arr(parsed.bullReasons, 4), bearReasons: arr(parsed.bearReasons, 4),
     logic: arr(parsed.logic, 5), risks: arr(parsed.risks, 3),

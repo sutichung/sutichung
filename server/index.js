@@ -23,6 +23,7 @@ const globalIntelligence = require('./lib/intelligence');
 const marketIntelligence = require('./lib/market-intelligence');
 const { diagnoseProviders } = require('./lib/provider-diagnostics');
 const { loadOfficialDailyQuotes, diagnoseOfficialDailyQuotes } = require('./lib/official-tw-market');
+const { getOfficialFundamentals } = require('./lib/official-tw-fundamentals');
 const { epochMilliseconds, isStaleTimestamp } = require('./lib/market-timestamps');
 const { createDependencyVulnerabilityScanner } = require('./lib/dependency-vulnerabilities');
 const { verifyGitHubActionsToken } = require('./lib/github-oidc');
@@ -33,9 +34,8 @@ const cryptoEventStorage = require('./lib/crypto-event-storage').createCryptoEve
 const dependencyVulnerabilityScanner = createDependencyVulnerabilityScanner({ lockPath: path.join(__dirname, '..', 'package-lock.json'), manifestPath: path.join(__dirname, '..', 'package.json'), auditPath: path.join(__dirname, '..', 'dependency-audit.json') });
 
 const PORT = Number(process.env.PORT || 8787);
-const FINMIND_BASE = process.env.FINMIND_BASE || 'https://api.finmindtrade.com/api/v4/data';
-const FINMIND_TOKEN = process.env.FINMIND_TOKEN || '';
 const CACHE = new Map();
+const PERSISTED_OFFICIAL_MARKET_DATES = new Set();
 const PENDING = new Map();
 const RATE = new Map();
 const TTL = { universe: 6*60*60*1000, snapshot: 5*60*1000, scan: 10000, history: 5*60*1000, flows: 30*60*1000, futures: 5*60*1000, sentiment: 30*60*1000, news: 5*60*1000 };
@@ -49,14 +49,7 @@ async function fetchJson(url, timeoutMs=8000, extraHeaders={}) {
   try { const r=await fetch(url,{signal:controller.signal,headers:{accept:'application/json',...extraHeaders}}); if(!r.ok) throw new Error('upstream_http_'+r.status); return await r.json(); }
   finally { clearTimeout(timer); }
 }
-async function finmind(dataset, extra={}, timeoutMs=8000) {
-  if(!FINMIND_TOKEN) throw new Error('未設定 FINMIND_TOKEN');
-  const u=new URL(FINMIND_BASE); u.searchParams.set('dataset',dataset);
-  for(const [k,v] of Object.entries(extra)) if(v!==undefined&&v!==null&&v!=='')u.searchParams.set(k,String(v));
-  const payload=await fetchJson(u.toString(),timeoutMs,{Authorization:'Bearer '+FINMIND_TOKEN});
-  if(payload.status!==200 && payload.status!==undefined) throw new Error('FinMind status '+payload.status);
-  return Array.isArray(payload.data)?payload.data:[];
-}
+
 async function external(urlEnv, fallbackMessage) {
   const target=process.env[urlEnv];
   if(!target) throw new Error(fallbackMessage);
@@ -125,9 +118,10 @@ async function twseListedUniverse(){
           if(csvRows.length)return csvRows;
         }
       }catch(_){}
-      const archive=await recentOpenArchive('price_tpex',1);
-      if(!archive.length)throw new Error('TPEx 公司清單 API、官方 CSV 與日行情備援皆不可用：'+error.message);
-      return Object.keys(archive[0].rows||{}).filter(validateSymbol).map(symbol=>({symbol,name:symbol,sector:'未分類',exchange:'TPEx',namePending:true}));
+      const officialQuotes=await fetchJson('https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes',20000);
+      const rows=(officialQuotes||[]).map(row=>({symbol:String(row.SecuritiesCompanyCode||'').trim(),name:String(row.CompanyName||row.CompanyAbbreviation||'').trim(),sector:'未分類',exchange:'TPEx'})).filter(x=>validateSymbol(x.symbol));
+      if(!rows.length)throw new Error('TPEx 官方公司清單及官方日行情均不可用：'+error.message);
+      return rows;
     }
   })();
   const [listed,otc]=await Promise.all([listedPromise,otcPromise]);
@@ -176,17 +170,6 @@ async function tdccShareholdingDistribution(){
   if(!Object.keys(latest).length)throw new Error('TDCC 集保股權分散 CSV 欄位無法解析');
   const asOf=Object.values(latest).map(x=>x.date).sort().at(-1);return {data:latest,asOf,source:'TDCC 集保戶股權分散開放資料（每週更新）'};
 }
-async function fetchOpenArchive(kind,date){
-  const base=process.env.OPEN_DATA_ARCHIVE_URL||'https://raw.githubusercontent.com/88jiayu/tw-chip-open-data/main/data/official';
-  const doc=await fetchJson(base+'/'+kind+'/'+date+'.json',12000,{'User-Agent':'TaiwanStockDashboard/1.0','Accept':'application/json'});
-  if(!doc||doc.license!=='open'||doc.kind!==kind||doc.trade_date!==date||!doc.rows||typeof doc.rows!=='object')throw new Error('開放資料檔案格式或授權欄位不符');
-  return doc;
-}
-async function recentOpenArchive(kind,count=2){
-  const dates=archiveDates(18);
-  const docs=await mapLimit(dates,6,async date=>{try{return await fetchOpenArchive(kind,date);}catch(_){return null;}});
-  return docs.filter(Boolean).sort((a,b)=>a.trade_date.localeCompare(b.trade_date)).slice(-count);
-}
 async function twseInstitutionalDay(date){
   const ymd=date.replace(/-/g,'');
   const url='https://www.twse.com.tw/rwd/zh/fund/T86?response=json&date='+ymd+'&selectType=ALLBUT0999';
@@ -221,40 +204,7 @@ async function twseInstitutionalFlows(){
     x.foreignNet5d+=foreign;x.trustNet5d+=r.trust;x.dealerNet5d+=dealer;x.institutionalNet5d+=total;
     if(day.date===valid.at(-1).date){x.asOf=day.date;x.foreignNet=foreign;x.trustNet=r.trust;x.dealerNet=dealer;x.institutionalNet=total;}
   }
-  let tpexInstitutionalAsOf=null;
-  try{
-    const docs=await recentOpenArchive('inst_tpex',5);
-    tpexInstitutionalAsOf=docs.at(-1)?.trade_date||null;
-    for(const doc of docs){
-      const fields=doc.fields||[],ix={foreign:fields.indexOf('foreign_net'),trust:fields.indexOf('trust_net'),dealer:fields.indexOf('dealer_net'),total:fields.indexOf('total_net')};
-      if(Object.values(ix).some(i=>i<0))continue;
-      for(const [symbol,values] of Object.entries(doc.rows||{})){
-        const x=data[symbol]||(data[symbol]={asOf:doc.trade_date,foreignNet:0,trustNet:0,dealerNet:0,foreignNet5d:0,trustNet5d:0,dealerNet5d:0,institutionalNet:0,institutionalNet5d:0});
-        const foreign=Number(values?.[ix.foreign]),trust=Number(values?.[ix.trust]),dealer=Number(values?.[ix.dealer]),total=Number(values?.[ix.total]);
-        if(![foreign,trust,dealer,total].every(Number.isFinite))continue;
-        x.foreignNet5d=(x.foreignNet5d||0)+foreign;x.trustNet5d=(x.trustNet5d||0)+trust;x.dealerNet5d=(x.dealerNet5d||0)+dealer;x.institutionalNet5d=(x.institutionalNet5d||0)+total;
-        if(doc.trade_date===tpexInstitutionalAsOf){x.asOf=doc.trade_date;x.foreignNet=foreign;x.trustNet=trust;x.dealerNet=dealer;x.institutionalNet=total;x.exchange='TPEx';}
-      }
-    }
-  }catch(_){}
-  let marginAsOf=null;
-  try{
-    const markets=await Promise.all([recentOpenArchive('margin_twse',2),recentOpenArchive('margin_tpex',2)]);
-    for(let marketIndex=0;marketIndex<markets.length;marketIndex++){
-      const margins=markets[marketIndex];
-      if(!margins.length)continue;
-      const latest=margins.at(-1),previous=margins.at(-2);
-      if(marketIndex===0)marginAsOf=latest.trade_date;
-      for(const [symbol,values] of Object.entries(latest.rows)){
-        const old=previous?.rows?.[symbol];
-        const x=data[symbol]||(data[symbol]={asOf:latest.trade_date});
-        const margin=Number(values?.[0]),short=Number(values?.[1]);
-        if(Number.isFinite(margin)){x.marginBalance=margin;if(old&&Number.isFinite(Number(old[0])))x.marginChange=margin-Number(old[0]);}
-        if(Number.isFinite(short)){x.shortBalance=short;if(old&&Number.isFinite(Number(old[1])))x.shortChange=short-Number(old[1]);}
-        if(marketIndex===1)x.marginAsOf=latest.trade_date;
-      }
-    }
-  }catch(_){}
+  // TPEx flow and margin snapshots are omitted until a documented official endpoint is wired; no third-party archive fallback.
   let tdccAsOf=null;
   try{
     const tdcc=await tdccShareholdingDistribution();tdccAsOf=tdcc.asOf;
@@ -263,84 +213,49 @@ async function twseInstitutionalFlows(){
       x.largeHolderPct=holder.largeHolderPct;x.retailHolderPct=holder.retailHolderPct;x.tdccAsOf=holder.date;
     }
   }catch(_){}
-  return {data,source:'TWSE T86 + TPEx 官方歸檔三大法人 + TWSE/TPEx 融資融券 + TDCC 集保資料',timestamp:now(),asOf:valid.at(-1).date,days:valid.map(x=>x.date),tpexInstitutionalAsOf,marginAsOf,tdccAsOf};
+  return {data,source:'TWSE 官方 T86 三大法人 + TDCC 官方集保資料（僅上市市場法人資料；未提供上櫃法人與融資融券）',timestamp:now(),asOf:valid.at(-1).date,days:valid.map(x=>x.date),coverage:{TWSE:true,TPEx:false,margin:false},tdccAsOf};
 }
-async function openSourceMarketHistory(){
-  const dates=archiveDates(120);
-  const kinds=['price_twse','price_tpex'];
-  const batches=await Promise.all(kinds.map(kind=>mapLimit(dates,8,async date=>{try{return await fetchOpenArchive(kind,date);}catch(_){return null;}})));
-  const valid=batches.flat().filter(Boolean).sort((a,b)=>a.trade_date.localeCompare(b.trade_date));
-  const tradingDates=[...new Set(valid.map(x=>x.trade_date))].sort();
-  if(tradingDates.length<60)throw new Error('上市櫃開放資料歷史庫目前只有 '+tradingDates.length+' 個有效交易日，至少需要 60 日才能計算完整技術指標');
-  const grouped=new Map();
-  for(const doc of valid){
-    const fields=doc.fields||[],idx={open:fields.indexOf('open'),high:fields.indexOf('high'),low:fields.indexOf('low'),close:fields.indexOf('close'),volume:fields.indexOf('volume_shares')};
-    if(Object.values(idx).some(i=>i<0))continue;
-    for(const [symbol,values] of Object.entries(doc.rows||{})){
-      if(!/^[0-9A-Z]{4,10}$/.test(symbol)||!Array.isArray(values))continue;
-      const candle={time:doc.trade_date,open:Number(values[idx.open]),high:Number(values[idx.high]),low:Number(values[idx.low]),close:Number(values[idx.close]),volume:Number(values[idx.volume]),exchange:doc.kind==='price_tpex'?'TPEx':'TWSE'};
-      if(![candle.open,candle.high,candle.low,candle.close,candle.volume].every(Number.isFinite)||candle.close<=0||candle.high<=0||candle.low<=0)continue;
-      if(!grouped.has(symbol))grouped.set(symbol,[]);grouped.get(symbol).push(candle);
-    }
-  }
-  const data={};
-  for(const [symbol,candles] of grouped){
-    candles.sort((a,b)=>a.time.localeCompare(b.time));
-    if(candles.length<60)continue;
-    const ind=indicators(candles);if(!ind)continue;
-    const last=candles.at(-1),prior=candles.at(-2)?.close,close5=candles.at(-6)?.close,close20=candles.at(-21)?.close,volume5d=candles.slice(-5).reduce((sum,row)=>sum+row.volume,0);
-    data[symbol]={...ind,exchange:last.exchange,technicalAsOf:last.time,asOf:valid.filter(x=>x.trade_date===last.time&&x.kind===(last.exchange==='TPEx'?'price_tpex':'price_twse')).at(-1)?.fetched_at||now(),close:last.close,latestVolume:last.volume,volume5d,dailyChangePct:prior?((last.close/prior)-1)*100:null,return5dPct:close5?((last.close/close5)-1)*100:null,return20dPct:close20?((last.close/close20)-1)*100:null};
-  }
-  return {data,historyAsOf:tradingDates.at(-1),historyDateCount:tradingDates.length,historyCount:Object.keys(data).length,markets:{TWSE:Object.values(data).filter(x=>x.exchange==='TWSE').length,TPEx:Object.values(data).filter(x=>x.exchange==='TPEx').length},source:'88jiayu/tw-chip-open-data（TWSE + TPEx 官方開放資料歸檔；OGDL）'};
-}
-
 function validateSymbol(s){return /^[0-9A-Z]{2,10}$/.test(s||'');}
 function rateLimit(req){const ip=req.socket.remoteAddress||'unknown';const t=Date.now();let a=RATE.get(ip)||[];a=a.filter(x=>t-x<60000);if(a.length>=480)return false;a.push(t);RATE.set(ip,a);return true;}
 
-async function loadOpenArchiveStockHistory(symbol, kind='price_tpex') {
-  const dates=archiveDates(120);
-  const rows=await mapLimit(dates,8,async date=>{
-    try{
-      const doc=await fetchOpenArchive(kind,date);
-      const fields=doc.fields||[],values=doc.rows?.[symbol];
-      if(!Array.isArray(values))return null;
-      const idx={open:fields.indexOf('open'),high:fields.indexOf('high'),low:fields.indexOf('low'),close:fields.indexOf('close'),volume:fields.indexOf('volume_shares')};
-      if(Object.values(idx).some(i=>i<0))return null;
-      if(!doc.trade_date||!Number.isFinite(Date.parse(String(doc.trade_date))))return null;
-      const candle={time:doc.trade_date,open:parseMarketNumber(values[idx.open]),high:parseMarketNumber(values[idx.high]),low:parseMarketNumber(values[idx.low]),close:parseMarketNumber(values[idx.close]),volume:parseMarketNumber(values[idx.volume])};
-      if(![candle.open,candle.high,candle.low,candle.close,candle.volume].every(Number.isFinite)||candle.close<=0||candle.high<=0||candle.low<=0||candle.high<Math.max(candle.low,candle.close)||candle.low>Math.min(candle.high,candle.close)||candle.volume<0)return null;
-      return candle;
-    }catch(_){return null;}
-  });
-  const data=rows.filter(Boolean).sort((a,b)=>a.time.localeCompare(b.time)).slice(-240);
-  if(data.length<60)throw new Error('官方開放資料歷史庫中此上櫃股票不足 60 根有效日K，暫不能計算完整技術指標');
-  return {data,source:'TPEx 官方日行情開放資料歸檔（非即時日K）',timestamp:now(),asOf:data.at(-1).time,indicators:indicators(data)};
-}
-
 async function loadStockHistory(symbol){
-  let data=[],source='';
-  if(FINMIND_TOKEN){
-    const d=new Date();d.setDate(d.getDate()-260);const start=d.toISOString().slice(0,10);
-    const rows=await finmind('TaiwanStockPrice',{data_id:symbol,start_date:start});
-    data=rows.map(x=>({time:x.date,open:parseMarketNumber(x.open),high:parseMarketNumber(x.max),low:parseMarketNumber(x.min),close:parseMarketNumber(x.close),volume:parseMarketNumber(x.Trading_Volume)})).filter(x=>x.time&&Number.isFinite(Date.parse(String(x.time)))&&[x.open,x.high,x.low,x.close,x.volume].every(Number.isFinite)).slice(-240);
-    source='FinMind TaiwanStockPrice（日資料，非逐筆即時）';
-  }else{
-    const listed=await safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],error:e.message}));
-    const issuer=(listed.data||[]).find(x=>x.symbol===symbol);
-    if(issuer?.exchange==='TPEx')return loadOpenArchiveStockHistory(symbol,'price_tpex');
-    const months=[];for(let i=0;i<8;i++){const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-i);months.push(d.toISOString().slice(0,7)+'-01');}
-    const pages=await mapLimit(months,3,async month=>{
-      const date=month.replace(/-/g,'').slice(0,6)+'01';
-      const url='https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date='+date+'&stockNo='+encodeURIComponent(symbol)+'&response=json';
-      const payload=await fetchJson(url,12000,{'User-Agent':'Mozilla/5.0','Referer':'https://www.twse.com.tw/','Accept':'application/json'});
-      return (payload.data||[]).map(r=>{const parts=String(r[0]||'').split('/');const day=parts.length===3?String(Number(parts[0])+1911)+'-'+String(parts[1]).padStart(2,'0')+'-'+String(parts[2]).padStart(2,'0'):'';const n=parseMarketNumber;return {time:day,volume:n(r[1]),open:n(r[3]),high:n(r[4]),low:n(r[5]),close:n(r[6])};}).filter(x=>x.time&&[x.open,x.high,x.low,x.close,x.volume].every(Number.isFinite));
-    });
-    data=pages.flat().sort((a,b)=>a.time.localeCompare(b.time)).slice(-240);
-    source='TWSE 官方 STOCK_DAY 月日線（日資料，非逐筆即時）';
-    if(data.length<60&&issuer?.exchange!=='TWSE')return loadOpenArchiveStockHistory(symbol,'price_tpex');
+  const listed=await safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],error:e.message}));
+  const issuer=(listed.data||[]).find(x=>x.symbol===symbol);
+  if(!issuer)throw new Error('官方上市櫃公司清單找不到此代號；不猜測市場別');
+  if(issuer.exchange!=='TWSE'){
+    let historyStoreWarning=null;
+    try{
+      const persisted=await loadPersistedOfficialHistory(symbol,'TPEx');
+      if(persisted.length>=60)return {data:persisted,source:'TPEx 官方 OpenAPI 每日快照（Supabase 歷史累積；未還原權值）',timestamp:now(),asOf:persisted.at(-1).time,indicators:indicators(persisted),dataMode:'END_OF_DAY',historicalCoverage:persisted.length,historyStart:persisted[0].time};
+      historyStoreWarning='官方 TPEx 歷史快照目前僅累積 '+persisted.length+' 根有效日K；至少需要 60 根才能計算技術指標';
+    }catch(error){
+      // Missing Supabase credentials or an unapplied migration must not block the official latest-day quote.
+      historyStoreWarning=String(error.message||error).slice(0,180);
+    }
+    const latest=await loadOfficialDailyQuotes();
+    const quote=latest.data?.[symbol];
+    if(!quote)throw new Error('TPEx 官方 OpenAPI 僅提供最新交易日快照；尚無可用的官方歷史日K介面或已授權歷史資料，拒絕使用第三方歷史資料補值');
+    return {data:[{time:quote.asOf,open:quote.open,high:quote.high,low:quote.low,close:quote.close,volume:quote.volume}],source:'TPEx 官方 OpenAPI 最新日行情（單日快照；不足以計算技術指標）',timestamp:now(),asOf:quote.asOf,indicators:null,dataMode:'END_OF_DAY',historicalCoverage:1,historyLimitation:'官方公開 OpenAPI 未提供可查詢日期的歷史個股日K；需使用 TPEx 官方歷史資料商品或累積每日官方快照。',historyStoreWarning:typeof historyStoreWarning==='string'?historyStoreWarning:null};
   }
-  if(data.length<60)throw new Error('個股官方歷史日線不足 60 根，暫不能計算完整技術指標');
-  return {data,source,timestamp:now(),asOf:data.at(-1).time,indicators:indicators(data)};
+  const months=[];
+  for(let i=0;i<12;i++){const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-i);months.push(d.toISOString().slice(0,7)+'-01');}
+  const pages=await mapLimit(months,3,async month=>{
+    const date=month.replace(/-/g,'').slice(0,6)+'01';
+    const url='https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date='+date+'&stockNo='+encodeURIComponent(symbol)+'&response=json';
+    let payload;
+    try{payload=await fetchJson(url,15000,{'User-Agent':'TaiwanStockHunter/1.0','Referer':'https://www.twse.com.tw/','Accept':'application/json'});}
+    catch(_){return [];}
+    if(payload.stat&&payload.stat!=='OK')return [];
+    return (payload.data||[]).map(r=>{
+      const parts=String(r[0]||'').trim().split('/');
+      const day=parts.length===3?String(Number(parts[0])+1911)+'-'+String(parts[1]).padStart(2,'0')+'-'+String(parts[2]).padStart(2,'0'):'';
+      const n=parseMarketNumber;
+      return {time:day,volume:n(r[1]),turnover:n(r[2]),open:n(r[3]),high:n(r[4]),low:n(r[5]),close:n(r[6])};
+    }).filter(x=>x.time&&[x.open,x.high,x.low,x.close,x.volume].every(Number.isFinite)&&x.close>0&&x.high>=Math.max(x.low,x.close,x.open)&&x.low<=Math.min(x.high,x.close,x.open)&&x.volume>=0);
+  });
+  const data=[...new Map(pages.flat().map(row=>[row.time,row])).values()].sort((a,b)=>a.time.localeCompare(b.time)).slice(-240);
+  if(data.length<60)throw new Error('TWSE 官方 STOCK_DAY 有效歷史日K不足 60 根；不使用 FinMind 或第三方行情庫補值');
+  return {data,source:'TWSE 官方 STOCK_DAY（日資料；非盤中即時；官方公開歷史查詢起始範圍受交易所限制）',timestamp:now(),asOf:data.at(-1).time,indicators:indicators(data),dataMode:'END_OF_DAY',historicalCoverage:data.length,historyStart:data[0].time};
 }
 
 
@@ -354,16 +269,75 @@ async function readRequestJson(req,maxBytes=16384){
   try{return raw?JSON.parse(raw):{};}catch(_){throw new Error('invalid_json');}
 }
 function bearerToken(req){const h=String(req.headers.authorization||'');return /^Bearer\s+\S+$/i.test(h)?h.replace(/^Bearer\s+/i,''):'';}
-async function supabaseRequest(path,{method='GET',body,token,admin=false}={}){
+async function supabaseRequest(path,{method='GET',body,token,admin=false,extraHeaders={}}={}){
   if(!SUPABASE_CONFIGURED)throw new Error('Supabase 尚未設定');
   if(admin&&!SUPABASE_SERVICE_ROLE_KEY)throw new Error('管理員服務金鑰尚未在 Render 設定；會員登入不受影響');
   const key=admin?SUPABASE_SERVICE_ROLE_KEY:SUPABASE_ANON_KEY;
-  const headers={'apikey':key,'Authorization':'Bearer '+(token||(admin?SUPABASE_SERVICE_ROLE_KEY:key)),'Accept':'application/json'};
+  const headers={'apikey':key,'Authorization':'Bearer '+(token||(admin?SUPABASE_SERVICE_ROLE_KEY:key)),'Accept':'application/json',...extraHeaders};
   if(body!==undefined)headers['Content-Type']='application/json';
   const response=await fetch(SUPABASE_URL+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(12000)});
   const text=await response.text();let data={};try{data=text?JSON.parse(text):{};}catch(_){data={message:text};}
   if(!response.ok){const error=new Error(data.msg||data.message||data.error_description||data.error||'Supabase request failed');error.status=response.status;throw error;}
   return data;
+}
+async function persistOfficialDailyBars(snapshot){
+  if(!SUPABASE_CONFIGURED)return {persisted:false,reason:'supabase_not_configured'};
+  if(!SUPABASE_SERVICE_ROLE_KEY)return {persisted:false,reason:'SUPABASE_SERVICE_ROLE_KEY_not_configured'};
+  const rows=Object.values(snapshot?.data||{}).filter(q=>q&&q.symbol&&['TWSE','TPEx'].includes(q.market)&&q.asOf&&Number(q.close||q.price)>0).map(q=>({
+    symbol:String(q.symbol),exchange:q.market,trade_date:String(q.asOf).slice(0,10),
+    open:q.open,high:q.high,low:q.low,close:Number(q.close||q.price),volume:Number(q.volume||0),
+    turnover:q.turnover,trades:q.trades,source:String(q.source||snapshot.source||''),
+    source_url:String(q.sourceUrl||''),received_at:q.receivedAt||now()
+  }));
+  if(!rows.length)return {persisted:false,reason:'no_valid_official_rows'};
+  const pending=rows.filter(row=>!PERSISTED_OFFICIAL_MARKET_DATES.has(row.exchange+'|'+row.trade_date));
+  if(!pending.length)return {persisted:true,inserted:0,skipped:rows.length,source:'Supabase official daily bars'};
+  try{
+    await supabaseRequest('/rest/v1/tw_market_daily_bars?on_conflict=symbol,exchange,trade_date',{
+      method:'POST',body:pending,admin:true,
+      extraHeaders:{'Prefer':'resolution=merge-duplicates,return=minimal'}
+    });
+    for(const row of pending)PERSISTED_OFFICIAL_MARKET_DATES.add(row.exchange+'|'+row.trade_date);
+    return {persisted:true,inserted:pending.length,skipped:rows.length-pending.length,source:'Supabase official daily bars'};
+  }catch(error){
+    return {persisted:false,reason:String(error.message||error).slice(0,220),migrationRequired:/tw_market_daily_bars|relation .* does not exist|404/i.test(String(error.message||error))};
+  }
+}
+async function loadPersistedOfficialHistory(symbol,exchange){
+  const query='/rest/v1/tw_market_daily_bars?symbol=eq.'+encodeURIComponent(symbol)+'&exchange=eq.'+encodeURIComponent(exchange)+'&select=trade_date,open,high,low,close,volume,turnover,trades,source,source_url&order=trade_date.asc&limit=500';
+  const rows=await supabaseRequest(query,{admin:true});
+  const data=(rows||[]).map(row=>({time:String(row.trade_date||'').slice(0,10),open:Number(row.open),high:Number(row.high),low:Number(row.low),close:Number(row.close),volume:Number(row.volume)}))
+    .filter(row=>row.time&&[row.open,row.high,row.low,row.close,row.volume].every(Number.isFinite)&&row.close>0&&row.high>=Math.max(row.low,row.close)&&row.low<=Math.min(row.high,row.close)&&row.volume>=0);
+  return data;
+}
+async function loadOfficialMarketHistory(limit=120){
+  const rows=await supabaseRequest('/rest/v1/rpc/tw_market_scan_history',{
+    method:'POST',body:{p_limit:Math.max(60,Math.min(500,Number(limit)||120))},admin:true
+  });
+  const data={},allDates=new Set();
+  for(const row of rows||[]){
+    let bars=row.bars;
+    if(typeof bars==='string'){try{bars=JSON.parse(bars);}catch(_){bars=[];}}
+    if(!Array.isArray(bars))continue;
+    const candles=bars.map(bar=>({
+      time:String(bar.time||'').slice(0,10),open:Number(bar.open),high:Number(bar.high),
+      low:Number(bar.low),close:Number(bar.close),volume:Number(bar.volume)
+    })).filter(bar=>bar.time&&[bar.open,bar.high,bar.low,bar.close,bar.volume].every(Number.isFinite)&&bar.open>0&&bar.high>0&&bar.low>0&&bar.close>0&&bar.high>=Math.max(bar.low,bar.open,bar.close)&&bar.low<=Math.min(bar.high,bar.open,bar.close)&&bar.volume>=0)
+      .sort((a,b)=>a.time.localeCompare(b.time));
+    for(const bar of candles)allDates.add(bar.time);
+    if(candles.length<60)continue;
+    const technical=indicators(candles);
+    if(!technical)continue;
+    const last=candles.at(-1),prior=candles.at(-2)?.close,close5=candles.at(-6)?.close,close20=candles.at(-21)?.close;
+    data[row.symbol]={
+      ...technical,exchange:row.exchange,technicalAsOf:last.time,close:last.close,latestVolume:last.volume,
+      volume5d:candles.slice(-5).reduce((sum,bar)=>sum+bar.volume,0),
+      dailyChangePct:prior?((last.close/prior)-1)*100:null,
+      return5dPct:close5?((last.close/close5)-1)*100:null,
+      return20dPct:close20?((last.close/close20)-1)*100:null
+    };
+  }
+  return {data,historyDateCount:allDates.size,historyAsOf:[...allDates].sort().at(-1)||null,historyCount:Object.keys(data).length};
 }
 async function authenticatedUser(req){
   const token=bearerToken(req);if(!token)return null;
@@ -561,7 +535,7 @@ async function route(req,res){
     return json(res,result.status==='unavailable'?503:200,result);
   }
   if(u.pathname==='/api/health/ready'&&req.method==='GET'){const readiness=buildDependencyReadiness();return json(res,200,{...buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}),...readiness});}
-  if(u.pathname==='/api/health/details'){let cryptoStatus=cryptoRealtimeFeed.status();if(process.env.CRYPTO_STREAM_EMBEDDED==='false'){try{cryptoStatus=await cryptoEventStorage.readStatus();}catch(error){cryptoStatus={...cryptoStatus,workerStatusError:error.message};}}return json(res,200,{...buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}),auth:{configured:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY},provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),cryptoStreaming:cryptoStatus,providers:{finmind:!!FINMIND_TOKEN,youtubeApiKeyConfigured:!!process.env.YOUTUBE_API_KEY,youtubeLiveResolver:!!process.env.YOUTUBE_API_KEY,youtubeChannelEmbedFallback:true,openrouter:!!process.env.OPENROUTER_API_KEY,gemini:!!process.env.GEMINI_API_KEY,groq:!!process.env.GROQ_API_KEY,xai:!!process.env.XAI_API_KEY,deepseek:!!process.env.DEEPSEEK_API_KEY,cloudflare:!!(process.env.CLOUDFLARE_API_TOKEN&&process.env.CLOUDFLARE_ACCOUNT_ID),realtime:cryptoStatus.connectedFeedCount>0,realtimeProviderConfigured:(cryptoStatus.exchanges||[]).length>0,officialDailyMarketData:true,twseOfficialOpenApi:true,tpexOfficialOpenApi:true,licensedRealtimeFeedConfigured:(cryptoStatus.exchanges||[]).length>0,cryptoEventStorageConfigured:cryptoStatus.storage?.configured===true,telegramAlertsConfigured:cryptoStatus.telegramConfigured===true,scan:true,flows:true,futures:true,sentiment:true,news:true,openDataArchive:true}});}
+  if(u.pathname==='/api/health/details'){let cryptoStatus=cryptoRealtimeFeed.status();if(process.env.CRYPTO_STREAM_EMBEDDED==='false'){try{cryptoStatus=await cryptoEventStorage.readStatus();}catch(error){cryptoStatus={...cryptoStatus,workerStatusError:error.message};}}return json(res,200,{...buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}),auth:{configured:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY},provider:'TWSE + TPEx official OpenAPI',trading:getTradingReadiness(),cryptoStreaming:cryptoStatus,providers:{finmind:false,youtubeApiKeyConfigured:!!process.env.YOUTUBE_API_KEY,youtubeLiveResolver:!!process.env.YOUTUBE_API_KEY,youtubeChannelEmbedFallback:true,openrouter:!!process.env.OPENROUTER_API_KEY,gemini:!!process.env.GEMINI_API_KEY,groq:!!process.env.GROQ_API_KEY,xai:!!process.env.XAI_API_KEY,deepseek:!!process.env.DEEPSEEK_API_KEY,cloudflare:!!(process.env.CLOUDFLARE_API_TOKEN&&process.env.CLOUDFLARE_ACCOUNT_ID),realtime:cryptoStatus.connectedFeedCount>0,realtimeProviderConfigured:(cryptoStatus.exchanges||[]).length>0,officialDailyMarketData:true,twseOfficialOpenApi:true,tpexOfficialOpenApi:true,licensedRealtimeFeedConfigured:(cryptoStatus.exchanges||[]).length>0,cryptoEventStorageConfigured:cryptoStatus.storage?.configured===true,telegramAlertsConfigured:cryptoStatus.telegramConfigured===true,scan:stale('scan')?.status==='ready',flows:true,futures:true,sentiment:!!stale('sentiment')?.data,news:true,openDataArchive:false,officialFundamentals:true,twseHistoricalKline:true,tpexHistoricalKline:Number(stale('scan')?.markets?.TPEx||0)>0}});}
   if(SUPABASE_CONFIGURED&&u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/api/auth/')){
     const automationPaths=new Set(['/api/market/snapshot','/api/market/institutional-flows','/api/market/futures','/api/market/sentiment','/api/market/scan','/api/market/news','/api/market/calendar','/api/diagnostics/providers','/api/diagnostics/vulnerabilities','/api/diagnostics/market','/api/crypto/market','/api/crypto/realtime/status','/api/crypto/realtime/quotes','/api/crypto/risk/BTCUSDT','/api/us/market']);
     const smokeReadOnlyPaths=new Set(['/api/diagnostics/providers','/api/diagnostics/vulnerabilities','/api/diagnostics/market','/api/crypto/market','/api/crypto/realtime/status','/api/crypto/realtime/quotes','/api/crypto/risk/BTCUSDT']);
@@ -831,97 +805,68 @@ async function route(req,res){
   }
   if(u.pathname==='/api/market/snapshot'){
     const result=await safeLoad('snapshot',TTL.snapshot,loadOfficialDailyQuotes,e=>({data:{},source:'unavailable',timestamp:now(),dataMode:'END_OF_DAY',delayed:true,error:e.message,quoteCount:0}));
-    return json(res,200,result);
+    const historyPersistence=result.data&&Object.keys(result.data).length?await persistOfficialDailyBars(result):{persisted:false,reason:'no_official_snapshot'};
+    return json(res,200,{...result,historyPersistence});
   }
   if(u.pathname==='/api/diagnostics/analysis'){
     const [history,flows,listed]=await Promise.all([
-      safeLoad('open-source-market-history',12*60*60*1000,openSourceMarketHistory,e=>({data:{},error:e.message,historyDateCount:0,historyCount:0})),
+      safeLoad('official-market-history-diagnostics',30*60*1000,()=>loadOfficialMarketHistory(120),e=>({data:{},error:e.message,historyDateCount:0,historyCount:0})),
       safeLoad('flows',TTL.flows,()=>twseInstitutionalFlows(),e=>({data:{},error:e.message})),
       safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],error:e.message}))
     ]);
     const flowRows=Object.values(flows.data||{});
-    return json(res,200,{ok:!history.error&&history.historyCount>0,source:history.source||'open data archive',historyAsOf:history.historyAsOf,historyDays:history.historyDateCount||0,historyStocks:history.historyCount||0,listedCount:listed.data?.length||0,institutionalStocks:flowRows.filter(x=>x.institutionalNet!=null).length,marginStocks:flowRows.filter(x=>x.marginChange!=null||x.shortChange!=null).length,tdccStocks:flowRows.filter(x=>x.largeHolderPct!=null).length,institutionalAsOf:flows.asOf||null,marginAsOf:flows.marginAsOf||null,tdccAsOf:flows.tdccAsOf||null,errors:[history.error,flows.error,listed.error].filter(Boolean),serverTime:now()});
+    return json(res,200,{ok:!history.error&&history.historyCount>0,source:history.error?'official-history-not-configured':'TWSE／TPEx 官方日K Supabase 歷史資料庫',historyAsOf:history.historyAsOf,historyDays:history.historyDateCount||0,historyStocks:history.historyCount||0,listedCount:listed.data?.length||0,institutionalStocks:flowRows.filter(x=>x.institutionalNet!=null).length,marginStocks:flowRows.filter(x=>x.marginChange!=null||x.shortChange!=null).length,tdccStocks:flowRows.filter(x=>x.largeHolderPct!=null).length,institutionalAsOf:flows.asOf||null,marginAsOf:flows.marginAsOf||null,tdccAsOf:flows.tdccAsOf||null,errors:[history.error,flows.error,listed.error].filter(Boolean),serverTime:now()});
   }
   if(u.pathname==='/api/market/scan'){
     const result=await safeLoad('scan',TTL.scan,async()=>{
-      if(process.env.MARKET_SCAN_URL){
-        const x=await external('MARKET_SCAN_URL','');
-        const timestamp=x.timestamp||null,raw=x.data||{},data={},flows=stale('flows')?.data||{},sentiment=stale('sentiment')?.data||{},futures=stale('futures')?.data||{};
-        const changes=Object.values(raw).map(r=>Number(r?.changePct??r?.return5dPct)).filter(Number.isFinite),adv=changes.filter(v=>v>0).length,dec=changes.filter(v=>v<0).length,advanceDecline=adv/Math.max(1,dec);
-        for(const [symbol,row] of Object.entries(raw)){
-          if(!row||typeof row!=='object')continue;
-          const flow=flows[symbol]||{},merged={...row,...flow};
-          data[symbol]={...merged,scorecard:scoreStock({...merged,asOf:row.asOf||timestamp,fearGreed:row.fearGreed??x.fearGreed??sentiment.fearGreed,advanceDecline:row.advanceDecline??x.advanceDecline??sentiment.advanceDecline,futuresChangePct:row.futuresChangePct??x.futuresChangePct??futures.changePct})};
-        }
-        return {data,source:x.source||'Configured full-market scanner',timestamp:timestamp||now(),scannedCount:Object.keys(data).length,advanceDecline:x.advanceDecline??advanceDecline};
-      }
-      const base=await safeLoad(FINMIND_TOKEN?'all-market-history':'open-source-market-history',FINMIND_TOKEN?6*60*60*1000:12*60*60*1000,async()=>{
-        if(!FINMIND_TOKEN)return await openSourceMarketHistory();
-        const tradingDates=await finmind('TaiwanStockTradingDate',{},15000);
-        const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date());
-        const localTime=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Taipei',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date());
-        const includeToday=localTime>='17:30';
-        const dates=tradingDates.map(x=>String(x.date||'')).filter(x=>x&&x<=today&&(includeToday||x<today)).sort().slice(-100);
-        if(dates.length<60)throw new Error('可用交易日少於 60 日，無法建立全市場技術指標');
-        const dailyRows=await mapLimit(dates,8,date=>finmind('TaiwanStockPrice',{start_date:date},45000));
-        const grouped=new Map();
-        for(const dayRows of dailyRows)for(const r of dayRows){
-          const symbol=String(r.stock_id||r.data_id||'');if(!validateSymbol(symbol))continue;
-          const candle={time:r.date,open:Number(r.open),high:Number(r.max),low:Number(r.min),close:Number(r.close),volume:Number(r.Trading_Volume)};
-          if(![candle.open,candle.high,candle.low,candle.close,candle.volume].every(Number.isFinite)||candle.close<=0||candle.high<=0||candle.low<=0)continue;
-          if(!grouped.has(symbol))grouped.set(symbol,[]);grouped.get(symbol).push(candle);
-        }
-        const data={};
-        for(const [symbol,candles] of grouped){
-          candles.sort((a,b)=>String(a.time).localeCompare(String(b.time)));
-          if(candles.length<60)continue;
-          const ind=indicators(candles);if(!ind)continue;
-          const last=candles.at(-1),priorClose=candles.at(-2)?.close,close5=candles.at(-6)?.close,close20=candles.at(-21)?.close,volume5d=candles.slice(-5).reduce((sum,row)=>sum+row.volume,0);
-          data[symbol]={...ind,technicalAsOf:last.time,volume5d,dailyChangePct:priorClose?((last.close/priorClose)-1)*100:null,return5dPct:close5?((last.close/close5)-1)*100:null,return20dPct:close20?((last.close/close20)-1)*100:null};
-        }
-        return {data,historyAsOf:dates.at(-1),historyDateCount:dates.length,historyCount:Object.keys(data).length};
-      },e=>({data:{},error:e.message,historyCount:0}));
-      if(base.error)throw new Error(base.error);
+      const base=await loadOfficialMarketHistory(120);
       const listed=await safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],error:e.message}));
-      if(listed.error||!listed.data?.length)throw new Error(listed.error||'無法取得證交所上市股票清單');
-      const marketSymbols=new Set(listed.data.map(x=>x.symbol)),exchangeBySymbol=new Map(listed.data.map(x=>[x.symbol,x.exchange||'TWSE']));
-      const perResult=await safeLoad('all-market-per',6*60*60*1000,async()=>{
-        const data={};
-        if(FINMIND_TOKEN){
-          const rows=await finmind('TaiwanStockPER',{start_date:base.historyAsOf},20000);
-          for(const r of rows){const symbol=String(r.stock_id||'');if(!validateSymbol(symbol))continue;const date=String(r.date||'');if(!data[symbol]||date>String(data[symbol].date||''))data[symbol]={date,pe:Number(r.PER),pb:Number(r.PBR),dividendYield:Number(r.dividend_yield)};}
-          return {data,asOf:base.historyAsOf,source:'FinMind TaiwanStockPER'};
-        }
-        const rows=await fetchJson('https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL',12000);
-        for(const r of rows||[]){
-          const symbol=String(r.Code||r['證券代號']||r['股票代號']||'');if(!validateSymbol(symbol))continue;
-          const pick=(re)=>{const k=Object.keys(r).find(key=>re.test(key));return k?twseNumber(r[k]):null;};
-          const pe=pick(/PEratio|本益比/),pb=pick(/PBratio|股價淨值比/),yieldPct=pick(/DividendYield|殖利率/);
-          data[symbol]={date:base.historyAsOf,pe,pb,dividendYield:yieldPct};
-        }
-        return {data,asOf:base.historyAsOf,source:'TWSE OpenAPI BWIBBU_ALL'};
-      },e=>({data:{},error:e.message}));
-      const flowResult=await safeLoad('flows',TTL.flows,()=>twseInstitutionalFlows(),e=>({data:{},error:e.message}));
-      const quotes=stale('snapshot')?.data||{},flows=flowResult.data||stale('flows')?.data||{},sentiment=stale('sentiment')?.data||{},futures=stale('futures')?.data||{},data={};
-      const fiveDay=Object.values(base.data||{}).map(x=>Number(x.return5dPct)).filter(Number.isFinite),adv=fiveDay.filter(v=>v>0).length,dec=fiveDay.filter(v=>v<0).length,advanceDecline=adv/Math.max(1,dec);
-      for(const [symbol,technical] of Object.entries(base.data||{})){
-        if(!marketSymbols.has(symbol))continue;
-        const quote=quotes[symbol]||{},flow=flows[symbol]||{},valuation=perResult.data?.[symbol]||{},livePrice=quote.price!=null&&Number.isFinite(Number(quote.price))&&Number(quote.price)>0?Number(quote.price):null,price=livePrice??Number(technical.close);
-        const trustFlowPct5d=Number.isFinite(Number(flow.trustNet5d))&&technical.volume5d>0?(Number(flow.trustNet5d)/technical.volume5d)*100:null;
-        const foreignFlowPct5d=Number.isFinite(Number(flow.foreignNet5d))&&technical.volume5d>0?(Number(flow.foreignNet5d)/technical.volume5d)*100:null;
-        const row={...technical,...flow,...valuation,pe:valuation.pe,pb:valuation.pb,dividendYield:valuation.dividendYield,trustFlowPct5d,foreignFlowPct5d,signal:technical.macdSignal,price,quoteIsLive:livePrice!==null&&!quote.delayed,quoteDelayed:!!quote.delayed,quoteSource:quote.source||null,exchange:quote.market==='OTC'?'TPEx':exchangeBySymbol.get(symbol)||technical.exchange||'TWSE',changePct:quote.changePct??technical.dailyChangePct,volume:quote.volume??technical.latestVolume,asOf:(!quote.delayed&&quote.timestamp)|| (technical.technicalAsOf?new Date(technical.technicalAsOf+'T13:30:00+08:00').toISOString():technical.asOf||null),priceVsEma20Pct:price!==null&&technical.ema20?((price/technical.ema20)-1)*100:null,priceVsEma60Pct:price!==null&&technical.ema60?((price/technical.ema60)-1)*100:null,priceVsVwap20Pct:price!==null&&technical.vwap20?((price/technical.vwap20)-1)*100:null};
-        const taiwanClock=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Taipei',weekday:'short',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(new Date());
-        const taiwanWeekday=taiwanClock.find(x=>x.type==='weekday')?.value||'';
-        const taiwanHour=Number(taiwanClock.find(x=>x.type==='hour')?.value||0),taiwanMinute=Number(taiwanClock.find(x=>x.type==='minute')?.value||0);
-        const marketSessionOpen=!['Sat','Sun'].includes(taiwanWeekday)&&(taiwanHour*60+taiwanMinute>=540)&&(taiwanHour*60+taiwanMinute<810);
-        row.scorecard=scoreStock({...row,asOf:row.asOf,maxAgeMs:36*60*60*1000,technicalAsOf:technical.technicalAsOf,quoteIsLive:row.quoteIsLive,marketSessionOpen,fearGreed:sentiment.fearGreed,advanceDecline:sentiment.advanceDecline??advanceDecline,futuresChangePct:futures.changePct});
+      const listedCount=(listed.data||[]).length,minSymbols=Math.max(100,Math.ceil(listedCount*0.6));
+      const historyCoveragePct=Math.round(base.historyCount/Math.max(1,listedCount)*100);
+      if(base.historyCount<minSymbols||base.historyDateCount<60)return {
+        status:'official_history_required',data:{},source:'official-history-not-ready',timestamp:now(),
+        scannedCount:0,historyDateCount:base.historyDateCount,historyCount:base.historyCount,
+        listedCount,historyCoveragePct,requiredSymbols:minSymbols,
+        error:'官方歷史資料尚未達全市場掃描門檻：目前 '+base.historyDateCount+' 個有效交易日、'+base.historyCount+'/'+listedCount+' 檔（'+historyCoveragePct+'%）具備至少 60 根日K；需至少 60 個交易日且覆蓋 60% 上市櫃清單。每日官方快照會持續累積，不使用第三方歷史庫補值。'
+      };
+      const snapshot=await safeLoad('snapshot',TTL.snapshot,loadOfficialDailyQuotes,e=>({data:{},error:e.message}));
+      const flowResult=await safeLoad('flows',TTL.flows,twseInstitutionalFlows,e=>({data:{},error:e.message}));
+      const futures=stale('futures')?.data||null;
+      const flows=flowResult.data||{};
+      const returns=Object.values(base.data).map(row=>Number(row.return5dPct)).filter(Number.isFinite);
+      const adv=returns.filter(value=>value>0).length,dec=returns.filter(value=>value<0).length;
+      const advanceDecline=adv/Math.max(1,dec);
+      const data={},markets={TWSE:0,TPEx:0};
+      const listedSymbols=new Set((listed.data||[]).map(item=>item.symbol));
+      for(const [symbol,technical] of Object.entries(base.data)){
+        if(!listedSymbols.has(symbol))continue;
+        const quote=snapshot.data?.[symbol]||{},flow=flows[symbol]||{};
+        const price=Number(quote.price)>0?Number(quote.price):technical.close;
+        const date=quote.asOf||technical.technicalAsOf;
+        const asOf=date?new Date(date+'T13:30:00+08:00').toISOString():null;
+        const row={
+          ...technical,...flow,price,quoteIsLive:false,quoteDelayed:true,
+          quoteSource:quote.source||'Supabase 儲存之交易所官方日行情',
+          changePct:quote.changePct??technical.dailyChangePct,
+          volume:quote.volume??technical.latestVolume,asOf,
+          priceVsEma20Pct:technical.ema20?((price/technical.ema20)-1)*100:null,
+          priceVsEma60Pct:technical.ema60?((price/technical.ema60)-1)*100:null,
+          priceVsVwap20Pct:technical.vwap20?((price/technical.vwap20)-1)*100:null
+        };
+        row.scorecard=scoreStock({...row,asOf,maxAgeMs:36*60*60*1000,technicalAsOf:technical.technicalAsOf,quoteIsLive:false,marketSessionOpen:false,advanceDecline,futuresChangePct:futures?.changePct});
         data[symbol]=row;
+        if(markets[technical.exchange]!==undefined)markets[technical.exchange]+=1;
       }
-      return {data,source:(base.source||'FinMind')+' + 上市櫃行情／公開估值／籌碼',timestamp:now(),scannedCount:Object.keys(data).length,historyAsOf:base.historyAsOf,historyCount:base.historyCount||Object.keys(base.data||{}).length,markets:base.markets||null,advanceDecline};
-    },e=>({data:{},source:'unavailable',timestamp:now(),scannedCount:0,error:e.message}));
-    if(result.stale&&result.data){const safeData={};for(const [symbol,row] of Object.entries(result.data)){const card=row?.scorecard||{};safeData[symbol]={...row,scorecard:{...card,direction:'觀望',status:'insufficient-data',fresh:false,reasons:[...(card.reasons||[]),'全市場掃描快取已過期，暫停方向判斷']}};}return json(res,200,{...result,data:safeData});}
-    if(!result.error&&!result.stale)antColony.enqueue('TW',Object.entries(result.data||{}).map(([symbol,row])=>({...row,symbol,source:result.source})),result.historyAsOf||result.timestamp||null);
-    return json(res,200,result);
+      return {
+        status:'ready',data,source:'TWSE／TPEx 官方日行情快照 + Supabase 官方歷史日K',
+        timestamp:now(),scannedCount:Object.keys(data).length,historyAsOf:base.historyAsOf,
+        historyDateCount:base.historyDateCount,historyCount:base.historyCount,listedCount,historyCoveragePct,markets,
+        advanceDecline,flowCoverage:flowResult.coverage||null,
+        warning:'全部價格與技術指標均以官方日收盤資料計算；不是盤中即時訊號。'
+      };
+    },error=>({status:'official_history_required',data:{},source:'unavailable',timestamp:now(),scannedCount:0,error:String(error.message||error).slice(0,240)}));
+    if(result.stale)return json(res,503,{status:'official_history_required',data:{},source:'stale-official-history-scan',timestamp:now(),scannedCount:0,error:'全市場掃描快取已過期；暫停輸出舊分數，等待官方歷史資料重新驗證。'});
+    return json(res,result.status==='ready'?200:503,result);
   }
   if(u.pathname.startsWith('/api/market/fundamentals/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop()||'');
@@ -953,64 +898,12 @@ async function route(req,res){
         mopsUrl:'https://mops.twse.com.tw/mops/web/t05st03',
         twseProfileUrl:company.exchange==='TWSE'?'https://www.twse.com.tw/pdf/ch/'+symbol+'_ch.pdf':null
       };
-      if(!FINMIND_TOKEN)return {company:officialCompany,profile:{description:officialCompany.businessDescription,descriptionNote:'尚未設定 FinMind Token；財務報表、月營收與股利資料暫不可用。',mopsUrl:officialCompany.mopsUrl},financials:null,financialError:'未設定 FINMIND_TOKEN；財報資料暫不可用',source:'TWSE／TPEx 官方公司基本資料',timestamp:now()};
-      const startDate='2018-01-01';
-      const datasets=['TaiwanStockFinancialStatements','TaiwanStockBalanceSheet','TaiwanStockCashFlowsStatement','TaiwanStockMonthRevenue','TaiwanStockDividend','TaiwanStockPER'];
-      const datasetErrors={};
-      const loadDataset=async name=>{try{return await finmind(name,{data_id:symbol,start_date:name==='TaiwanStockDividend'?'2018-01-01':startDate},20000);}catch(error){datasetErrors[name]=String(error.message||error);return [];}};
-      const [income,balance,cash,revenue,dividends,valuationRows]=await Promise.all(datasets.map(loadDataset));
-      const datesOf=rows=>[...new Set((rows||[]).map(x=>String(x.date||'')))].filter(Boolean).sort();
-      const latestIncome=datesOf(income).at(-1)||null,latestBalance=datesOf(balance).at(-1)||null,latestCash=datesOf(cash).at(-1)||null;
-      const pick=(rows,date,keys)=>{const found=(rows||[]).filter(x=>String(x.date||'')===date);for(const key of keys){const row=found.find(x=>String(x.type||'').toLowerCase()===key.toLowerCase()||String(x.origin_name||'').toLowerCase()===key.toLowerCase());if(row&&Number.isFinite(Number(row.value)))return Number(row.value);}return null;};
-      const incomeSummary=latestIncome?{
-        revenue:pick(income,latestIncome,['Revenue','OperatingRevenue','Income','營業收入合計','收益']),
-        grossProfit:pick(income,latestIncome,['GrossProfit','營業毛利（毛損）淨額']),
-        operatingIncome:pick(income,latestIncome,['OperatingIncome','OperatingIncomeLoss','IncomeFromOperations','營業利益（損失）']),
-        netIncome:pick(income,latestIncome,['IncomeAfterTaxes','NetIncome','本期淨利（淨損）']),
-        eps:pick(income,latestIncome,['EPS','EarningsPerShare','基本每股盈餘（元）'])
-      }:null;
-      const balanceSummary=latestBalance?{
-        totalAssets:pick(balance,latestBalance,['TotalAssets','資產總計']),
-        totalLiabilities:pick(balance,latestBalance,['TotalLiabilities','負債總計']),
-        totalEquity:pick(balance,latestBalance,['TotalEquity','EquityAttributableToOwnersOfParent','權益總計']),
-        currentAssets:pick(balance,latestBalance,['CurrentAssets','流動資產合計']),
-        currentLiabilities:pick(balance,latestBalance,['CurrentLiabilities','流動負債合計'])
-      }:null;
-      const cashKeys={operatingCashFlow:['CashFlowsFromOperatingActivities','CashProvidedByOperatingActivities','營業活動之淨現金流入（流出）'],investingCashFlow:['CashFlowsFromInvestingActivities','CashProvidedByInvestingActivities','投資活動之淨現金流入(流出)'],financingCashFlow:['CashFlowsFromFinancingActivities','CashProvidedByFinancingActivities','籌資活動之淨現金流入（流出）']};
-      const cashYtd=latestCash?Object.fromEntries(Object.entries(cashKeys).map(([key,keys])=>[key,pick(cash,latestCash,keys)])):{};
-      const cashDate=latestCash?new Date(latestCash+'T00:00:00Z'):null,cashMonth=cashDate?cashDate.getUTCMonth()+1:0;
-      const priorCashDate=cashDate&&cashMonth>3?new Date(Date.UTC(cashDate.getUTCFullYear(),cashDate.getUTCMonth()-2,0)).toISOString().slice(0,10):null;
-      const hasPriorCash=!!priorCashDate&&datesOf(cash).includes(priorCashDate);
-      const cashQuarter=latestCash?Object.fromEntries(Object.entries(cashKeys).map(([key,keys])=>{const current=cashYtd[key],prior=hasPriorCash?pick(cash,priorCashDate,keys):cashMonth===3?0:null;return [key,current==null||prior==null?null:current-prior];})):{};
-      const cashSummary=latestCash?{...cashQuarter,operatingCashFlowYtd:cashYtd.operatingCashFlow,investingCashFlowYtd:cashYtd.investingCashFlow,financingCashFlowYtd:cashYtd.financingCashFlow,periodBasis:cashMonth===3||hasPriorCash?'single-quarter':'year-to-date',periodDate:latestCash}:null;
-      const debtRatio=balanceSummary?.totalAssets>0&&balanceSummary?.totalLiabilities!=null?balanceSummary.totalLiabilities/balanceSummary.totalAssets*100:null;
-      const currentRatio=balanceSummary?.currentLiabilities>0&&balanceSummary?.currentAssets!=null?balanceSummary.currentAssets/balanceSummary.currentLiabilities:null;
-      const grossMargin=incomeSummary?.revenue>0&&incomeSummary?.grossProfit!=null?incomeSummary.grossProfit/incomeSummary.revenue*100:null;
-      const operatingMargin=incomeSummary?.revenue>0&&incomeSummary?.operatingIncome!=null?incomeSummary.operatingIncome/incomeSummary.revenue*100:null;
-      const netMargin=incomeSummary?.revenue>0&&incomeSummary?.netIncome!=null?incomeSummary.netIncome/incomeSummary.revenue*100:null;
-      const latestValuation=valuationRows.filter(x=>String(x.date||'')).sort((a,b)=>String(b.date).localeCompare(String(a.date)))[0]||null;
-      const valuation=latestValuation?{asOf:latestValuation.date,pe:Number.isFinite(Number(latestValuation.PER))?Number(latestValuation.PER):null,pb:Number.isFinite(Number(latestValuation.PBR))?Number(latestValuation.PBR):null,dividendYield:Number.isFinite(Number(latestValuation.dividend_yield))?Number(latestValuation.dividend_yield):null}:null;
-      const months=(revenue||[]).map(x=>({date:String(x.date||''),revenue:Number(x.revenue),year:Number(x.revenue_year),month:Number(x.revenue_month)})).filter(x=>x.date&&Number.isFinite(x.revenue)).sort((a,b)=>a.date.localeCompare(b.date));
-      const monthMap=new Map(months.map(x=>[x.year+'-'+x.month,x.revenue]));
-      const monthlyRevenue=months.slice(-24).map(x=>({date:x.date,revenue:x.revenue,yoy:monthMap.has((x.year-1)+'-'+x.month)&&monthMap.get((x.year-1)+'-'+x.month)!==0?(x.revenue/monthMap.get((x.year-1)+'-'+x.month)-1)*100:null}));
-      const dividendHistory=(dividends||[]).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).slice(0,12);
-      const isFinancialIndustry=/金融|保險/.test(String(company.sector||''));
-      const healthCandidates=[
-        ['EPS',incomeSummary?.eps,v=>v>0?1:-1],
-        ['毛利率',grossMargin,v=>v>=30?1:v<10?-1:0],
-        ['營業利益率',operatingMargin,v=>v>=10?1:v<0?-1:0],
-        ['稅後淨利率',netMargin,v=>v>=5?1:v<0?-1:0],
-        ['負債比',debtRatio,v=>v<=40?1:v>=70?-1:0],
-        ['流動比率',currentRatio,v=>v>=1.5?1:v<1?-1:0],
-        ['營業現金流',cashSummary?.operatingCashFlow??cashSummary?.operatingCashFlowYtd,v=>v>0?1:-1],
-        ['月營收年增率',monthlyRevenue.at(-1)?.yoy,v=>v>5?1:v< -5?-1:0]
-      ];
-      const applicableHealthCandidates=isFinancialIndustry?healthCandidates.filter(x=>['EPS','稅後淨利率','月營收年增率'].includes(x[0])):healthCandidates;
-      const availableHealth=applicableHealthCandidates.filter(x=>x[1]!=null&&Number.isFinite(Number(x[1])));
-      const healthScore=availableHealth.length?Math.round(50+availableHealth.reduce((sum,x)=>sum+x[2](Number(x[1])),0)/availableHealth.length*50):null;
-      const healthMinimumCoverage=Math.min(4,applicableHealthCandidates.length);
-      const financialHealth={score:availableHealth.length>=healthMinimumCoverage?healthScore:null,coverage:availableHealth.length,total:applicableHealthCandidates.length,status:availableHealth.length<healthMinimumCoverage?'資料不足':healthScore>=65?'偏強':healthScore<=35?'偏弱':'中性',note:isFinancialIndustry?'金融保險業不套用一般產業負債比、流動比及現金流門檻。':'一般產業簡易財務檢查，未作同業標準化；需搭配產業特性與多年趨勢判讀。'};
-      return {company:officialCompany,profile:{description:officialCompany.businessDescription,descriptionNote:officialCompany.businessDescription?'公司業務簡介取自證交所公開公司基本資料。':'官方公司基本資料未提供可用的營業項目欄位；請以公開資訊觀測站公司基本資料／年報為準。',mopsUrl:officialCompany.mopsUrl},financials:{incomeAsOf:latestIncome,balanceAsOf:latestBalance,cashAsOf:latestCash,income:incomeSummary,balance:balanceSummary,cash:cashSummary,debtRatio,currentRatio,grossMargin,operatingMargin,netMargin,financialHealth,valuation,monthlyRevenue,dividends:dividendHistory},datasetErrors,source:'FinMind 財報／月營收／股利資料；公司清單 TWSE／TPEx',timestamp:now(),periodType:'財報為季資料；月營收為月資料'};
+      const officialFinancials=await getOfficialFundamentals({symbol,exchange:company.exchange,sector:company.sector});
+      return {
+        company:officialCompany,
+        profile:{description:officialCompany.businessDescription,descriptionNote:'公司基本資料取自證交所／櫃買中心；詳細營業內容請以公開資訊觀測站年報為準。',mopsUrl:officialCompany.mopsUrl},
+        ...officialFinancials
+      };
     },e=>({error:e.message,company:null,financials:null,source:'unavailable',timestamp:now()}));
     return json(res,result.error?503:200,result);
   }
@@ -1035,7 +928,6 @@ async function route(req,res){
   }
   if(u.pathname==='/api/market/institutional-flows'){
     const result=await safeLoad('flows',TTL.flows,async()=>{
-      if(process.env.MARKET_FLOWS_URL){const x=await external('MARKET_FLOWS_URL','');return {data:x.data||{},source:x.source||'Configured flow provider',timestamp:x.timestamp||now(),asOf:x.asOf||null};}
       return await twseInstitutionalFlows();
     },e=>({data:{},source:'unavailable',timestamp:now(),error:e.message,asOf:null}));
     return json(res,200,result);
@@ -1043,21 +935,6 @@ async function route(req,res){
   if(u.pathname==='/api/market/futures'){
     const result=await safeLoad('futures',TTL.futures,async()=>{
       let nightSession=null,nightSessionError=null,daySession=null;
-      if(process.env.MARKET_FUTURES_URL){
-        const x=await external('MARKET_FUTURES_URL','');
-        return {data:x.data||null,source:x.source||'Configured futures provider',timestamp:x.timestamp||now()};
-      }
-      if(FINMIND_TOKEN){
-        const d=new Date();d.setDate(d.getDate()-14);const startDate=d.toISOString().slice(0,10);
-        const rows=await finmind('TaiwanFuturesDaily',{data_id:'TX',start_date:startDate},20000);
-        if(!rows.length)throw new Error('FinMind TX 期貨日資料目前無資料');
-        const latestDate=rows.map(x=>String(x.date||'')).sort().at(-1);
-        const today=rows.filter(x=>String(x.date)===latestDate).sort((a,b)=>Number(b.volume||0)-Number(a.volume||0));
-        const latest=today[0],contract=String(latest.contract_date||'');
-        const prior=rows.filter(x=>String(x.contract_date||'')===contract&&String(x.date)<latestDate).sort((a,b)=>String(b.date).localeCompare(String(a.date)))[0];
-        const last=Number(latest.close),prev=Number(prior?.close);
-        return {data:{last:Number.isFinite(last)?last:null,changePct:Number.isFinite(prev)&&prev!==0?(last/prev-1)*100:null,openInterestChange:prior?Number(latest.open_interest||0)-Number(prior.open_interest||0):null,volume:Number(latest.volume||0),contractDate:contract,asOf:latestDate,frequency:'daily',nightSession:null,nightSessionError:nightSessionError||'目前沒有可用的夜盤即時行情來源'},source:'FinMind TaiwanFuturesDaily（日資料，非即時）',timestamp:now()};
-      }
       const rows=await fetchJson('https://openapi.taifex.com.tw/v1/DailyMarketReportFut',15000,{'User-Agent':'Mozilla/5.0','Accept':'application/json'});
       if(!Array.isArray(rows)||!rows.length)throw new Error('TAIFEX OpenAPI 未回傳期貨日報');
       const tx=rows.filter(r=>String(r.Contract||r['契約']||r['商品']||'').trim().toUpperCase()==='TX');
@@ -1083,36 +960,25 @@ async function route(req,res){
   }
   if(u.pathname==='/api/market/sentiment'){
     const result=await safeLoad('sentiment',TTL.sentiment,async()=>{
-      if(process.env.MARKET_SENTIMENT_URL){const x=await external('MARKET_SENTIMENT_URL','');return {data:x.data||null,source:x.source||'Configured sentiment provider',timestamp:x.timestamp||now()};}
-      if(FINMIND_TOKEN){
-        const d=new Date();d.setDate(d.getDate()-45);const startDate=d.toISOString().slice(0,10);
-        const rows=await finmind('CnnFearGreedIndex',{start_date:startDate},15000);
-        const latest=rows.sort((a,b)=>String(a.date).localeCompare(String(b.date))).at(-1);
-        if(latest)return {data:{fearGreed:Number(latest.fear_greed),label:latest.fear_greed_emotion,asOf:latest.date},source:'FinMind CnnFearGreedIndex（日資料）',timestamp:now()};
-      }
-      const base=await safeLoad('open-source-market-history',12*60*60*1000,openSourceMarketHistory,e=>({data:{},error:e.message}));
-      if(base.error)throw new Error(base.error);
-      const returns=Object.values(base.data||{}).map(x=>Number(x.return5dPct)).filter(Number.isFinite);
-      const adv=returns.filter(x=>x>0).length,dec=returns.filter(x=>x<0).length;
-      return {data:{advanceDecline:adv/Math.max(1,dec),advancers:adv,decliners:dec,asOf:base.historyAsOf,label:'全市場近五日漲跌家數比'},source:'TWSE 官方開放資料計算市場廣度（非 CNN 恐懼貪婪指數）',timestamp:now()};
-    },e=>({data:null,source:'unavailable',timestamp:now(),error:e.message}));
+      const base=await loadOfficialMarketHistory(120);
+      const listed=await safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],error:e.message}));
+      const listedCount=(listed.data||[]).length,coveragePct=Math.round(base.historyCount/Math.max(1,listedCount)*100);
+      if(base.historyDateCount<60||base.historyCount<Math.max(100,Math.ceil(listedCount*0.6)))return {data:null,source:'official-history-not-ready',timestamp:now(),error:'官方歷史日行情快照尚未達 60 個交易日及 60% 市場覆蓋率（目前 '+base.historyDateCount+' 日、'+coveragePct+'%）；暫不計算市場廣度。'};
+      const returns=Object.values(base.data||{}).map(row=>Number(row.return5dPct)).filter(Number.isFinite);
+      const adv=returns.filter(value=>value>0).length,dec=returns.filter(value=>value<0).length;
+      return {data:{advanceDecline:adv/Math.max(1,dec),advancers:adv,decliners:dec,asOf:base.historyAsOf,label:'全市場官方日K近五日漲跌家數比'},source:'TWSE／TPEx 官方日K歷史資料',timestamp:now()};
+    },error=>({data:null,source:'unavailable',timestamp:now(),error:String(error.message||error).slice(0,220)}));
+    if(result.stale)return json(res,200,{data:null,source:'stale-official-history',timestamp:now(),error:'官方市場廣度快取已過期，暫不顯示舊值。'});
     return json(res,200,result);
   }
   if(u.pathname==='/api/market/news'){
     const result=await safeLoad('news',TTL.news,async()=>{
-      if(process.env.MARKET_NEWS_URL){const x=await external('MARKET_NEWS_URL','');return {data:Array.isArray(x.data)?x.data:[],source:x.source||'Configured news provider',timestamp:x.timestamp||now()};}
-      if(FINMIND_TOKEN){
-        const d=new Date();d.setDate(d.getDate()-3);const startDate=d.toISOString().slice(0,10);
-        const rows=await finmind('TaiwanStockNews',{start_date:startDate},20000);
-        const data=rows.map(r=>({title:r.title||'',summary:r.description||'',url:r.link||'',source:r.source||'FinMind',publishedAt:r.date||'',symbol:r.stock_id||''})).filter(x=>x.title||x.url).sort((a,b)=>String(b.publishedAt).localeCompare(String(a.publishedAt))).slice(0,50);
-        if(data.length)return {data,source:'FinMind TaiwanStockNews',timestamp:now()};
-      }
       const rows=await fetchJson('https://openapi.twse.com.tw/v1/news/newsList',12000);
       const data=(rows||[]).map(r=>{
         const pick=(re)=>{const k=Object.keys(r).find(key=>re.test(key));return k?r[k]:'';};
-        return {title:String(pick(/title|標題|主旨/i)||''),summary:String(pick(/content|摘要|內容/i)||''),url:String(pick(/url|link|網址|連結/i)||''),source:'臺灣證券交易所公告',publishedAt:String(pick(/date|時間|日期/i)||'')};
-      }).filter(x=>x.title).slice(0,50);
-      return {data,source:'TWSE OpenAPI newsList（交易所公告，不等同即時財經新聞）',timestamp:now()};
+        return {title:String(pick(/標題|主旨|title/i)||''),summary:String(pick(/內容|摘要|summary/i)||''),url:String(pick(/網址|連結|url/i)||''),source:'TWSE 官方新聞',publishedAt:String(pick(/日期|時間|date/i)||'')};
+      }).filter(x=>x.title).sort((a,b)=>String(b.publishedAt).localeCompare(String(a.publishedAt))).slice(0,50);
+      return {data,source:'TWSE OpenAPI newsList',timestamp:now()};
     },e=>({data:[],source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
   }
@@ -1135,8 +1001,6 @@ async function route(req,res){
   if(u.pathname==='/api/intelligence/overview'){
     const results=await Promise.allSettled([
       safeLoad('news',TTL.news,async()=>{
-        if(process.env.MARKET_NEWS_URL){const x=await external('MARKET_NEWS_URL','');return {data:Array.isArray(x.data)?x.data:[],source:x.source||'Configured news provider',timestamp:x.timestamp||now()};}
-        if(FINMIND_TOKEN){const d=new Date();d.setDate(d.getDate()-3);const rows=await finmind('TaiwanStockNews',{start_date:d.toISOString().slice(0,10)},20000);const data=rows.map(r=>({title:r.title||'',summary:r.description||'',url:r.link||'',source:r.source||'FinMind',publishedAt:r.date||''})).filter(x=>x.title);if(data.length)return {data,source:'FinMind',timestamp:now()};}
         const rows=await fetchJson('https://openapi.twse.com.tw/v1/news/newsList',12000);
         return {data:(rows||[]).map(r=>{const pick=re=>{const k=Object.keys(r).find(key=>re.test(key));return k?r[k]:'';};return {title:String(pick(/title|標題|主旨/i)||''),summary:String(pick(/content|摘要|內容/i)||''),url:String(pick(/url|link|網址|連結/i)||''),source:'臺灣證券交易所公告',publishedAt:String(pick(/date|時間|日期/i)||'')};}).filter(x=>x.title).slice(0,50),source:'TWSE OpenAPI',timestamp:now()};
       },e=>({data:[],source:'unavailable',error:e.message,timestamp:now()})),
