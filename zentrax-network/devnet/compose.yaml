@@ -10,7 +10,7 @@ x-node-common: &node-common
   volumes:
     - ${ZENTRAX_DEVNET_DATA:-./.local-data}:/data
   entrypoint: ["/bin/sh", "-ec"]
-  command: ["exec evmd start --home \"/data/node$$NODE_INDEX/evmd\" --minimum-gas-prices=0atest"]
+  command: ["exec evmd start --home \"/data/node$$NODE_INDEX/evmd\" --chain-id zentrax-devnet-1 --minimum-gas-prices=0atest"]
   healthcheck:
     test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:26657/status | grep -q latest_block_height"]
     interval: 5s
