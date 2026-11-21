@@ -39,5 +39,9 @@ jobs:
         run: npm install
       - name: Build production frontend
         run: npm run build
+      - name: Verify production bundle exists
+        run: test -s dist/index.html
+      - name: Build production Docker image
+        run: docker build -t zentrax-testnet-ci .
       - name: Run backend tests
         run: npm run test:server
