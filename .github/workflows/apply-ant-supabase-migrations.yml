@@ -1,10 +1,10 @@
-name: Apply ANT Supabase migrations
+name: Apply ANT BSC testnet Supabase migrations
 
 on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: Type APPLY to apply all pending migrations to the configured Supabase database
+        description: Type APPLY BSC TESTNET MIGRATIONS to apply pending migrations to the dedicated testnet database
         required: true
         type: string
 
@@ -12,24 +12,24 @@ permissions:
   contents: read
 
 concurrency:
-  group: ant-supabase-migrations
+  group: ant-bsc-testnet-supabase-migrations
   cancel-in-progress: false
 
 jobs:
   apply:
-    if: ${{ inputs.confirm == 'APPLY' }}
+    if: ${{ inputs.confirm == 'APPLY BSC TESTNET MIGRATIONS' && vars.ANT_DB_ENVIRONMENT == 'bsc-testnet' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Require database secret
+      - name: Require dedicated testnet database secret
         env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_TESTNET_DB_URL: ${{ secrets.SUPABASE_TESTNET_DB_URL }}
         run: |
-          if [ -z "$SUPABASE_DB_URL" ]; then
-            echo "::error::Repository secret SUPABASE_DB_URL is not configured."
+          if [ -z "$SUPABASE_TESTNET_DB_URL" ]; then
+            echo "::error::Repository secret SUPABASE_TESTNET_DB_URL is not configured."
             exit 1
           fi
 
@@ -38,7 +38,7 @@ jobs:
         with:
           version: latest
 
-      - name: Apply pending migrations
+      - name: Apply pending testnet migrations
         env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-        run: supabase db push --db-url "$SUPABASE_DB_URL" --yes
+          SUPABASE_TESTNET_DB_URL: ${{ secrets.SUPABASE_TESTNET_DB_URL }}
+        run: supabase db push --db-url "$SUPABASE_TESTNET_DB_URL" --yes
