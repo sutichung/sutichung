@@ -28,7 +28,7 @@ permissions:
 
 concurrency:
   group: zentrax-web-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   web-build-and-server-tests:
