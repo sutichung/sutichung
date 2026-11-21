@@ -8,7 +8,7 @@ on:
     - cron: "0 2-5 * * 1-5"
     # Close review after the cash session: 13:40 Taiwan time.
     - cron: "40 5 * * 1-5"
-    # Re-run close research after FinMind institutional flows are normally published.
+    # Re-run close research after official exchange institutional data is normally published.
     - cron: "10 13 * * 1-5"
     # Daily system and provider health review at 06:00 Taiwan time (22:00 UTC).
     - cron: "0 22 * * *"
@@ -42,8 +42,13 @@ jobs:
           curl --fail --silent --show-error --max-time 45 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/market/institutional-flows" -o /tmp/flows.json
           curl --fail --silent --show-error --max-time 45 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/market/futures" -o /tmp/futures.json
           curl --fail --silent --show-error --max-time 45 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/market/sentiment" -o /tmp/sentiment.json
-          curl --fail --silent --show-error --max-time 180 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/market/scan" -o /tmp/scan.json
-          node -e "const x=require('/tmp/scan.json'); console.log('Scanned symbols:', x.scannedCount ?? Object.keys(x.data||{}).length, 'source:', x.source||'unknown')"
+          curl --silent --show-error --max-time 180 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/market/scan" -o /tmp/scan.json
+          SCAN_STATUS=$(node -e "const x=JSON.parse(require('fs').readFileSync('/tmp/scan.json','utf8')); process.stdout.write(x.status||'')")
+          if [ "$SCAN_STATUS" = "official_history_required" ]; then
+            echo "Official historical store is not ready; skipping scan archive without using third-party data."
+            exit 0
+          fi
+          node -e "const x=JSON.parse(require('fs').readFileSync('/tmp/scan.json','utf8')); console.log('Scanned symbols:', x.scannedCount ?? Object.keys(x.data||{}).length, 'source:', x.source||'unknown')"
           mkdir -p reports
           node server/jobs/archive-intraday-snapshot.js /tmp/scan.json /tmp/snapshot.json
       - uses: actions/upload-artifact@v4
@@ -64,6 +69,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
         run: |
+          OIDC_TOKEN=$(curl --fail --silent --show-error --get --data-urlencode "audience=taiwan-stock-hunter-automation" "$ACTIONS_ID_TOKEN_REQUEST_URL" -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | jq -r '.value')
+          test -n "$OIDC_TOKEN" && test "$OIDC_TOKEN" != "null" || { echo "Unable to obtain GitHub Actions OIDC token"; exit 1; }
+          echo "::add-mask::$OIDC_TOKEN"
+          curl --silent --show-error --max-time 180 -H "Authorization: Bearer $OIDC_TOKEN" "$MARKET_APP_URL/api/market/scan" -o /tmp/scan-status.json
+          SCAN_STATUS=$(node -e "const x=JSON.parse(require('fs').readFileSync('/tmp/scan-status.json','utf8')); process.stdout.write(x.status||'')")
+          if [ "$SCAN_STATUS" = "official_history_required" ]; then
+            echo "Skipping outcome evaluation: official history is not ready; do not score old third-party snapshots."
+            exit 0
+          fi
           mkdir -p reports previous-report
           curl --fail --silent --show-error -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" -o /tmp/artifacts.json
           node server/jobs/select-intraday-artifact.js /tmp/artifacts.json "$GITHUB_RUN_ID" > reports/selected-intraday-horizon.json
