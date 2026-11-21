@@ -51,7 +51,7 @@ jobs:
           trap 'docker rm -f zentrax-testnet-ci >/dev/null 2>&1 || true' EXIT
           health_ok=false
           for attempt in $(seq 1 20); do
-            if curl --silent --show-error --output /tmp/health.json --write-out '%{http_code}' http://127.0.0.1:8787/api/health | grep -qx '200'; then
+            if curl --connect-timeout 2 --max-time 3 --silent --show-error --output /tmp/health.json --write-out '%{http_code}' http://127.0.0.1:8787/api/health | grep -qx '200'; then
               health_ok=true
               break
             fi
