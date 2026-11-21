@@ -32,7 +32,12 @@ jobs:
           export ZENTRAX_UID="$(id -u)"
           export ZENTRAX_GID="$(id -g)"
           mkdir -p .local-data
-          docker compose -f compose.yaml up -d --build
+          docker compose -f compose.yaml up -d --build || {
+            echo "Devnet startup failed; dumping init and validator container logs."
+            docker compose -f compose.yaml ps -a || true
+            docker compose -f compose.yaml logs --no-color init node0 node1 node2 node3 || true
+            exit 1
+          }
       - name: Verify consensus and EVM RPC on all four nodes
         working-directory: zentrax-network/devnet
         run: |
