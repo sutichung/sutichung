@@ -13,10 +13,10 @@ async function oidcToken(){
  const payload=await response.json();if(!payload.value)throw new Error('GitHub Actions OIDC token missing');
  return payload.value;
 }
-async function get(endpoint){
+async function get(endpoint,allowNonOk=false){
  const token=await oidcToken();
  const response=await fetch(base+endpoint,{headers:{accept:'application/json',authorization:'Bearer '+token},signal:AbortSignal.timeout(120000)});
- if(!response.ok){let detail='';try{const payload=await response.json();detail=String(payload.error||payload.message||'').slice(0,160);}catch(_){}throw new Error(endpoint+' returned HTTP '+response.status+(detail?' ('+detail+')':''));}
+ if(!response.ok&&!allowNonOk){let detail='';try{const payload=await response.json();detail=String(payload.error||payload.message||'').slice(0,160);}catch(_){}throw new Error(endpoint+' returned HTTP '+response.status+(detail?' ('+detail+')':''));}
  return response.json();
 }
 (async()=>{
@@ -31,7 +31,13 @@ async function get(endpoint){
  }
  await get('/api/market/snapshot');
  const [flows,futures,sentiment,news]=await Promise.all([get('/api/market/institutional-flows'),get('/api/market/futures'),get('/api/market/sentiment'),get('/api/market/news')]);
- const scan=await get('/api/market/scan');
+ const scan=await get('/api/market/scan',true);
+ if(scan.status==='official_history_required'){
+  fs.mkdirSync('reports',{recursive:true});
+  fs.writeFileSync(path.join('reports','market-scan-paused-'+todayTaiwan+'.json'),JSON.stringify({marketOpen:false,date:todayTaiwan,reason:'official_history_required',message:scan.error||'Official historical data store is not ready.'},null,2));
+  process.stdout.write(JSON.stringify({marketOpen:false,date:todayTaiwan,skipped:true,reason:'official_history_required'}));
+  return;
+ }
  if(scan.error||!scan.data||!Object.keys(scan.data).length)throw new Error('Market scan returned no usable data: '+String(scan.error||'empty scan').slice(0,180));
  const rows=Object.entries(scan.data||{}).map(([symbol,row])=>({symbol,...row,scorecard:row.scorecard||null}));
  const research=buildResearchLists(rows,30);
