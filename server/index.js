@@ -3,6 +3,19 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { URL } = require('node:url');
+const Module = require('node:module');
+const bootDiagnostics = process.env.BOOT_DIAGNOSTICS === 'true';
+const originalModuleLoad = Module._load;
+if (bootDiagnostics) {
+  process.stderr.write('[boot] server/index.js entry\n');
+  Module._load = function(request, parent, isMain) {
+    if (parent && parent.filename === __filename) process.stderr.write('[boot] loading ' + request + '\n');
+    return originalModuleLoad.call(this, request, parent, isMain);
+  };
+}
+const bootLog = message => {
+  if (bootDiagnostics) process.stderr.write('[boot] ' + message + '\n');
+};
 const { indicators } = require('./lib/indicators');
 const { scoreStock } = require('./lib/scoring');
 const { getTradingReadiness } = require('./lib/trading-readiness');
@@ -31,6 +44,7 @@ const { getHistoricalCoverage, validateHistoryRange } = require('./lib/historica
 const researchStorage = require('./lib/research-storage').createResearchStorage();
 const cryptoEventStorage = require('./lib/crypto-event-storage').createCryptoEventStorage();
 const dependencyVulnerabilityScanner = createDependencyVulnerabilityScanner({ lockPath: path.join(__dirname, '..', 'package-lock.json'), manifestPath: path.join(__dirname, '..', 'package.json'), auditPath: path.join(__dirname, '..', 'dependency-audit.json') });
+bootLog('all application modules loaded');
 
 const PORT = Number(process.env.PORT || 8787);
 const FINMIND_BASE = process.env.FINMIND_BASE || 'https://api.finmindtrade.com/api/v4/data';
@@ -1176,7 +1190,10 @@ const server=http.createServer(async(req,res)=>{
   if(!applyFirewall(req,res))return;
   try{await route(req,res);}catch(e){json(res,500,{error:'internal_error',message:process.env.NODE_ENV==='production'?'服務暫時無法處理請求':e.message});}
 });
+bootLog('binding HTTP server on port ' + PORT);
+server.on('error',error=>bootLog('HTTP server error: ' + error.message));
 server.listen(PORT,()=>{
+  bootLog('HTTP server listening on ' + PORT);
   if(process.env.CRYPTO_STREAM_EMBEDDED!=='false') cryptoRealtimeFeed.start();
   process.stdout.write('Taiwan stock API listening on '+PORT+'\\n');
 });
