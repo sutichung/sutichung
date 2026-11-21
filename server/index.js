@@ -9,6 +9,7 @@ const { getTradingReadiness } = require('./lib/trading-readiness');
 const { buildAiCommittee } = require('./lib/agents');
 const { applyFirewall, getTelemetry } = require('./lib/firewall');
 const antColony = require('./lib/ant-colony');
+const { createAntApi } = require('./lib/ant-api');
 const { loadMarket: loadUsMarket, getChart: getUsChart, searchSymbols: searchUsSymbols, getUniversePage: getUsUniversePage } = require('./lib/us-market');
 const cryptoMarket = require('./lib/crypto-market');
 const cryptoRealtime = require('./lib/crypto-stream-engine');
@@ -369,9 +370,11 @@ async function authenticatedUser(req){
   try{return await supabaseRequest('/auth/v1/user',{token});}catch(_){return null;}
 }
 function isAdminUser(user){return !!(user&&user.email&&SUPABASE_ADMIN_EMAIL&&String(user.email).toLowerCase()===SUPABASE_ADMIN_EMAIL);}
+const antApiHandler=createAntApi({supabaseUrl:SUPABASE_URL,anonKey:SUPABASE_ANON_KEY,serviceKey:SUPABASE_SERVICE_ROLE_KEY,json,readJson:readRequestJson});
 
 async function route(req,res){
   const u=new URL(req.url,'http://localhost');
+  if(await antApiHandler(req,res,u))return;
   if(req.method==='POST'&&u.pathname==='/api/automation/research/outcomes'){
     if(!await verifyGitHubActionsToken(bearerToken(req)))return json(res,401,{error:'automation_authentication_required'});
     try{
