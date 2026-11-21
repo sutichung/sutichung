@@ -53,3 +53,12 @@ test('finance access accepts only an assigned finance role or exact configured a
   assert.equal(hasFinanceAccess({email:'member@example.com'}, [{role:'SUPPORT'}], ''), false);
   assert.equal(hasFinanceAccess({}, [], 'owner@example.com'), false);
 });
+
+test('order history query is scoped to the authenticated user and bounded', () => {
+  const { buildOrderHistoryQuery } = require('../lib/ant-api');
+  const query = buildOrderHistoryQuery('user@example.com/id');
+  assert.match(query, /user_id=eq\.user%40example\.com%2Fid/);
+  assert.match(query, /order=created_at\.desc/);
+  assert.match(query, /limit=100/);
+  assert.doesNotMatch(query, /user_id=eq\.undefined/);
+});
