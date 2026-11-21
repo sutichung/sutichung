@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import path from 'node:path';
 
 const required = [
   'zentrax-network/README.md',
@@ -35,8 +34,8 @@ if (!readme.includes('No bespoke ZENTRAX chain application')) failures.push('Wor
 if (!devnetReadme.includes('local-only engineering harness')) failures.push('Devnet README must disclose local-only reference scope.');
 if (!dockerfile.includes('git checkout --detach ba66d3106a52f84b1c1ede8d9683c2df98d742ef')) failures.push('Devnet image must pin the reviewed immutable Cosmos EVM source commit.');
 if (!compose.includes('evmd comet show-node-id')) failures.push('Devnet peer bootstrap must use the CometBFT node ID command.');
-if (!compose.includes('--chain-id zentrax-devnet-1')) failures.push('Each validator must pass the configured application chain ID at startup.');
 if (!compose.includes('127.0.0.1:26657:26657')) failures.push('Devnet RPC ports must be bound to host loopback only.');
+if (!compose.includes('client.toml') || !compose.includes('chain-id = "zentrax-devnet-1"')) failures.push('Devnet init must persist the chain ID in each node client.toml for BaseApp initialization.');
 for (const node of ['node0:', 'node1:', 'node2:', 'node3:']) if (!compose.includes(node)) failures.push(`Four-validator compose service is missing: ${node}`);
 if (!verifier.includes('Expected 4 validators')) failures.push('Devnet verifier must assert the four-validator set.');
 if (fs.existsSync('zentrax-network/genesis.json') || fs.existsSync('zentrax-network/config/genesis.json')) {
@@ -46,4 +45,4 @@ if (failures.length) {
   console.error(failures.join('\n'));
   process.exit(1);
 }
-console.log(`ZENTRAX network checks passed: ${required.length} required files present; four-node devnet harness declared; no production genesis configuration found.`);
+console.log(`ZENTRAX network checks passed: ${required.length} required files present; four-node devnet harness declared; chain ID client config enforced; no production genesis configuration found.`);
