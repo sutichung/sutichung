@@ -17,6 +17,10 @@ function parseRaw(value, field) {
   if (!RAW_RE.test(raw) || BigInt(raw) <= 0n) throw new Error('invalid_' + field);
   return raw;
 }
+function buildOrderHistoryQuery(userId) {
+  return 'select=id,chain_id,buyer_wallet,gross_usdt_raw,fee_usdt_raw,net_usdt_raw,quoted_ant_raw,min_ant_raw,status,tx_hash,block_number,confirmations,created_at,updated_at' +
+    '&user_id=eq.' + encodeURIComponent(String(userId)) + '&order=created_at.desc&limit=100';
+}
 function requireConditionalUpdate(rows, errorCode) {
   if (!Array.isArray(rows) || rows.length !== 1) {
     const error = new Error(errorCode);
@@ -260,6 +264,17 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
       } catch (error) { json(res, error.status || 503, { error: error.message }); }
       return true;
     }
+    if (pathname === '/api/ant/orders' && req.method === 'GET') {
+      try {
+        // The authenticated Supabase user ID is always part of the database filter.
+        // Never accept a user_id supplied by the browser for this endpoint.
+        const orders = await db('ant_payment_orders', {
+          query: buildOrderHistoryQuery(user.id)
+        });
+        json(res, 200, { orders });
+      } catch (error) { json(res, error.status || 503, { error: error.message }); }
+      return true;
+    }
     if (pathname === '/api/ant/orders' && req.method === 'POST') {
       try {
         const body = await readJson(req, 4096);
@@ -424,4 +439,4 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
   }
   return false;
 }
-module.exports = { createAntApi, buildWalletMessage, parseRaw, assuranceLevel, requireConditionalUpdate, hasFinanceAccess };
+module.exports = { createAntApi, buildWalletMessage, parseRaw, assuranceLevel, requireConditionalUpdate, hasFinanceAccess, buildOrderHistoryQuery };
