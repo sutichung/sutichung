@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   index:
-    if: ${{ vars.ANT_INDEXER_ENABLED == 'true' }}
+    if: ${{ vars.ANT_INDEXER_ENABLED == 'true' && vars.ANT_DB_ENVIRONMENT == 'bsc-testnet' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -35,8 +35,8 @@ jobs:
           ANT_MAX_ORACLE_AGE: ${{ vars.ANT_MAX_ORACLE_AGE }}
           BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL }}
           BSC_TESTNET_RPC_URL_SECONDARY: ${{ secrets.BSC_TESTNET_RPC_URL_SECONDARY }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_TESTNET_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_TESTNET_SERVICE_ROLE_KEY }}
           ANT_SALE_CONTRACT: ${{ vars.ANT_SALE_CONTRACT }}
           ANT_USDT_CONTRACT: ${{ vars.ANT_USDT_CONTRACT }}
           ANT_TOKEN_CONTRACT: ${{ vars.ANT_TOKEN_CONTRACT }}
