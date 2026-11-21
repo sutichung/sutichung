@@ -1,5 +1,5 @@
 # Build the React dashboard, then run the lightweight Node API/static server.
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm install --no-audit --no-fund
@@ -9,7 +9,7 @@ RUN npm audit --json > /app/dependency-audit.json || true
 RUN node --check server/index.js
 RUN npm run build
 
-FROM node:20-alpine AS runtime
+FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production PORT=8787
 COPY --from=build /app/server ./server
