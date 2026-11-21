@@ -2,7 +2,7 @@ name: ZENTRAX network scaffold checks
 
 on:
   push:
-    branches: [ant-token-testnet]
+    branches: [ant-token-testnet, zentrax-network-integration]
     paths:
       - 'zentrax-network/**'
       - 'scripts/check-zentrax-network.mjs'
