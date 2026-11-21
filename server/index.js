@@ -178,17 +178,6 @@ async function tdccShareholdingDistribution(){
   if(!Object.keys(latest).length)throw new Error('TDCC 集保股權分散 CSV 欄位無法解析');
   const asOf=Object.values(latest).map(x=>x.date).sort().at(-1);return {data:latest,asOf,source:'TDCC 集保戶股權分散開放資料（每週更新）'};
 }
-async function fetchOpenArchive(kind,date){
-  const base=process.env.OPEN_DATA_ARCHIVE_URL||'https://raw.githubusercontent.com/88jiayu/tw-chip-open-data/main/data/official';
-  const doc=await fetchJson(base+'/'+kind+'/'+date+'.json',12000,{'User-Agent':'TaiwanStockDashboard/1.0','Accept':'application/json'});
-  if(!doc||doc.license!=='open'||doc.kind!==kind||doc.trade_date!==date||!doc.rows||typeof doc.rows!=='object')throw new Error('開放資料檔案格式或授權欄位不符');
-  return doc;
-}
-async function recentOpenArchive(kind,count=2){
-  const dates=archiveDates(18);
-  const docs=await mapLimit(dates,6,async date=>{try{return await fetchOpenArchive(kind,date);}catch(_){return null;}});
-  return docs.filter(Boolean).sort((a,b)=>a.trade_date.localeCompare(b.trade_date)).slice(-count);
-}
 async function twseInstitutionalDay(date){
   const ymd=date.replace(/-/g,'');
   const url='https://www.twse.com.tw/rwd/zh/fund/T86?response=json&date='+ymd+'&selectType=ALLBUT0999';
@@ -233,57 +222,8 @@ async function twseInstitutionalFlows(){
   }catch(_){}
   return {data,source:'TWSE T86 + TPEx 官方歸檔三大法人 + TWSE/TPEx 融資融券 + TDCC 集保資料',timestamp:now(),asOf:valid.at(-1).date,days:valid.map(x=>x.date),tpexInstitutionalAsOf,marginAsOf,tdccAsOf};
 }
-async function openSourceMarketHistory(){
-  const dates=archiveDates(120);
-  const kinds=['price_twse','price_tpex'];
-  const batches=await Promise.all(kinds.map(kind=>mapLimit(dates,8,async date=>{try{return await fetchOpenArchive(kind,date);}catch(_){return null;}})));
-  const valid=batches.flat().filter(Boolean).sort((a,b)=>a.trade_date.localeCompare(b.trade_date));
-  const tradingDates=[...new Set(valid.map(x=>x.trade_date))].sort();
-  if(tradingDates.length<60)throw new Error('上市櫃開放資料歷史庫目前只有 '+tradingDates.length+' 個有效交易日，至少需要 60 日才能計算完整技術指標');
-  const grouped=new Map();
-  for(const doc of valid){
-    const fields=doc.fields||[],idx={open:fields.indexOf('open'),high:fields.indexOf('high'),low:fields.indexOf('low'),close:fields.indexOf('close'),volume:fields.indexOf('volume_shares')};
-    if(Object.values(idx).some(i=>i<0))continue;
-    for(const [symbol,values] of Object.entries(doc.rows||{})){
-      if(!/^[0-9A-Z]{4,10}$/.test(symbol)||!Array.isArray(values))continue;
-      const candle={time:doc.trade_date,open:Number(values[idx.open]),high:Number(values[idx.high]),low:Number(values[idx.low]),close:Number(values[idx.close]),volume:Number(values[idx.volume]),exchange:doc.kind==='price_tpex'?'TPEx':'TWSE'};
-      if(![candle.open,candle.high,candle.low,candle.close,candle.volume].every(Number.isFinite)||candle.close<=0||candle.high<=0||candle.low<=0)continue;
-      if(!grouped.has(symbol))grouped.set(symbol,[]);grouped.get(symbol).push(candle);
-    }
-  }
-  const data={};
-  for(const [symbol,candles] of grouped){
-    candles.sort((a,b)=>a.time.localeCompare(b.time));
-    if(candles.length<60)continue;
-    const ind=indicators(candles);if(!ind)continue;
-    const last=candles.at(-1),prior=candles.at(-2)?.close,close5=candles.at(-6)?.close,close20=candles.at(-21)?.close,volume5d=candles.slice(-5).reduce((sum,row)=>sum+row.volume,0);
-    data[symbol]={...ind,exchange:last.exchange,technicalAsOf:last.time,asOf:valid.filter(x=>x.trade_date===last.time&&x.kind===(last.exchange==='TPEx'?'price_tpex':'price_twse')).at(-1)?.fetched_at||now(),close:last.close,latestVolume:last.volume,volume5d,dailyChangePct:prior?((last.close/prior)-1)*100:null,return5dPct:close5?((last.close/close5)-1)*100:null,return20dPct:close20?((last.close/close20)-1)*100:null};
-  }
-  return {data,historyAsOf:tradingDates.at(-1),historyDateCount:tradingDates.length,historyCount:Object.keys(data).length,markets:{TWSE:Object.values(data).filter(x=>x.exchange==='TWSE').length,TPEx:Object.values(data).filter(x=>x.exchange==='TPEx').length},source:'88jiayu/tw-chip-open-data（TWSE + TPEx 官方開放資料歸檔；OGDL）'};
-}
-
 function validateSymbol(s){return /^[0-9A-Z]{2,10}$/.test(s||'');}
 function rateLimit(req){const ip=req.socket.remoteAddress||'unknown';const t=Date.now();let a=RATE.get(ip)||[];a=a.filter(x=>t-x<60000);if(a.length>=480)return false;a.push(t);RATE.set(ip,a);return true;}
-
-async function loadOpenArchiveStockHistory(symbol, kind='price_tpex') {
-  const dates=archiveDates(120);
-  const rows=await mapLimit(dates,8,async date=>{
-    try{
-      const doc=await fetchOpenArchive(kind,date);
-      const fields=doc.fields||[],values=doc.rows?.[symbol];
-      if(!Array.isArray(values))return null;
-      const idx={open:fields.indexOf('open'),high:fields.indexOf('high'),low:fields.indexOf('low'),close:fields.indexOf('close'),volume:fields.indexOf('volume_shares')};
-      if(Object.values(idx).some(i=>i<0))return null;
-      if(!doc.trade_date||!Number.isFinite(Date.parse(String(doc.trade_date))))return null;
-      const candle={time:doc.trade_date,open:parseMarketNumber(values[idx.open]),high:parseMarketNumber(values[idx.high]),low:parseMarketNumber(values[idx.low]),close:parseMarketNumber(values[idx.close]),volume:parseMarketNumber(values[idx.volume])};
-      if(![candle.open,candle.high,candle.low,candle.close,candle.volume].every(Number.isFinite)||candle.close<=0||candle.high<=0||candle.low<=0||candle.high<Math.max(candle.low,candle.close)||candle.low>Math.min(candle.high,candle.close)||candle.volume<0)return null;
-      return candle;
-    }catch(_){return null;}
-  });
-  const data=rows.filter(Boolean).sort((a,b)=>a.time.localeCompare(b.time)).slice(-240);
-  if(data.length<60)throw new Error('官方開放資料歷史庫中此上櫃股票不足 60 根有效日K，暫不能計算完整技術指標');
-  return {data,source:'TPEx 官方日行情開放資料歸檔（非即時日K）',timestamp:now(),asOf:data.at(-1).time,indicators:indicators(data)};
-}
 
 async function loadStockHistory(symbol){
   const listed=await safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],error:e.message}));
@@ -814,59 +754,7 @@ async function route(req,res){
     return json(res,200,{ok:!history.error&&history.historyCount>0,source:history.source||'open data archive',historyAsOf:history.historyAsOf,historyDays:history.historyDateCount||0,historyStocks:history.historyCount||0,listedCount:listed.data?.length||0,institutionalStocks:flowRows.filter(x=>x.institutionalNet!=null).length,marginStocks:flowRows.filter(x=>x.marginChange!=null||x.shortChange!=null).length,tdccStocks:flowRows.filter(x=>x.largeHolderPct!=null).length,institutionalAsOf:flows.asOf||null,marginAsOf:flows.marginAsOf||null,tdccAsOf:flows.tdccAsOf||null,errors:[history.error,flows.error,listed.error].filter(Boolean),serverTime:now()});
   }
   if(u.pathname==='/api/market/scan'){
-    const result=await safeLoad('scan',TTL.scan,async()=>{
-      if(process.env.MARKET_SCAN_URL){
-        const x=await external('MARKET_SCAN_URL','');
-        const timestamp=x.timestamp||null,raw=x.data||{},data={},flows=stale('flows')?.data||{},sentiment=stale('sentiment')?.data||{},futures=stale('futures')?.data||{};
-        const changes=Object.values(raw).map(r=>Number(r?.changePct??r?.return5dPct)).filter(Number.isFinite),adv=changes.filter(v=>v>0).length,dec=changes.filter(v=>v<0).length,advanceDecline=adv/Math.max(1,dec);
-        for(const [symbol,row] of Object.entries(raw)){
-          if(!row||typeof row!=='object')continue;
-          const flow=flows[symbol]||{},merged={...row,...flow};
-          data[symbol]={...merged,scorecard:scoreStock({...merged,asOf:row.asOf||timestamp,fearGreed:row.fearGreed??x.fearGreed??sentiment.fearGreed,advanceDecline:row.advanceDecline??x.advanceDecline??sentiment.advanceDecline,futuresChangePct:row.futuresChangePct??x.futuresChangePct??futures.changePct})};
-        }
-        return {data,source:x.source||'Configured full-market scanner',timestamp:timestamp||now(),scannedCount:Object.keys(data).length,advanceDecline:x.advanceDecline??advanceDecline};
-      }
-      const base={data:{},error:'全市場歷史掃描暫停：正在改接官方歷史資料庫；目前不以 FinMind 或第三方 GitHub 歷史庫產生全市場技術分數'};\n      if(base.error)throw new Error(base.error);
-      const listed=await safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],error:e.message}));
-      if(listed.error||!listed.data?.length)throw new Error(listed.error||'無法取得證交所上市股票清單');
-      const marketSymbols=new Set(listed.data.map(x=>x.symbol)),exchangeBySymbol=new Map(listed.data.map(x=>[x.symbol,x.exchange||'TWSE']));
-      const perResult=await safeLoad('all-market-per',6*60*60*1000,async()=>{
-        const data={};
-        if(FINMIND_TOKEN){
-          const rows=await finmind('TaiwanStockPER',{start_date:base.historyAsOf},20000);
-          for(const r of rows){const symbol=String(r.stock_id||'');if(!validateSymbol(symbol))continue;const date=String(r.date||'');if(!data[symbol]||date>String(data[symbol].date||''))data[symbol]={date,pe:Number(r.PER),pb:Number(r.PBR),dividendYield:Number(r.dividend_yield)};}
-          return {data,asOf:base.historyAsOf,source:'FinMind TaiwanStockPER'};
-        }
-        const rows=await fetchJson('https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL',12000);
-        for(const r of rows||[]){
-          const symbol=String(r.Code||r['證券代號']||r['股票代號']||'');if(!validateSymbol(symbol))continue;
-          const pick=(re)=>{const k=Object.keys(r).find(key=>re.test(key));return k?twseNumber(r[k]):null;};
-          const pe=pick(/PEratio|本益比/),pb=pick(/PBratio|股價淨值比/),yieldPct=pick(/DividendYield|殖利率/);
-          data[symbol]={date:base.historyAsOf,pe,pb,dividendYield:yieldPct};
-        }
-        return {data,asOf:base.historyAsOf,source:'TWSE OpenAPI BWIBBU_ALL'};
-      },e=>({data:{},error:e.message}));
-      const flowResult=await safeLoad('flows',TTL.flows,()=>twseInstitutionalFlows(),e=>({data:{},error:e.message}));
-      const quotes=stale('snapshot')?.data||{},flows=flowResult.data||stale('flows')?.data||{},sentiment=stale('sentiment')?.data||{},futures=stale('futures')?.data||{},data={};
-      const fiveDay=Object.values(base.data||{}).map(x=>Number(x.return5dPct)).filter(Number.isFinite),adv=fiveDay.filter(v=>v>0).length,dec=fiveDay.filter(v=>v<0).length,advanceDecline=adv/Math.max(1,dec);
-      for(const [symbol,technical] of Object.entries(base.data||{})){
-        if(!marketSymbols.has(symbol))continue;
-        const quote=quotes[symbol]||{},flow=flows[symbol]||{},valuation=perResult.data?.[symbol]||{},livePrice=quote.price!=null&&Number.isFinite(Number(quote.price))&&Number(quote.price)>0?Number(quote.price):null,price=livePrice??Number(technical.close);
-        const trustFlowPct5d=Number.isFinite(Number(flow.trustNet5d))&&technical.volume5d>0?(Number(flow.trustNet5d)/technical.volume5d)*100:null;
-        const foreignFlowPct5d=Number.isFinite(Number(flow.foreignNet5d))&&technical.volume5d>0?(Number(flow.foreignNet5d)/technical.volume5d)*100:null;
-        const row={...technical,...flow,...valuation,pe:valuation.pe,pb:valuation.pb,dividendYield:valuation.dividendYield,trustFlowPct5d,foreignFlowPct5d,signal:technical.macdSignal,price,quoteIsLive:livePrice!==null&&!quote.delayed,quoteDelayed:!!quote.delayed,quoteSource:quote.source||null,exchange:quote.market==='OTC'?'TPEx':exchangeBySymbol.get(symbol)||technical.exchange||'TWSE',changePct:quote.changePct??technical.dailyChangePct,volume:quote.volume??technical.latestVolume,asOf:(!quote.delayed&&quote.timestamp)|| (technical.technicalAsOf?new Date(technical.technicalAsOf+'T13:30:00+08:00').toISOString():technical.asOf||null),priceVsEma20Pct:price!==null&&technical.ema20?((price/technical.ema20)-1)*100:null,priceVsEma60Pct:price!==null&&technical.ema60?((price/technical.ema60)-1)*100:null,priceVsVwap20Pct:price!==null&&technical.vwap20?((price/technical.vwap20)-1)*100:null};
-        const taiwanClock=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Taipei',weekday:'short',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(new Date());
-        const taiwanWeekday=taiwanClock.find(x=>x.type==='weekday')?.value||'';
-        const taiwanHour=Number(taiwanClock.find(x=>x.type==='hour')?.value||0),taiwanMinute=Number(taiwanClock.find(x=>x.type==='minute')?.value||0);
-        const marketSessionOpen=!['Sat','Sun'].includes(taiwanWeekday)&&(taiwanHour*60+taiwanMinute>=540)&&(taiwanHour*60+taiwanMinute<810);
-        row.scorecard=scoreStock({...row,asOf:row.asOf,maxAgeMs:36*60*60*1000,technicalAsOf:technical.technicalAsOf,quoteIsLive:row.quoteIsLive,marketSessionOpen,fearGreed:sentiment.fearGreed,advanceDecline:sentiment.advanceDecline??advanceDecline,futuresChangePct:futures.changePct});
-        data[symbol]=row;
-      }
-      return {data,source:(base.source||'FinMind')+' + 上市櫃行情／公開估值／籌碼',timestamp:now(),scannedCount:Object.keys(data).length,historyAsOf:base.historyAsOf,historyCount:base.historyCount||Object.keys(base.data||{}).length,markets:base.markets||null,advanceDecline};
-    },e=>({data:{},source:'unavailable',timestamp:now(),scannedCount:0,error:e.message}));
-    if(result.stale&&result.data){const safeData={};for(const [symbol,row] of Object.entries(result.data)){const card=row?.scorecard||{};safeData[symbol]={...row,scorecard:{...card,direction:'觀望',status:'insufficient-data',fresh:false,reasons:[...(card.reasons||[]),'全市場掃描快取已過期，暫停方向判斷']}};}return json(res,200,{...result,data:safeData});}
-    if(!result.error&&!result.stale)antColony.enqueue('TW',Object.entries(result.data||{}).map(([symbol,row])=>({...row,symbol,source:result.source})),result.historyAsOf||result.timestamp||null);
-    return json(res,200,result);
+    return json(res,503,{status:'official_history_required',data:{},source:'unavailable',timestamp:now(),scannedCount:0,error:'全市場技術掃描暫停：需先建立並驗證交易所官方歷史日K資料庫；目前不使用第三方行情庫或未核實的外部掃描服務。'});
   }
   if(u.pathname.startsWith('/api/market/fundamentals/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop()||'');
@@ -975,37 +863,16 @@ async function route(req,res){
     return json(res,200,result);
   }
   if(u.pathname==='/api/market/sentiment'){
-    const result=await safeLoad('sentiment',TTL.sentiment,async()=>{
-      if(process.env.MARKET_SENTIMENT_URL){const x=await external('MARKET_SENTIMENT_URL','');return {data:x.data||null,source:x.source||'Configured sentiment provider',timestamp:x.timestamp||now()};}
-      if(FINMIND_TOKEN){
-        const d=new Date();d.setDate(d.getDate()-45);const startDate=d.toISOString().slice(0,10);
-        const rows=await finmind('CnnFearGreedIndex',{start_date:startDate},15000);
-        const latest=rows.sort((a,b)=>String(a.date).localeCompare(String(b.date))).at(-1);
-        if(latest)return {data:{fearGreed:Number(latest.fear_greed),label:latest.fear_greed_emotion,asOf:latest.date},source:'FinMind CnnFearGreedIndex（日資料）',timestamp:now()};
-      }
-      const base=await safeLoad('open-source-market-history',12*60*60*1000,openSourceMarketHistory,e=>({data:{},error:e.message}));
-      if(base.error)throw new Error(base.error);
-      const returns=Object.values(base.data||{}).map(x=>Number(x.return5dPct)).filter(Number.isFinite);
-      const adv=returns.filter(x=>x>0).length,dec=returns.filter(x=>x<0).length;
-      return {data:{advanceDecline:adv/Math.max(1,dec),advancers:adv,decliners:dec,asOf:base.historyAsOf,label:'全市場近五日漲跌家數比'},source:'TWSE 官方開放資料計算市場廣度（非 CNN 恐懼貪婪指數）',timestamp:now()};
-    },e=>({data:null,source:'unavailable',timestamp:now(),error:e.message}));
-    return json(res,200,result);
+    return json(res,200,{data:null,source:'official-history-not-ready',timestamp:now(),error:'官方歷史日行情快照尚未累積足夠交易日，暫不計算市場廣度；不以第三方情緒指數代替。'});
   }
   if(u.pathname==='/api/market/news'){
     const result=await safeLoad('news',TTL.news,async()=>{
-      if(process.env.MARKET_NEWS_URL){const x=await external('MARKET_NEWS_URL','');return {data:Array.isArray(x.data)?x.data:[],source:x.source||'Configured news provider',timestamp:x.timestamp||now()};}
-      if(FINMIND_TOKEN){
-        const d=new Date();d.setDate(d.getDate()-3);const startDate=d.toISOString().slice(0,10);
-        const rows=await finmind('TaiwanStockNews',{start_date:startDate},20000);
-        const data=rows.map(r=>({title:r.title||'',summary:r.description||'',url:r.link||'',source:r.source||'FinMind',publishedAt:r.date||'',symbol:r.stock_id||''})).filter(x=>x.title||x.url).sort((a,b)=>String(b.publishedAt).localeCompare(String(a.publishedAt))).slice(0,50);
-        if(data.length)return {data,source:'FinMind TaiwanStockNews',timestamp:now()};
-      }
       const rows=await fetchJson('https://openapi.twse.com.tw/v1/news/newsList',12000);
       const data=(rows||[]).map(r=>{
         const pick=(re)=>{const k=Object.keys(r).find(key=>re.test(key));return k?r[k]:'';};
-        return {title:String(pick(/title|標題|主旨/i)||''),summary:String(pick(/content|摘要|內容/i)||''),url:String(pick(/url|link|網址|連結/i)||''),source:'臺灣證券交易所公告',publishedAt:String(pick(/date|時間|日期/i)||'')};
-      }).filter(x=>x.title).slice(0,50);
-      return {data,source:'TWSE OpenAPI newsList（交易所公告，不等同即時財經新聞）',timestamp:now()};
+        return {title:String(pick(/標題|主旨|title/i)||''),summary:String(pick(/內容|摘要|summary/i)||''),url:String(pick(/網址|連結|url/i)||''),source:'TWSE 官方新聞',publishedAt:String(pick(/日期|時間|date/i)||'')};
+      }).filter(x=>x.title).sort((a,b)=>String(b.publishedAt).localeCompare(String(a.publishedAt))).slice(0,50);
+      return {data,source:'TWSE OpenAPI newsList',timestamp:now()};
     },e=>({data:[],source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
   }
