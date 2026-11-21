@@ -1,0 +1,46 @@
+name: ANT BSC testnet payment indexer
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/5 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ant-bsc-testnet-payment-indexer
+  cancel-in-progress: false
+
+jobs:
+  index:
+    if: ${{ vars.ANT_INDEXER_ENABLED == 'true' && vars.ANT_DB_ENVIRONMENT == 'bsc-testnet' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install production dependencies
+        run: npm install --omit=dev --no-audit --no-fund
+      - name: Verify configuration and reconcile one bounded cycle
+        env:
+          ANT_INDEXER_ONESHOT: "true"
+          ANT_INDEXER_START_BLOCK: ${{ vars.ANT_INDEXER_START_BLOCK }}
+          ANT_INDEXER_CONFIRMATIONS: ${{ vars.ANT_INDEXER_CONFIRMATIONS }}
+          ANT_INDEXER_BLOCK_RANGE: ${{ vars.ANT_INDEXER_BLOCK_RANGE }}
+          ANT_INDEXER_REORG_LOOKBACK: ${{ vars.ANT_INDEXER_REORG_LOOKBACK }}
+          ANT_USDT_DECIMALS: ${{ vars.ANT_USDT_DECIMALS }}
+          ANT_MAX_ORACLE_AGE: ${{ vars.ANT_MAX_ORACLE_AGE }}
+          BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL }}
+          BSC_TESTNET_RPC_URL_SECONDARY: ${{ secrets.BSC_TESTNET_RPC_URL_SECONDARY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_TESTNET_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_TESTNET_SERVICE_ROLE_KEY }}
+          ANT_SALE_CONTRACT: ${{ vars.ANT_SALE_CONTRACT }}
+          ANT_USDT_CONTRACT: ${{ vars.ANT_USDT_CONTRACT }}
+          ANT_TOKEN_CONTRACT: ${{ vars.ANT_TOKEN_CONTRACT }}
+          ANT_ORACLE_CONTRACT: ${{ vars.ANT_ORACLE_CONTRACT }}
+          ANT_FEE_WALLET: ${{ vars.ANT_FEE_WALLET }}
+          ANT_TREASURY_WALLET: ${{ vars.ANT_TREASURY_WALLET }}
+        run: npm run ant:chain-indexer

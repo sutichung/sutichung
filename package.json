@@ -8,7 +8,8 @@
     "react-dom": "^18.2.0",
     "lightweight-charts": "^5.0.0",
     "hls.js": "^1.6.15",
-    "ws": "^8.18.3"
+    "ws": "^8.18.3",
+    "ethers": "^6.14.4"
   },
   "scripts": {
     "start": "vite --host 0.0.0.0",
@@ -16,7 +17,8 @@
     "preview": "vite preview --host 0.0.0.0",
     "server": "node server/index.js",
     "crypto:worker": "node server/jobs/crypto-stream-worker.js",
-    "test:server": "node --test server/test/*.test.js"
+    "test:server": "node --test server/test/*.test.js",
+    "ant:chain-indexer": "node server/jobs/ant-chain-indexer.js"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "5.2.0",
