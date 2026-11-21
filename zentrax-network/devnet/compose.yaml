@@ -2,15 +2,12 @@ name: zentrax-local-devnet
 
 x-node-common: &node-common
   image: zentrax-evmd:0.7.4
-  build:
-    context: .
-    dockerfile: Dockerfile
   restart: unless-stopped
   user: "${ZENTRAX_UID:-1000}:${ZENTRAX_GID:-1000}"
   volumes:
     - ${ZENTRAX_DEVNET_DATA:-./.local-data}:/data
   entrypoint: ["/bin/sh", "-ec"]
-  command: "exec evmd start --home \"/data/node$NODE_INDEX/evmd\" --minimum-gas-prices=0atest"
+  command: "exec evmd start --home \"/data/node$$NODE_INDEX/evmd\" --minimum-gas-prices=0atest"
   healthcheck:
     test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:26657/status | grep -q latest_block_height"]
     interval: 5s
@@ -38,11 +35,11 @@ services:
           for i in 0 1 2 3; do
             peers=""
             for j in 0 1 2 3; do
-              [ "$i" = "$j" ] && continue
-              node_id="$(evmd comet show-node-id --home "/data/node$j/evmd")"
-              peers="${peers:+$peers,}$node_id@node$j:26656"
+              [ "$$i" = "$$j" ] && continue
+              node_id="$(evmd comet show-node-id --home "/data/node$$j/evmd")"
+              peers="${peers:+$$peers,}$$node_id@node$$j:26656"
             done
-            sed -i "s|^persistent_peers = .*|persistent_peers = \"$peers\"|" "/data/node$i/evmd/config/config.toml"
+            sed -i "s|^persistent_peers = .*|persistent_peers = \"$$peers\"|" "/data/node$$i/evmd/config/config.toml"
           done
         else
           echo "Existing local devnet genesis found; preserving node keys and state."
