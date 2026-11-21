@@ -51,7 +51,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          docker run -d --name zentrax-ci -p 8787:8787 -e NODE_ENV=production -e CRYPTO_STREAM_EMBEDDED=false zentrax-ci
+          docker run -d --name zentrax-ci -p 8787:8787 -e NODE_ENV=production -e CRYPTO_STREAM_EMBEDDED=false -e BOOT_DIAGNOSTICS=true zentrax-ci
           cleanup() {
             status=$?
             if [ "$status" -ne 0 ]; then
