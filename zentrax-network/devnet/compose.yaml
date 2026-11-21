@@ -9,7 +9,8 @@ x-node-common: &node-common
   user: "${ZENTRAX_UID:-1000}:${ZENTRAX_GID:-1000}"
   volumes:
     - ${ZENTRAX_DEVNET_DATA:-./.local-data}:/data
-  command: ["start", "--home", "/data/node${NODE_INDEX}/evmd", "--minimum-gas-prices=0atest"]
+  entrypoint: ["/bin/sh", "-ec"]
+  command: "exec evmd start --home \"/data/node$NODE_INDEX/evmd\" --minimum-gas-prices=0atest"
   healthcheck:
     test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:26657/status | grep -q latest_block_height"]
     interval: 5s
