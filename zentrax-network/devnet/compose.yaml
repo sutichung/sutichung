@@ -10,7 +10,7 @@ x-node-common: &node-common
   volumes:
     - ${ZENTRAX_DEVNET_DATA:-./.local-data}:/data
   entrypoint: ["/bin/sh", "-ec"]
-  command: ["exec evmd start --home \"/data/node$NODE_INDEX/evmd\" --minimum-gas-prices=0atest"]
+  command: ["exec evmd start --home \"/data/node$$NODE_INDEX/evmd\" --minimum-gas-prices=0atest"]
   healthcheck:
     test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:26657/status | grep -q latest_block_height"]
     interval: 5s
@@ -45,9 +45,9 @@ services:
               node_id="$$(evmd comet show-node-id --home "/data/node$$j/evmd")"
               peers="$${peers:+$$peers,}$$node_id@node$$j:26656"
             done
-            sed -i "s|^persistent_peers = .*|persistent_peers = \"$peers\"|" "/data/node$i/evmd/config/config.toml"
+            sed -i "s|^persistent_peers = .*|persistent_peers = \"$peers\"|" "/data/node$$i/evmd/config/config.toml"
             # Cosmos EVM requires the CometBFT application mempool.
-            sed -i 's/^type = "flood"$/type = "app"/' "/data/node$i/evmd/config/config.toml"
+            sed -i 's/^type = "flood"$/type = "app"/' "/data/node$$i/evmd/config/config.toml"
             grep -Fq 'type = "app"' "/data/node$$i/evmd/config/config.toml" || { echo "Failed to configure app mempool for node $$i" >&2; exit 1; }
           done
         else
