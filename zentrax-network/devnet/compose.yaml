@@ -4,6 +4,9 @@ x-node-common: &node-common
   image: zentrax-evmd:0.7.4
   restart: unless-stopped
   user: "${ZENTRAX_UID:-1000}:${ZENTRAX_GID:-1000}"
+  working_dir: /data
+  environment:
+    HOME: /data
   volumes:
     - ${ZENTRAX_DEVNET_DATA:-./.local-data}:/data
   entrypoint: ["/bin/sh", "-ec"]
@@ -25,6 +28,9 @@ services:
       context: .
       dockerfile: Dockerfile
     user: "${ZENTRAX_UID:-1000}:${ZENTRAX_GID:-1000}"
+    working_dir: /data
+    environment:
+      HOME: /data
     volumes:
       - ${ZENTRAX_DEVNET_DATA:-./.local-data}:/data
     entrypoint: ["/bin/sh", "-ec"]
@@ -36,8 +42,8 @@ services:
             peers=""
             for j in 0 1 2 3; do
               [ "$$i" = "$$j" ] && continue
-              node_id="$(evmd comet show-node-id --home "/data/node$$j/evmd")"
-              peers="$${peers:+$$peers,}$$node_id@node$$j:26656"
+              node_id="$$(evmd comet show-node-id --home "/data/node$$j/evmd")"
+              peers="${peers:+$$peers,}$$node_id@node$$j:26656"
             done
             sed -i "s|^persistent_peers = .*|persistent_peers = \"$$peers\"|" "/data/node$$i/evmd/config/config.toml"
           done
@@ -50,7 +56,7 @@ services:
 
   node0:
     <<: *node-common
-    environment: { NODE_INDEX: "0" }
+    environment: { NODE_INDEX: "0", HOME: /data }
     ports:
       - "127.0.0.1:26657:26657"
       - "127.0.0.1:8545:8545"
@@ -64,7 +70,7 @@ services:
 
   node1:
     <<: *node-common
-    environment: { NODE_INDEX: "1" }
+    environment: { NODE_INDEX: "1", HOME: /data }
     ports:
       - "127.0.0.1:26667:26657"
       - "127.0.0.1:8555:8545"
@@ -78,7 +84,7 @@ services:
 
   node2:
     <<: *node-common
-    environment: { NODE_INDEX: "2" }
+    environment: { NODE_INDEX: "2", HOME: /data }
     ports:
       - "127.0.0.1:26677:26657"
       - "127.0.0.1:8565:8545"
@@ -92,7 +98,7 @@ services:
 
   node3:
     <<: *node-common
-    environment: { NODE_INDEX: "3" }
+    environment: { NODE_INDEX: "3", HOME: /data }
     ports:
       - "127.0.0.1:26687:26657"
       - "127.0.0.1:8575:8545"
