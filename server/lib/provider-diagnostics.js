@@ -140,17 +140,20 @@ async function diagnoseProviders(env = process.env) {
     if (!observation || !observation.d || !(Number(observation.FXCADUSD.v) > 0)) throw new Error('Bank of Canada 回應缺少有效 CAD/USD 觀測值');
     return { httpStatus: response.status, dataCount: 1, sourceTime: observation.d, message: '每日平均指示性匯率端點正常；非即時報價或收盤價' };
   }));
-  if (env.FINMIND_TOKEN) {
-    checks.push(probe('finmind', 'FinMind 資料 API', async () => {
-      const url = new URL(env.FINMIND_BASE || 'https://api.finmindtrade.com/api/v4/data');
-      url.searchParams.set('dataset', 'TaiwanStockInfo');
-      const { response, body } = await request(url.toString(), { headers: { accept: 'application/json', Authorization: 'Bearer ' + env.FINMIND_TOKEN } });
-      if (!response.ok) throw new Error('upstream_http_' + response.status);
-      const payload = JSON.parse(body);
-      if (payload.status !== 200) throw new Error('FinMind status ' + payload.status);
-      return { httpStatus: response.status, dataCount: Array.isArray(payload.data) ? payload.data.length : 0, message: '金鑰驗證成功，資料端點有回應' };
-    }));
-  } else checks.push(notConfigured('finmind', 'FinMind 資料 API', 'Render 未設定 FINMIND_TOKEN；可使用公開資料備援'));
+  checks.push(probe('mops-twse', '公開資訊觀測站／證交所官方月營收 API', async () => {
+    const { response, body } = await request('https://openapi.twse.com.tw/v1/opendata/t187ap05_L', { headers: { accept: 'application/json' } });
+    if (!response.ok) throw new Error('upstream_http_' + response.status);
+    const rows = JSON.parse(body);
+    if (!Array.isArray(rows) || !rows.length) throw new Error('TWSE 官方月營收回應格式錯誤或沒有資料');
+    return { httpStatus: response.status, dataCount: rows.length, message: '官方上市公司最新月營收端點正常；此端點不是完整歷史資料庫' };
+  }));
+  checks.push(probe('mops-tpex', '櫃買中心／公開資訊觀測站官方月營收 API', async () => {
+    const { response, body } = await request('https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap05_O', { headers: { accept: 'application/json' } });
+    if (!response.ok) throw new Error('upstream_http_' + response.status);
+    const rows = JSON.parse(body);
+    if (!Array.isArray(rows) || !rows.length) throw new Error('TPEx 官方月營收回應格式錯誤或沒有資料');
+    return { httpStatus: response.status, dataCount: rows.length, message: '官方上櫃公司最新月營收端點正常；此端點不是完整歷史資料庫' };
+  }));
   const supabaseUrl = String(env.SUPABASE_URL || '').replace(/\/+$/, '');
   if (supabaseUrl && env.SUPABASE_ANON_KEY) {
     checks.push(probe('supabase', 'Supabase Auth API', async () => {
@@ -204,6 +207,7 @@ async function diagnoseProviders(env = process.env) {
   for (const [id, label, endpoint, valid, message] of cryptoQuotes) {
     const provider = id.startsWith('binance') ? 'Binance' : id === 'bybit' ? 'Bybit' : id.startsWith('okx') ? 'OKX' : id === 'coinbase' ? 'Coinbase' : id === 'kraken' ? 'Kraken' : id === 'kraken-futures' ? 'Kraken Futures' : null;
     const metadata = provider ? { licenseStatus: isMarketDataLicensed(provider, env) ? 'confirmed' : 'not_confirmed', licenseEnv: licenseEnvName(provider), usageGate: 'market_data_entitlement' } : {};
+    if (provider && !isMarketDataLicensed(provider, env)) { checks.push({ ...notConfigured(id, label, '未取得或未設定此來源的會員展示／再分發書面授權；請先確認條款並設定 ' + licenseEnvName(provider) + '=true'), ...metadata }); continue; }
     checks.push(probe(id, label, async () => {
       const candidates = id === 'bybit'
         ? ['https://api.bybit.com/v5/market/tickers?category=spot&symbol=BTCUSDT', 'https://api.bytick.com/v5/market/tickers?category=spot&symbol=BTCUSDT']
@@ -227,7 +231,8 @@ async function diagnoseProviders(env = process.env) {
   {
     const provider = 'Kraken Futures';
     const metadata = { licenseStatus: isMarketDataLicensed(provider, env) ? 'confirmed' : 'not_confirmed', licenseEnv: licenseEnvName(provider), usageGate: 'market_data_entitlement' };
-    checks.push(probe('kraken-futures', 'Kraken Futures 官方永續行情 API', async () => {
+    if (!isMarketDataLicensed(provider, env)) { checks.push({ ...notConfigured('kraken-futures', 'Kraken Futures 官方永續行情 API', '未取得或未設定此來源的會員展示／再分發書面授權；請先確認條款並設定 ' + licenseEnvName(provider) + '=true'), ...metadata }); }
+    else checks.push(probe('kraken-futures', 'Kraken Futures 官方永續行情 API', async () => {
       const { response, body } = await request('https://futures.kraken.com/derivatives/api/v3/tickers', { headers: { accept: 'application/json' } });
       if (!response.ok) throw new Error('upstream_http_' + response.status);
       const payload = JSON.parse(body);
