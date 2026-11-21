@@ -863,6 +863,7 @@ async function route(req,res){
         warning:'全部價格與技術指標均以官方日收盤資料計算；不是盤中即時訊號。'
       };
     },error=>({status:'official_history_required',data:{},source:'unavailable',timestamp:now(),scannedCount:0,error:String(error.message||error).slice(0,240)}));
+    if(result.stale)return json(res,503,{status:'official_history_required',data:{},source:'stale-official-history-scan',timestamp:now(),scannedCount:0,error:'全市場掃描快取已過期；暫停輸出舊分數，等待官方歷史資料重新驗證。'});
     return json(res,result.status==='ready'?200:503,result);
   }
   if(u.pathname.startsWith('/api/market/fundamentals/')){
@@ -965,6 +966,7 @@ async function route(req,res){
       const adv=returns.filter(value=>value>0).length,dec=returns.filter(value=>value<0).length;
       return {data:{advanceDecline:adv/Math.max(1,dec),advancers:adv,decliners:dec,asOf:base.historyAsOf,label:'全市場官方日K近五日漲跌家數比'},source:'TWSE／TPEx 官方日K歷史資料',timestamp:now()};
     },error=>({data:null,source:'unavailable',timestamp:now(),error:String(error.message||error).slice(0,220)}));
+    if(result.stale)return json(res,200,{data:null,source:'stale-official-history',timestamp:now(),error:'官方市場廣度快取已過期，暫不顯示舊值。'});
     return json(res,200,result);
   }
   if(u.pathname==='/api/market/news'){
