@@ -1,0 +1,104 @@
+name: zentrax-local-devnet
+
+x-node-common: &node-common
+  image: zentrax-evmd:0.7.4
+  build:
+    context: .
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  user: "${ZENTRAX_UID:-1000}:${ZENTRAX_GID:-1000}"
+  volumes:
+    - ${ZENTRAX_DEVNET_DATA:-./.local-data}:/data
+  command: ["start", "--home", "/data/node${NODE_INDEX}/evmd", "--minimum-gas-prices=0atest"]
+  healthcheck:
+    test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:26657/status | grep -q latest_block_height"]
+    interval: 5s
+    timeout: 3s
+    retries: 30
+    start_period: 30s
+  networks:
+    zentrax:
+      ipv4_address: 172.30.0.10
+
+services:
+  init:
+    image: zentrax-evmd:0.7.4
+    build:
+      context: .
+      dockerfile: Dockerfile
+    user: "${ZENTRAX_UID:-1000}:${ZENTRAX_GID:-1000}"
+    volumes:
+      - ${ZENTRAX_DEVNET_DATA:-./.local-data}:/data
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        if [ ! -s /data/node0/evmd/config/genesis.json ]; then
+          evmd testnet init-files --validator-count 4 --chain-id zentrax-devnet-1 --output-dir /data --node-daemon-home evmd --starting-ip-address 172.30.0.10 --keyring-backend test
+        else
+          echo "Existing local devnet genesis found; preserving node keys and state."
+        fi
+    networks:
+      zentrax:
+        ipv4_address: 172.30.0.9
+
+  node0:
+    <<: *node-common
+    environment: { NODE_INDEX: "0" }
+    ports:
+      - "26657:26657"
+      - "8545:8545"
+      - "1317:1317"
+    networks:
+      zentrax:
+        ipv4_address: 172.30.0.10
+    depends_on:
+      init:
+        condition: service_completed_successfully
+
+  node1:
+    <<: *node-common
+    environment: { NODE_INDEX: "1" }
+    ports:
+      - "26667:26657"
+      - "8555:8545"
+      - "1327:1317"
+    networks:
+      zentrax:
+        ipv4_address: 172.30.0.11
+    depends_on:
+      init:
+        condition: service_completed_successfully
+
+  node2:
+    <<: *node-common
+    environment: { NODE_INDEX: "2" }
+    ports:
+      - "26677:26657"
+      - "8565:8545"
+      - "1337:1317"
+    networks:
+      zentrax:
+        ipv4_address: 172.30.0.12
+    depends_on:
+      init:
+        condition: service_completed_successfully
+
+  node3:
+    <<: *node-common
+    environment: { NODE_INDEX: "3" }
+    ports:
+      - "26687:26657"
+      - "8575:8545"
+      - "1347:1317"
+    networks:
+      zentrax:
+        ipv4_address: 172.30.0.13
+    depends_on:
+      init:
+        condition: service_completed_successfully
+
+networks:
+  zentrax:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
