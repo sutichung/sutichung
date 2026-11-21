@@ -17,7 +17,8 @@ COPY --from=build /app/package-lock.json ./package-lock.json
 COPY --from=build /app/dependency-audit.json ./dependency-audit.json
 COPY --from=build /app/package.json ./package.json
 RUN npm ci --omit=dev --no-audit --no-fund
-COPY --from=build /app/dist ./dist
+# vite.config.mjs emits to /app/build; the Node server serves /app/dist.
+COPY --from=build /app/build ./dist
 EXPOSE 8787
 USER node
 CMD ["node", "server/index.js"]
