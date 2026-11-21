@@ -249,3 +249,112 @@ html[data-device="phone"] .stock-app .stock-panel:nth-of-type(3){animation-delay
   .mobile-market-dock { grid-template-columns:repeat(5,minmax(0,1fr)); gap:0!important; }
   .mobile-market-dock a { font-size:9px!important; }
 }
+
+/* ZENTRAX black-and-gold brand layer */
+:root{color-scheme:dark;--premium-bg:#080808;--premium-panel:rgba(20,18,14,.88);--premium-line:rgba(214,181,109,.22);--premium-glow:rgba(214,181,109,.12)}
+html{background:#080808}
+body{background:radial-gradient(ellipse at 82% -12%,rgba(214,181,109,.11),transparent 38%),radial-gradient(ellipse at 4% 70%,rgba(141,116,66,.07),transparent 34%),#080808}
+.stock-app>header.zentrax-brand-header{border-bottom-color:rgba(214,181,109,.28)!important;background:linear-gradient(115deg,rgba(26,22,15,.94),rgba(9,9,9,.9))!important;border:1px solid rgba(214,181,109,.2)!important;border-radius:18px;padding:16px!important;box-shadow:0 16px 42px rgba(0,0,0,.28),inset 0 1px rgba(242,217,154,.06)}
+.zentrax-brand-lockup{display:flex;align-items:center;gap:13px;min-width:0}
+.zentrax-brand-mark{display:grid;place-items:center;width:46px;height:46px;flex:0 0 46px;border:1px solid rgba(214,181,109,.72);border-radius:13px;background:linear-gradient(145deg,#302513,#0c0b09);color:#F2D99A;font-size:27px;font-weight:900;font-family:Georgia,serif;box-shadow:0 0 22px rgba(214,181,109,.12),inset 0 1px rgba(255,255,255,.08)}
+.zentrax-brand-name{display:block!important;color:#F2D99A!important;letter-spacing:.16em!important;font-weight:850!important;text-shadow:0 0 24px rgba(214,181,109,.15)}
+.zentrax-brand-tagline{margin-top:3px;color:#D6B56D;font-size:9px;font-weight:750;letter-spacing:.19em}
+.zentrax-brand-subtitle{margin-top:6px;color:#B8B1A2;font-size:10px;line-height:1.6}
+.zentrax-sync-button{background:linear-gradient(135deg,#9A7A3F,#5E4824)!important;color:#fff7e4!important;border:1px solid rgba(242,217,154,.45)!important}
+.stock-app .stock-panel:hover{border-color:rgba(214,181,109,.3)!important;box-shadow:0 18px 42px rgba(0,0,0,.23),0 0 24px rgba(214,181,109,.045)}
+.stock-app button:focus-visible,.stock-app input:focus-visible{outline-color:rgba(214,181,109,.85)}
+.stock-app input:focus{border-color:rgba(214,181,109,.65)!important;box-shadow:0 0 0 4px rgba(214,181,109,.1)}
+@media(max-width:760px){.zentrax-brand-lockup{gap:10px}.zentrax-brand-mark{width:40px;height:40px;flex-basis:40px;font-size:24px}.zentrax-brand-name{font-size:20px!important}.zentrax-brand-tagline{font-size:8px;letter-spacing:.14em}.zentrax-brand-subtitle{font-size:9px}}
+
+
+/* ZENTRAX consistency pass: extend the black-and-metallic-gold system to every
+   remaining legacy navigation, mobile dock, and Ant Colony monitoring surface. */
+:root{
+  --zentrax-black:#080808;
+  --zentrax-panel:#15120d;
+  --zentrax-gold:#D6B56D;
+  --zentrax-gold-bright:#F2D99A;
+  --zentrax-gold-muted:#8D7442;
+  --zentrax-text:#F5F1E8;
+  --zentrax-muted:#B8B1A2;
+}
+.stock-app .market-zone-nav{
+  background:rgba(8,8,8,.94)!important;
+  border-bottom:1px solid rgba(214,181,109,.24)!important;
+}
+.stock-app .market-zone-nav a{
+  background:linear-gradient(145deg,rgba(43,34,19,.96),rgba(18,16,12,.98))!important;
+  border:1px solid rgba(214,181,109,.35)!important;
+  color:#F2D99A!important;
+  box-shadow:inset 0 1px rgba(255,255,255,.045);
+}
+.stock-app .market-zone-nav a:hover,
+.stock-app .market-zone-nav a:focus-visible{
+  border-color:rgba(242,217,154,.8)!important;
+  background:linear-gradient(145deg,rgba(72,55,27,.98),rgba(25,21,14,.98))!important;
+  outline-color:rgba(214,181,109,.8)!important;
+}
+.stock-app .zentrax-sync-button{
+  background:linear-gradient(135deg,#8D7442,#5D4824)!important;
+  color:#fff7df!important;
+  border:1px solid rgba(242,217,154,.55)!important;
+}
+.stock-app section[aria-label="蟻群協作監控中心"]{
+  color:var(--zentrax-text)!important;
+  background:linear-gradient(145deg,rgba(27,23,16,.97),rgba(12,11,9,.98))!important;
+  border:1px solid rgba(214,181,109,.3)!important;
+  box-shadow:0 12px 34px rgba(0,0,0,.24),inset 0 1px rgba(242,217,154,.045)!important;
+}
+.stock-app section[aria-label="蟻群協作監控中心"] [style*="background:#172338"],
+.stock-app section[aria-label="蟻群協作監控中心"] [style*="background: rgb(23, 35, 56)"],
+.stock-app section[aria-label="蟻群協作監控中心"] [style*="background: rgb(23, 35, 56)"]{
+  background:linear-gradient(145deg,#211b11,#15120d)!important;
+  border:1px solid rgba(214,181,109,.14);
+}
+.stock-app section[aria-label="蟻群協作監控中心"] [style*="background:#111a2b"]{
+  background:linear-gradient(145deg,#1b1710,#0c0b09)!important;
+}
+.stock-app section[aria-label="蟻群協作監控中心"] [style*="background:#293951"]{
+  background:#3b3020!important;
+}
+.stock-app section[aria-label="蟻群協作監控中心"] [style*="background:#34d399"]{
+  background:linear-gradient(90deg,#8D7442,#F2D99A)!important;
+}
+.stock-app section[aria-label="蟻群協作監控中心"] [style*="color:#91a1b8"]{
+  color:#B8B1A2!important;
+}
+.mobile-market-dock{
+  border-color:rgba(214,181,109,.3)!important;
+  background:rgba(10,9,7,.96)!important;
+  box-shadow:0 -12px 36px rgba(0,0,0,.42),inset 0 1px rgba(242,217,154,.06)!important;
+}
+.mobile-market-dock button{color:#B8B1A2!important}
+.mobile-market-dock button[aria-current="page"]{
+  color:#F2D99A!important;
+  background:linear-gradient(180deg,rgba(214,181,109,.2),rgba(214,181,109,.055))!important;
+}
+.mobile-market-dock button[aria-current="page"]::before{
+  background:#D6B56D!important;
+  box-shadow:0 0 12px rgba(214,181,109,.55)!important;
+}
+.mobile-more-scrim{background:rgba(0,0,0,.66)!important}
+.mobile-more-sheet{
+  border-color:rgba(214,181,109,.3)!important;
+  background:linear-gradient(155deg,#211b11,#0c0b09)!important;
+}
+.mobile-more-sheet h3,.mobile-more-sheet button{color:#F5F1E8!important}
+.mobile-more-sheet button{border-color:rgba(214,181,109,.18)!important;background:rgba(214,181,109,.045)!important}
+.mobile-more-sheet button small{color:#B8B1A2!important}
+.mobile-more-sheet .more-arrow{color:#D6B56D!important}
+.stock-app button:focus-visible,
+.stock-app a:focus-visible,
+.stock-app input:focus-visible,
+.stock-app select:focus-visible{
+  outline:2px solid rgba(214,181,109,.88)!important;
+  outline-offset:3px;
+}
+@media(prefers-reduced-motion:reduce){
+  .stock-app *, .mobile-market-dock *, .mobile-more-sheet *{
+    scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;
+  }
+}
