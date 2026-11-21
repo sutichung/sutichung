@@ -146,3 +146,15 @@ ANT 專案的全球自然流量推廣執行計畫已整理於 [ANT Global Growth
 - [ZENTRAX Brand System](./docs/ZENTRAX_BRAND_SYSTEM.md)：平台品牌架構、黑金視覺、ANT 代幣連續性及商標／網域檢查清單。\n- [ANT Creator Revenue & Fair-Launch Policy](./docs/ANT_CREATOR_REVENUE_POLICY.md)：5% 平台佣金、創造者收入、財庫分流、反狙擊公平發行規範與公開銷售前驗收門檻。此為規格文件，不代表銷售已上線。
 
 - [ANT Security Operations & Incident Response](./docs/ANT_SECURITY_OPERATIONS.md)：管理員分權、多簽與金鑰保護、Oracle／USDT 驗證、監控告警及事故處理流程。
+
+## ZENTRAX Network — 獨立 Layer-1 工程
+
+ZENTRAX Network 已建立獨立工作區，與既有 ANT 應用／BNB Smart Chain 測試網分離。此工作區目前是架構與安全規格骨架，**不是已運作的區塊鏈**。
+
+- [Network 工作區](./zentrax-network/README.md)
+- [架構決策紀錄](./zentrax-network/docs/ARCHITECTURE_DECISION_RECORD.md)：Cosmos SDK + CometBFT + Cosmos EVM 為候選技術，尚未批准正式版本。
+- [威脅模型](./zentrax-network/docs/THREAT_MODEL.md)：共識、驗證者、金鑰、RPC、治理及供應鏈風險。
+- [Genesis 參數](./zentrax-network/docs/GENESIS_PARAMETERS.md)：生產 chain ID、原生資產、供應量、質押及獎勵參數全部維持未定。
+- [節點營運規範](./zentrax-network/docs/OPERATIONS.md)：節點角色、監控、備份、升級及主網硬性上線條件。
+
+執行 `npm run zentrax:check` 可檢查工作區必要文件及安全狀態；GitHub Actions 的 ZENTRAX Network workflow 會在相關檔案變更時自動執行。通過這項檢查只代表規格骨架完整，不代表鏈核心已編譯、共識已運作或測試網已部署。
