@@ -1,25 +1,25 @@
 /* Premium, Apple-inspired responsive visual layer for Taiwan Stock Hunter. */
-:root{color-scheme:dark;--premium-bg:#070b13;--premium-panel:rgba(17,26,43,.78);--premium-line:rgba(148,163,184,.16);--premium-glow:rgba(96,165,250,.14)}
+:root{color-scheme:dark;--premium-bg:#070707;--premium-panel:rgba(18,16,12,.88);--premium-line:rgba(214,181,109,.20);--premium-glow:rgba(214,181,109,.14)}
 html{background:var(--premium-bg);scroll-behavior:smooth}
-body{margin:0;background:radial-gradient(ellipse at 12% -10%,rgba(59,130,246,.12),transparent 38%),radial-gradient(ellipse at 100% 18%,rgba(45,212,191,.07),transparent 32%),var(--premium-bg);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body{margin:0;background:radial-gradient(ellipse at 12% -10%,rgba(214,181,109,.10),transparent 38%),radial-gradient(ellipse at 100% 18%,rgba(242,217,154,.045),transparent 32%),var(--premium-bg);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 .stock-app{background:transparent!important;max-width:1600px;margin:0 auto;padding:clamp(12px,2vw,28px)!important;animation:premium-enter .7s cubic-bezier(.2,.75,.25,1) both}
-.stock-app>header{position:relative;padding:18px 18px 20px!important;margin:0 0 18px!important;border:1px solid var(--premium-line)!important;border-radius:22px;background:linear-gradient(135deg,rgba(23,35,56,.88),rgba(10,16,28,.72))!important;box-shadow:0 18px 55px rgba(0,0,0,.22),inset 0 1px rgba(255,255,255,.055);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px)}
+.stock-app>header{position:relative;padding:18px 18px 20px!important;margin:0 0 18px!important;border:1px solid var(--premium-line)!important;border-radius:22px;background:linear-gradient(135deg,rgba(27,23,16,.94),rgba(10,9,7,.92))!important;box-shadow:0 18px 55px rgba(0,0,0,.22),inset 0 1px rgba(255,255,255,.055);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px)}
 .stock-app>header b{letter-spacing:-.035em!important;font-weight:760}
-.stock-app .stock-panel{position:relative;border:1px solid var(--premium-line)!important;border-radius:20px!important;background:linear-gradient(145deg,rgba(21,32,51,.86),rgba(12,19,32,.9))!important;box-shadow:0 12px 34px rgba(0,0,0,.16),inset 0 1px rgba(255,255,255,.035);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);transition:transform .28s cubic-bezier(.2,.75,.25,1),border-color .28s ease,box-shadow .28s ease}
-.stock-app .stock-panel:hover{border-color:rgba(96,165,250,.28)!important;box-shadow:0 18px 42px rgba(0,0,0,.23),0 0 24px rgba(96,165,250,.055)}
+.stock-app .stock-panel{position:relative;border:1px solid var(--premium-line)!important;border-radius:20px!important;background:linear-gradient(145deg,rgba(27,23,16,.86),rgba(12,11,9,.94))!important;box-shadow:0 12px 34px rgba(0,0,0,.16),inset 0 1px rgba(255,255,255,.035);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);transition:transform .28s cubic-bezier(.2,.75,.25,1),border-color .28s ease,box-shadow .28s ease}
+.stock-app .stock-panel:hover{border-color:rgba(214,181,109,.34)!important;box-shadow:0 18px 42px rgba(0,0,0,.23),0 0 24px rgba(214,181,109,.06)}
 .stock-app .stock-panel>div:first-child>b{letter-spacing:-.02em}
 .stock-app [style*="background: rgb(23, 35, 56)"],.stock-app [style*="background:#172338"]{border:1px solid rgba(148,163,184,.10);border-radius:13px!important}
 .stock-app button,.stock-app input,.stock-app select{font:inherit;transition:transform .2s ease,border-color .2s ease,background-color .2s ease,box-shadow .2s ease}
 .stock-app button{border-radius:12px!important;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .stock-app button:active{transform:scale(.975)}
-.stock-app button:focus-visible,.stock-app input:focus-visible{outline:2px solid rgba(96,165,250,.8);outline-offset:3px}
-.stock-app input{border-radius:12px!important;border:1px solid var(--premium-line)!important;background:rgba(5,10,18,.55)!important;color:#eef4ff!important}
-.stock-app input:focus{border-color:rgba(96,165,250,.7)!important;box-shadow:0 0 0 4px rgba(96,165,250,.12)}
+.stock-app button:focus-visible,.stock-app input:focus-visible{outline:2px solid rgba(242,217,154,.88);outline-offset:3px}
+.stock-app input{border-radius:12px!important;border:1px solid var(--premium-line)!important;background:rgba(5,5,5,.72)!important;color:#f5f1e8!important}
+.stock-app input:focus{border-color:rgba(214,181,109,.72)!important;box-shadow:0 0 0 4px rgba(214,181,109,.13)}
 .stock-app [style*="overflow-x: auto"]{scrollbar-width:thin;scrollbar-color:rgba(148,163,184,.28) transparent;-webkit-overflow-scrolling:touch}
 .stock-app canvas{border-radius:14px}
 .stock-app footer{opacity:.88}
 @keyframes premium-enter{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-@keyframes premium-pulse{0%,100%{box-shadow:0 0 0 0 rgba(96,165,250,0)}50%{box-shadow:0 0 0 5px rgba(96,165,250,.08)}}
+@keyframes premium-pulse{0%,100%{box-shadow:0 0 0 0 rgba(214,181,109,0)}50%{box-shadow:0 0 0 5px rgba(214,181,109,.08)}}
 @media(min-width:761px){.stock-app .stock-panel{padding:18px!important}.stock-app .stock-panel:hover{transform:translateY(-2px)}}
 @media(max-width:760px){
  html,body,#root{min-height:100%;width:100%;overflow-x:hidden}
