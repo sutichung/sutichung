@@ -1,6 +1,7 @@
 import React,{useEffect} from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
+import AppErrorBoundary from './AppErrorBoundary.jsx';
 import AuthGate from './AuthGate.jsx';
 import './premium.css';
 
@@ -32,4 +33,4 @@ function DeviceProfile({children}){
   return children;
 }
 const root=ReactDOM.createRoot(document.getElementById('root'));
-root.render(<DeviceProfile><AuthGate><App/></AuthGate></DeviceProfile>);
+root.render(<AppErrorBoundary><DeviceProfile><AuthGate><App/></AuthGate></DeviceProfile></AppErrorBoundary>);
