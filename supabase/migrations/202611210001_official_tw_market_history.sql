@@ -29,5 +29,6 @@ create index if not exists tw_market_daily_bars_symbol_date_idx
   on public.tw_market_daily_bars (symbol, trade_date desc);
 
 alter table public.tw_market_daily_bars enable row level security;
+grant all on table public.tw_market_daily_bars to service_role;
 -- The application writes and reads this table only with the server-side service role key.
 -- No anon/authenticated policies are intentionally created.
