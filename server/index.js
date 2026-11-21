@@ -308,6 +308,35 @@ async function loadPersistedOfficialHistory(symbol,exchange){
     .filter(row=>row.time&&[row.open,row.high,row.low,row.close,row.volume].every(Number.isFinite)&&row.close>0&&row.high>=Math.max(row.low,row.close)&&row.low<=Math.min(row.high,row.close)&&row.volume>=0);
   return data;
 }
+async function loadOfficialMarketHistory(limit=120){
+  const rows=await supabaseRequest('/rest/v1/rpc/tw_market_scan_history',{
+    method:'POST',body:{p_limit:Math.max(60,Math.min(500,Number(limit)||120))},admin:true
+  });
+  const data={},allDates=new Set();
+  for(const row of rows||[]){
+    let bars=row.bars;
+    if(typeof bars==='string'){try{bars=JSON.parse(bars);}catch(_){bars=[];}}
+    if(!Array.isArray(bars))continue;
+    const candles=bars.map(bar=>({
+      time:String(bar.time||'').slice(0,10),open:Number(bar.open),high:Number(bar.high),
+      low:Number(bar.low),close:Number(bar.close),volume:Number(bar.volume)
+    })).filter(bar=>bar.time&&[bar.open,bar.high,bar.low,bar.close,bar.volume].every(Number.isFinite)&&bar.close>0&&bar.high>=Math.max(bar.low,bar.open,bar.close)&&bar.low<=Math.min(bar.high,bar.open,bar.close)&&bar.volume>=0)
+      .sort((a,b)=>a.time.localeCompare(b.time));
+    for(const bar of candles)allDates.add(bar.time);
+    if(candles.length<60)continue;
+    const technical=indicators(candles);
+    if(!technical)continue;
+    const last=candles.at(-1),prior=candles.at(-2)?.close,close5=candles.at(-6)?.close,close20=candles.at(-21)?.close;
+    data[row.symbol]={
+      ...technical,exchange:row.exchange,technicalAsOf:last.time,close:last.close,latestVolume:last.volume,
+      volume5d:candles.slice(-5).reduce((sum,bar)=>sum+bar.volume,0),
+      dailyChangePct:prior?((last.close/prior)-1)*100:null,
+      return5dPct:close5?((last.close/close5)-1)*100:null,
+      return20dPct:close20?((last.close/close20)-1)*100:null
+    };
+  }
+  return {data,historyDateCount:allDates.size,historyAsOf:[...allDates].sort().at(-1)||null,historyCount:Object.keys(data).length};
+}
 async function authenticatedUser(req){
   const token=bearerToken(req);if(!token)return null;
   try{return await supabaseRequest('/auth/v1/user',{token});}catch(_){return null;}
