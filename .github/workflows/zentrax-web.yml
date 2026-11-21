@@ -2,7 +2,7 @@ name: ZENTRAX web CI
 
 on:
   push:
-    branches: [main, ant-token-testnet]
+    branches: [main, ant-token-testnet, zentrax-network-integration]
     paths:
       - "src/**"
       - "index.html"
