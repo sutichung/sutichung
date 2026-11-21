@@ -55,13 +55,13 @@ async function request(url, options = {}, timeoutMs = CHECK_TIMEOUT_MS) {
   }
 }
 
-async function probe(id, label, run) {
+async function probe(id, label, run, metadata = {}) {
   const started = Date.now();
   const checkedAt = new Date().toISOString();
   try {
     const result = await run();
     return {
-      id, label, status: result.status || 'connected',
+      id, label, ...metadata, status: result.status || 'connected',
       httpStatus: result.httpStatus || null,
       latencyMs: Date.now() - started,
       checkedAt,
@@ -73,7 +73,7 @@ async function probe(id, label, run) {
     const message = providerErrorMessage(id, error);
     const http = String(error && error.message || '').match(/upstream_http_(\d{3})/i);
     return {
-      id, label,
+      id, label, ...metadata,
       status: /逾時/.test(message) ? 'timeout' :
         http ? statusForHttp(Number(http[1])) :
         'error',
@@ -140,17 +140,20 @@ async function diagnoseProviders(env = process.env) {
     if (!observation || !observation.d || !(Number(observation.FXCADUSD.v) > 0)) throw new Error('Bank of Canada 回應缺少有效 CAD/USD 觀測值');
     return { httpStatus: response.status, dataCount: 1, sourceTime: observation.d, message: '每日平均指示性匯率端點正常；非即時報價或收盤價' };
   }));
-  if (env.FINMIND_TOKEN) {
-    checks.push(probe('finmind', 'FinMind 資料 API', async () => {
-      const url = new URL(env.FINMIND_BASE || 'https://api.finmindtrade.com/api/v4/data');
-      url.searchParams.set('dataset', 'TaiwanStockInfo');
-      const { response, body } = await request(url.toString(), { headers: { accept: 'application/json', Authorization: 'Bearer ' + env.FINMIND_TOKEN } });
-      if (!response.ok) throw new Error('upstream_http_' + response.status);
-      const payload = JSON.parse(body);
-      if (payload.status !== 200) throw new Error('FinMind status ' + payload.status);
-      return { httpStatus: response.status, dataCount: Array.isArray(payload.data) ? payload.data.length : 0, message: '金鑰驗證成功，資料端點有回應' };
-    }));
-  } else checks.push(notConfigured('finmind', 'FinMind 資料 API', 'Render 未設定 FINMIND_TOKEN；可使用公開資料備援'));
+  checks.push(probe('mops-twse', '公開資訊觀測站／證交所官方月營收 API', async () => {
+    const { response, body } = await request('https://openapi.twse.com.tw/v1/opendata/t187ap05_L', { headers: { accept: 'application/json' } });
+    if (!response.ok) throw new Error('upstream_http_' + response.status);
+    const rows = JSON.parse(body);
+    if (!Array.isArray(rows) || !rows.length) throw new Error('TWSE 官方月營收回應格式錯誤或沒有資料');
+    return { httpStatus: response.status, dataCount: rows.length, message: '官方上市公司最新月營收端點正常；此端點不是完整歷史資料庫' };
+  }));
+  checks.push(probe('mops-tpex', '櫃買中心／公開資訊觀測站官方月營收 API', async () => {
+    const { response, body } = await request('https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap05_O', { headers: { accept: 'application/json' } });
+    if (!response.ok) throw new Error('upstream_http_' + response.status);
+    const rows = JSON.parse(body);
+    if (!Array.isArray(rows) || !rows.length) throw new Error('TPEx 官方月營收回應格式錯誤或沒有資料');
+    return { httpStatus: response.status, dataCount: rows.length, message: '官方上櫃公司最新月營收端點正常；此端點不是完整歷史資料庫' };
+  }));
   const supabaseUrl = String(env.SUPABASE_URL || '').replace(/\/+$/, '');
   if (supabaseUrl && env.SUPABASE_ANON_KEY) {
     checks.push(probe('supabase', 'Supabase Auth API', async () => {
@@ -203,7 +206,7 @@ async function diagnoseProviders(env = process.env) {
   ];
   for (const [id, label, endpoint, valid, message] of cryptoQuotes) {
     const provider = id.startsWith('binance') ? 'Binance' : id === 'bybit' ? 'Bybit' : id.startsWith('okx') ? 'OKX' : id === 'coinbase' ? 'Coinbase' : id === 'kraken' ? 'Kraken' : id === 'kraken-futures' ? 'Kraken Futures' : null;
-    if (provider && !isMarketDataLicensed(provider, env)) { checks.push(notConfigured(id, label, '未取得或未設定此來源的會員展示／再分發書面授權；請先確認條款並設定 ' + licenseEnvName(provider) + '=true')); continue; }
+    const metadata = provider ? { licenseStatus: isMarketDataLicensed(provider, env) ? 'confirmed' : 'not_confirmed', licenseEnv: licenseEnvName(provider), usageGate: 'market_data_entitlement' } : {};
     checks.push(probe(id, label, async () => {
       const candidates = id === 'bybit'
         ? ['https://api.bybit.com/v5/market/tickers?category=spot&symbol=BTCUSDT', 'https://api.bytick.com/v5/market/tickers?category=spot&symbol=BTCUSDT']
@@ -218,15 +221,15 @@ async function diagnoseProviders(env = process.env) {
           const payload = JSON.parse(body);
           if (!valid(payload)) throw new Error(id + ' 報價回應格式錯誤或價格無效');
           const host = new URL(candidate).host;
-          return { httpStatus: response.status, dataCount: 1, message: message + '（實際端點：' + host + '）' };
+          return { httpStatus: response.status, dataCount: 1, message: message + '（實際端點：' + host + '）' + (provider && !isMarketDataLicensed(provider, env) ? '；技術連線成功，但商業展示／再分發權限尚未確認' : '') };
         } catch (error) { errors.push(error); }
       }
       throw errors[errors.length - 1] || new Error(id + ' 所有官方端點均無回應');
-    }));
+    }, metadata));
   }
-  if (!isMarketDataLicensed('Kraken Futures', env)) {
-    checks.push(notConfigured('kraken-futures', 'Kraken Futures 官方永續行情 API', '未取得或未設定此來源的會員展示／再分發書面授權；請先確認條款並設定 ' + licenseEnvName('Kraken Futures') + '=true'));
-  } else {
+  {
+    const provider = 'Kraken Futures';
+    const metadata = { licenseStatus: isMarketDataLicensed(provider, env) ? 'confirmed' : 'not_confirmed', licenseEnv: licenseEnvName(provider), usageGate: 'market_data_entitlement' };
     checks.push(probe('kraken-futures', 'Kraken Futures 官方永續行情 API', async () => {
       const { response, body } = await request('https://futures.kraken.com/derivatives/api/v3/tickers', { headers: { accept: 'application/json' } });
       if (!response.ok) throw new Error('upstream_http_' + response.status);
@@ -235,8 +238,8 @@ async function diagnoseProviders(env = process.env) {
       const perpetuals = tickers.filter(x => x && x.tag === 'perpetual' && Number(x.last) > 0 && Number(x.markPrice) > 0);
       if (!perpetuals.length) throw new Error('Kraken Futures 回應缺少有效永續商品報價');
       const btc = perpetuals.find(x => /XBT:USD|BTC:USD/i.test(String(x.pair || '')));
-      return { httpStatus: response.status, dataCount: perpetuals.length, sourceTime: btc && Number.isFinite(Number(btc.time)) ? new Date(Number(btc.time)).toISOString() : null, message: '官方公開永續商品報價有效；實際可用商品依帳戶與地區資格而異' };
-    }));
+      return { httpStatus: response.status, dataCount: perpetuals.length, sourceTime: btc && Number.isFinite(Number(btc.time)) ? new Date(Number(btc.time)).toISOString() : null, message: '官方公開永續商品報價有效；實際可用商品依帳戶與地區資格而異' + (!isMarketDataLicensed(provider, env) ? '；技術連線成功，但商業展示／再分發權限尚未確認' : '') };
+    }, metadata));
   }
   checks.push(notConfigured(
     'us-equities-official',
