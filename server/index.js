@@ -818,10 +818,14 @@ async function route(req,res){
   if(u.pathname==='/api/market/scan'){
     const result=await safeLoad('scan',TTL.scan,async()=>{
       const base=await loadOfficialMarketHistory(120);
-      if(base.historyCount<1||base.historyDateCount<60)return {
+      const listed=await safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],error:e.message}));
+      const listedCount=(listed.data||[]).length,minSymbols=Math.max(100,Math.ceil(listedCount*0.6));
+      const historyCoveragePct=Math.round(base.historyCount/Math.max(1,listedCount)*100);
+      if(base.historyCount<minSymbols||base.historyDateCount<60)return {
         status:'official_history_required',data:{},source:'official-history-not-ready',timestamp:now(),
         scannedCount:0,historyDateCount:base.historyDateCount,historyCount:base.historyCount,
-        error:'官方歷史資料目前只有 '+base.historyDateCount+' 個有效交易日、'+base.historyCount+' 檔具備至少 60 根日K；全市場技術掃描需至少 60 個交易日。每日官方快照會持續累積，不使用第三方歷史庫補值。'
+        listedCount,historyCoveragePct,requiredSymbols:minSymbols,
+        error:'官方歷史資料尚未達全市場掃描門檻：目前 '+base.historyDateCount+' 個有效交易日、'+base.historyCount+'/'+listedCount+' 檔（'+historyCoveragePct+'%）具備至少 60 根日K；需至少 60 個交易日且覆蓋 60% 上市櫃清單。每日官方快照會持續累積，不使用第三方歷史庫補值。'
       };
       const snapshot=await safeLoad('snapshot',TTL.snapshot,loadOfficialDailyQuotes,e=>({data:{},error:e.message}));
       const flowResult=await safeLoad('flows',TTL.flows,twseInstitutionalFlows,e=>({data:{},error:e.message}));
@@ -831,7 +835,9 @@ async function route(req,res){
       const adv=returns.filter(value=>value>0).length,dec=returns.filter(value=>value<0).length;
       const advanceDecline=adv/Math.max(1,dec);
       const data={},markets={TWSE:0,TPEx:0};
+      const listedSymbols=new Set((listed.data||[]).map(item=>item.symbol));
       for(const [symbol,technical] of Object.entries(base.data)){
+        if(!listedSymbols.has(symbol))continue;
         const quote=snapshot.data?.[symbol]||{},flow=flows[symbol]||{};
         const price=Number(quote.price)>0?Number(quote.price):technical.close;
         const date=quote.asOf||technical.technicalAsOf;
@@ -852,7 +858,7 @@ async function route(req,res){
       return {
         status:'ready',data,source:'TWSE／TPEx 官方日行情快照 + Supabase 官方歷史日K',
         timestamp:now(),scannedCount:Object.keys(data).length,historyAsOf:base.historyAsOf,
-        historyDateCount:base.historyDateCount,historyCount:base.historyCount,markets,
+        historyDateCount:base.historyDateCount,historyCount:base.historyCount,listedCount,historyCoveragePct,markets,
         advanceDecline,flowCoverage:flowResult.coverage||null,
         warning:'全部價格與技術指標均以官方日收盤資料計算；不是盤中即時訊號。'
       };
@@ -952,7 +958,9 @@ async function route(req,res){
   if(u.pathname==='/api/market/sentiment'){
     const result=await safeLoad('sentiment',TTL.sentiment,async()=>{
       const base=await loadOfficialMarketHistory(120);
-      if(base.historyDateCount<60||base.historyCount<1)return {data:null,source:'official-history-not-ready',timestamp:now(),error:'官方歷史日行情快照目前只有 '+base.historyDateCount+' 個有效交易日；至少需要 60 日才計算市場廣度。'};
+      const listed=await safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],error:e.message}));
+      const listedCount=(listed.data||[]).length,coveragePct=Math.round(base.historyCount/Math.max(1,listedCount)*100);
+      if(base.historyDateCount<60||base.historyCount<Math.max(100,Math.ceil(listedCount*0.6)))return {data:null,source:'official-history-not-ready',timestamp:now(),error:'官方歷史日行情快照尚未達 60 個交易日及 60% 市場覆蓋率（目前 '+base.historyDateCount+' 日、'+coveragePct+'%）；暫不計算市場廣度。'};
       const returns=Object.values(base.data||{}).map(row=>Number(row.return5dPct)).filter(Number.isFinite);
       const adv=returns.filter(value=>value>0).length,dec=returns.filter(value=>value<0).length;
       return {data:{advanceDecline:adv/Math.max(1,dec),advancers:adv,decliners:dec,asOf:base.historyAsOf,label:'全市場官方日K近五日漲跌家數比'},source:'TWSE／TPEx 官方日K歷史資料',timestamp:now()};
