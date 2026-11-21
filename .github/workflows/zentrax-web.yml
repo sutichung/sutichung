@@ -44,7 +44,7 @@ jobs:
       - name: Build production frontend
         run: npm run build
       - name: Verify production bundle exists
-        run: test -s dist/index.html
+        run: test -s build/index.html
       - name: Build production Docker image
         run: docker build -t zentrax-ci .
       - name: Smoke-test production container and static frontend
