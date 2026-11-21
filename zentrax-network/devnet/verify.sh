@@ -4,12 +4,15 @@ cd "$(dirname "$0")"
 command -v curl >/dev/null 2>&1 || { echo "curl is required." >&2; exit 1; }
 command -v jq >/dev/null 2>&1 || { echo "jq is required." >&2; exit 1; }
 expected_chain_id=""
+expected_height=""
 for port in 26657 26667 26677 26687; do
   status="$(curl --fail --silent --show-error "http://127.0.0.1:$port/status")"
   chain_id="$(printf '%s' "$status" | jq -er '.result.node_info.network')"
   height="$(printf '%s' "$status" | jq -er '.result.sync_info.latest_block_height | tonumber')"
   [ "$chain_id" = "zentrax-devnet-1" ] || { echo "Unexpected chain id on RPC port $port: $chain_id" >&2; exit 1; }
   [ "$height" -ge 1 ] || { echo "Node on RPC port $port has not committed a block." >&2; exit 1; }
+  if [ -z "$expected_height" ]; then expected_height="$height"; fi
+  [ "$height" -eq "$expected_height" ] || { echo "Validator height mismatch on port $port: expected $expected_height, got $height" >&2; exit 1; }
   echo "CometBFT $port: chain=$chain_id height=$height"
 done
 validators="$(curl --fail --silent --show-error 'http://127.0.0.1:26657/validators?per_page=100')"
@@ -25,4 +28,4 @@ for port in 8545 8555 8565 8575; do
   [ "$chain" = "$expected_chain_id" ] || { echo "EVM chain ID mismatch on port $port: expected $expected_chain_id, got $chain" >&2; exit 1; }
   echo "EVM RPC $port: chainId=$chain"
 done
-echo "PASS: four validator RPC endpoints, four EVM endpoints, four genesis validators, and consistent nonzero EVM chain IDs verified."
+echo "PASS: four validator RPC endpoints, four EVM endpoints, four genesis validators, synchronized block heights, and consistent nonzero EVM chain IDs verified."
