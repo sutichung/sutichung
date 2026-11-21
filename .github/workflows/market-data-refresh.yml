@@ -29,7 +29,7 @@ jobs:
       group: market-quote-refresh-${{ github.event.schedule || 'manual' }}
       cancel-in-progress: false
     steps:
-      - name: Refresh Taiwan, crypto and US quote snapshots independently
+      - name: Refresh Taiwan stock quote snapshot only
         env:
           MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
           WORKER_SLOT: ${{ github.event.schedule || 'manual' }}
@@ -37,7 +37,7 @@ jobs:
         run: |
           set -uo pipefail
           echo "=== quote refresh worker: $WORKER_SLOT at $(date -u +%FT%TZ) ==="
-          rm -f /tmp/tw-market.json /tmp/crypto-market.json /tmp/us-market.json
+          rm -f /tmp/tw-market.json
 
           OIDC_TOKEN=$(curl --fail --silent --show-error --get \
             --data-urlencode "audience=taiwan-stock-hunter-automation" \
@@ -65,28 +65,17 @@ jobs:
 
           request_with_retry "$MARKET_APP_URL/api/market/snapshot" /tmp/tw-market.json &
           TW_PID=$!
-          request_with_retry "$MARKET_APP_URL/api/crypto/market" /tmp/crypto-market.json &
-          CRYPTO_PID=$!
-          request_with_retry "$MARKET_APP_URL/api/us/market" /tmp/us-market.json &
-          US_PID=$!
-
-          TW_OK=0; CRYPTO_OK=0; US_OK=0
+          TW_OK=0
           wait "$TW_PID" && TW_OK=1 || echo "::error::Taiwan quote worker failed"
-          wait "$CRYPTO_PID" && CRYPTO_OK=1 || echo "::warning::Crypto feed request failed"
-          wait "$US_PID" && US_OK=1 || echo "::warning::US feed request failed"
 
-          TW_OK="$TW_OK" CRYPTO_OK="$CRYPTO_OK" US_OK="$US_OK" node - <<'NODE'
+          TW_OK="$TW_OK" node - <<'NODE'
           const fs = require('node:fs');
           function read(path) {
             try { return JSON.parse(fs.readFileSync(path, 'utf8')); }
             catch (error) { return { error: error.message }; }
           }
           const tw = read('/tmp/tw-market.json');
-          const crypto = read('/tmp/crypto-market.json');
-          const us = read('/tmp/us-market.json');
           const twCount = Number(tw.quoteCount ?? Object.keys(tw.data || {}).length);
-          const cryptoCount = Array.isArray(crypto.markets) ? crypto.markets.length : 0;
-          const usCount = Object.keys(us.data || {}).length;
           const result = {
             worker: process.env.WORKER_SLOT || 'manual',
             generatedAt: new Date().toISOString(),
@@ -99,26 +88,9 @@ jobs:
               asOf: tw.timestamp || null,
               error: tw.error || null
             },
-            crypto: {
-              requestOk: process.env.CRYPTO_OK === '1',
-              count: cryptoCount,
-              status: crypto.status || null,
-              licenseRequiredProviders: crypto.licenseRequiredProviders || [],
-              error: crypto.error || null
-            },
-            us: {
-              requestOk: process.env.US_OK === '1',
-              count: usCount,
-              source: us.source || null,
-              timestamp: us.timestamp || null,
-              error: us.error || null
-            }
           };
           console.log(JSON.stringify(result, null, 2));
           if (!result.taiwan.requestOk || twCount < 1) throw new Error('No valid Taiwan official daily quotes');
-          if (!result.crypto.requestOk && crypto.status !== 'license_required') console.warn('Crypto snapshot unavailable; license gate remains enabled.');
-          if (cryptoCount < 1 && crypto.status === 'license_required') console.warn('Crypto quotes are blocked pending provider display/redistribution rights; no license gate bypassed.');
-          if (!result.us.requestOk || usCount < 1) console.warn('US watchlist unavailable in this refresh; any Yahoo data remains explicitly non-official.');
           NODE
 
   technical-scan:
