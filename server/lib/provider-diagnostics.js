@@ -207,7 +207,6 @@ async function diagnoseProviders(env = process.env) {
   for (const [id, label, endpoint, valid, message] of cryptoQuotes) {
     const provider = id.startsWith('binance') ? 'Binance' : id === 'bybit' ? 'Bybit' : id.startsWith('okx') ? 'OKX' : id === 'coinbase' ? 'Coinbase' : id === 'kraken' ? 'Kraken' : id === 'kraken-futures' ? 'Kraken Futures' : null;
     const metadata = provider ? { licenseStatus: isMarketDataLicensed(provider, env) ? 'confirmed' : 'not_confirmed', licenseEnv: licenseEnvName(provider), usageGate: 'market_data_entitlement' } : {};
-    if (provider && !isMarketDataLicensed(provider, env)) { checks.push({ ...notConfigured(id, label, '未取得或未設定此來源的會員展示／再分發書面授權；請先確認條款並設定 ' + licenseEnvName(provider) + '=true'), ...metadata }); continue; }
     checks.push(probe(id, label, async () => {
       const candidates = id === 'bybit'
         ? ['https://api.bybit.com/v5/market/tickers?category=spot&symbol=BTCUSDT', 'https://api.bytick.com/v5/market/tickers?category=spot&symbol=BTCUSDT']
@@ -231,8 +230,7 @@ async function diagnoseProviders(env = process.env) {
   {
     const provider = 'Kraken Futures';
     const metadata = { licenseStatus: isMarketDataLicensed(provider, env) ? 'confirmed' : 'not_confirmed', licenseEnv: licenseEnvName(provider), usageGate: 'market_data_entitlement' };
-    if (!isMarketDataLicensed(provider, env)) { checks.push({ ...notConfigured('kraken-futures', 'Kraken Futures 官方永續行情 API', '未取得或未設定此來源的會員展示／再分發書面授權；請先確認條款並設定 ' + licenseEnvName(provider) + '=true'), ...metadata }); }
-    else checks.push(probe('kraken-futures', 'Kraken Futures 官方永續行情 API', async () => {
+    checks.push(probe('kraken-futures', 'Kraken Futures 官方永續行情 API', async () => {
       const { response, body } = await request('https://futures.kraken.com/derivatives/api/v3/tickers', { headers: { accept: 'application/json' } });
       if (!response.ok) throw new Error('upstream_http_' + response.status);
       const payload = JSON.parse(body);
