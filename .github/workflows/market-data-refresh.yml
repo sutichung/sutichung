@@ -86,10 +86,12 @@ jobs:
               source: tw.source || null,
               dataMode: tw.dataMode || null,
               asOf: tw.timestamp || null,
+              historyPersistence: tw.historyPersistence || null,
               error: tw.error || null
             },
           };
           console.log(JSON.stringify(result, null, 2));
+          if (tw.historyPersistence && !tw.historyPersistence.persisted) console.warn('Official daily history was not persisted: ' + (tw.historyPersistence.reason || 'unknown reason'));
           if (!result.taiwan.requestOk || twCount < 1) throw new Error('No valid Taiwan official daily quotes');
           NODE
 
