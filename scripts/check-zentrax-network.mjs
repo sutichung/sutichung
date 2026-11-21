@@ -31,7 +31,7 @@ const verifier = fs.readFileSync('zentrax-network/devnet/verify.sh', 'utf8');
 if (!adr.includes('PROPOSED — NOT APPROVED')) failures.push('Architecture decision must remain explicitly unapproved until review.');
 if (!threat.includes('Security invariants')) failures.push('Threat model security invariants section is missing.');
 if (!params.includes('ALL PRODUCTION VALUES UNSET')) failures.push('Production genesis parameters must remain unset at this stage.');
-if (!readme.includes('No chain node')) failures.push('Workspace README must disclose scaffold-only status.');
+if (!readme.includes('No bespoke ZENTRAX chain application')) failures.push('Workspace README must distinguish the reference harness from a bespoke ZENTRAX chain.');
 if (!devnetReadme.includes('local-only engineering harness')) failures.push('Devnet README must disclose local-only reference scope.');
 if (!dockerfile.includes('git checkout --detach ba66d3106a52f84b1c1ede8d9683c2df98d742ef')) failures.push('Devnet image must pin the reviewed immutable Cosmos EVM source commit.');
 if (!compose.includes('evmd comet show-node-id')) failures.push('Devnet peer bootstrap must use the CometBFT node ID command.');
