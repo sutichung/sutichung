@@ -1154,7 +1154,7 @@ async function route(req,res){
   }
   // In production, serve the compiled React app from the same origin as the API.
   if (process.env.NODE_ENV === 'production') {
-    const root = path.resolve(__dirname, '..', 'build');
+    const root = path.resolve(__dirname, '..', 'dist');
     const requested = decodeURIComponent(u.pathname === '/' ? '/index.html' : u.pathname);
     const file = path.resolve(root, '.' + requested);
     if (file === root || file.startsWith(root + path.sep)) {
