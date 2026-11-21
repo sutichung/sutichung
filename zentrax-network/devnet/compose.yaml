@@ -55,9 +55,9 @@ services:
     <<: *node-common
     environment: { NODE_INDEX: "0" }
     ports:
-      - "26657:26657"
-      - "8545:8545"
-      - "1317:1317"
+      - "127.0.0.1:26657:26657"
+      - "127.0.0.1:8545:8545"
+      - "127.0.0.1:1317:1317"
     networks:
       zentrax:
         ipv4_address: 172.30.0.10
@@ -69,9 +69,9 @@ services:
     <<: *node-common
     environment: { NODE_INDEX: "1" }
     ports:
-      - "26667:26657"
-      - "8555:8545"
-      - "1327:1317"
+      - "127.0.0.1:26667:26657"
+      - "127.0.0.1:8555:8545"
+      - "127.0.0.1:1327:1317"
     networks:
       zentrax:
         ipv4_address: 172.30.0.11
@@ -83,9 +83,9 @@ services:
     <<: *node-common
     environment: { NODE_INDEX: "2" }
     ports:
-      - "26677:26657"
-      - "8565:8545"
-      - "1337:1317"
+      - "127.0.0.1:26677:26657"
+      - "127.0.0.1:8565:8545"
+      - "127.0.0.1:1337:1317"
     networks:
       zentrax:
         ipv4_address: 172.30.0.12
@@ -97,9 +97,9 @@ services:
     <<: *node-common
     environment: { NODE_INDEX: "3" }
     ports:
-      - "26687:26657"
-      - "8575:8545"
-      - "1347:1317"
+      - "127.0.0.1:26687:26657"
+      - "127.0.0.1:8575:8545"
+      - "127.0.0.1:1347:1317"
     networks:
       zentrax:
         ipv4_address: 172.30.0.13
