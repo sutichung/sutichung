@@ -35,7 +35,7 @@ test('loads listed-company financials and revenue from official TWSE endpoints w
     if (target.endsWith('/exchangeReport/BWIBBU_ALL')) rows = [{
       Code: '2330', Date: '20261120', PEratio: '20.1', PBratio: '5.2', DividendYield: '2.1'
     }];
-    if (target.endsWith('/opendata/t187ap45_L')) rows = [{ '公司代號': '2330', '年度': '114' }];
+    if (target.endsWith('/opendata/t187ap45_L')) rows = [{ '公司代號': '2330', '年度': '114', '現金股利(元/股)': '5.0', '股票股利(元/股)': '0.5', '除息交易日': '2026/07/01' }];
     return { ok: true, status: 200, json: async () => rows };
   };
   try {
@@ -45,6 +45,8 @@ test('loads listed-company financials and revenue from official TWSE endpoints w
     assert.equal(result.financials.income.eps, 9.5);
     assert.equal(result.financials.balance.totalAssets, 2000000);
     assert.equal(result.financials.valuation.pe, 20.1);
+    assert.equal(result.financials.dividends[0].CashEarningsDistribution, 5);
+    assert.equal(result.financials.dividends[0].StockEarningsDistribution, 0.5);
     assert.equal(result.financials.cash, null);
     assert.equal(result.completeness.cashFlow, false);
     assert.ok(result.source.includes('TWSE OpenAPI'));
