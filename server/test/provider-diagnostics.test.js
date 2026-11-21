@@ -98,11 +98,31 @@ test('provider diagnostics classify regional restrictions and permission denials
   assert.match(safeError(new Error('upstream_http_451')), /不可用代理或偽裝地區繞過/);
 });
 
-test('all exchange diagnostics remain blocked without provider-specific redistribution licenses',async()=>{
- const original=global.fetch;let cryptoCalls=0;
- const hosts=['data-api.binance.vision','fapi.binance.com','api.bybit.com','api.bytick.com','okx.com','api.exchange.coinbase.com','api.kraken.com','futures.kraken.com'];
- global.fetch=async url=>{if(hosts.some(host=>String(url).includes(host)))cryptoCalls++;throw new Error('unexpected_test_url');};
- try{const result=await diagnoseProviders({});for(const id of ['binance','binance-futures','bybit','okx','okx-swap','coinbase','kraken','kraken-futures']){const check=result.checks.find(x=>x.id===id);assert.equal(check.status,'not_configured',id);assert.match(check.message,/書面授權/);}assert.equal(cryptoCalls,0);}finally{global.fetch=original;}
+test('exchange diagnostics check public API connectivity independently from redistribution license',async()=>{
+ const original=global.fetch;
+ const payloads=[
+  ['openapi.twse.com.tw',[{Code:'2330'}]],
+  ['data-api.ecb.europa.eu','KEY,OBS_VALUE\\nX,1.1'],
+  ['bankofcanada.ca',{observations:[{d:'2026-11-17',FXCADUSD:{v:'0.6997'}}]}],
+  ['data-api.binance.vision',{symbol:'BTCUSDT',price:'65000'}],
+  ['fapi.binance.com',{symbol:'BTCUSDT',markPrice:'65000'}],
+  ['api.bybit.com',{retCode:0,result:{list:[{lastPrice:'65000'}]}}],
+  ['www.okx.com',{code:'0',data:[{instId:'BTC-USDT',last:'65000'}]}],
+  ['api.exchange.coinbase.com',{price:'65000'}],
+  ['api.kraken.com',{error:[],result:{XXBTZUSD:{c:['65000','1']}}}],
+  ['futures.kraken.com',{tickers:[{tag:'perpetual',pair:'XBT:USD',last:65000,markPrice:65010,time:1790000000000}]}]
+ ];
+ global.fetch=async url=>{const entry=payloads.find(([host])=>String(url).includes(host));if(!entry)throw new Error('unexpected_test_url:'+url);const body=typeof entry[1]==='string'?entry[1]:JSON.stringify(entry[1]);return {ok:true,status:200,text:async()=>body};};
+ try{
+  const result=await diagnoseProviders({});
+  for(const id of ['binance','binance-futures','bybit','okx','okx-swap','coinbase','kraken','kraken-futures']){
+   const check=result.checks.find(x=>x.id===id);
+   assert.equal(check.status,'connected',id+' should test technical connectivity without a redistribution license');
+   assert.equal(check.licenseStatus,'not_confirmed',id+' must not imply usage permission');
+   assert.ok(check.licenseEnv);
+   assert.match(check.message,/權限尚未確認/);
+  }
+ }finally{global.fetch=original;}
 });
 
 
