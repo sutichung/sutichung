@@ -47,7 +47,7 @@ services:
             done
             sed -i "s|^persistent_peers = .*|persistent_peers = \"$peers\"|" "/data/node$i/evmd/config/config.toml"
             # Cosmos EVM requires the CometBFT application mempool.
-            sed -i 's/^type = "flood"$/type = "app/' "/data/node$i/evmd/config/config.toml"
+            sed -i 's/^type = "flood"$/type = "app"/' "/data/node$i/evmd/config/config.toml"
             grep -q '^type = "app"
           done
         else
