@@ -3,7 +3,7 @@
 FROM golang:1.26.10-alpine AS build
 RUN apk add --no-cache git build-base
 WORKDIR /src
-RUN git clone --depth 1 --branch v0.7.4 https://github.com/cosmos/evm.git .
+RUN git clone https://github.com/cosmos/evm.git . && git checkout --detach ba66d3106a52f84b1c1ede8d9683c2df98d742ef
 WORKDIR /src/evmd
 RUN mkdir -p /out && CGO_ENABLED=1 go build -trimpath -buildvcs=false -ldflags="-s -w" -o /out/evmd ./cmd/evmd
 
