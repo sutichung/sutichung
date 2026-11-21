@@ -4,7 +4,7 @@ This directory is the isolated workspace for the proposed ZENTRAX sovereign EVM-
 
 ## Current status
 
-**Scaffold only. No chain node, consensus engine, genesis, native asset, validator network, RPC endpoint, explorer, faucet or testnet is implemented here.**
+**No bespoke ZENTRAX chain application or public network is implemented here.** A local-only four-validator reference harness based on upstream Cosmos EVM is provided under `devnet/` for toolchain experiments; it is not a ZENTRAX-customized chain, public devnet, or public testnet.
 
 The existing ANT application and BNB Smart Chain testnet work are separate products. Do not treat this workspace as a running chain.
 
@@ -14,7 +14,7 @@ The existing ANT application and BNB Smart Chain testnet work are separate produ
 2. Complete the threat model in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 3. Keep chain/genesis parameters explicitly unset in [docs/GENESIS_PARAMETERS.md](docs/GENESIS_PARAMETERS.md) until protocol simulation and security review.
 4. Define operator procedures in [docs/OPERATIONS.md](docs/OPERATIONS.md).
-5. Only then pin upstream releases and introduce the node application and local multi-node devnet.
+5. The local reference harness is not a substitute for a ZENTRAX-specific application; after the stack gate, implement and test the custom chain modules and repeat the local multi-node acceptance against that application.
 
 ## Rules
 
