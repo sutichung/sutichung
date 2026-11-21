@@ -223,12 +223,14 @@ async function loadStockHistory(symbol){
   const issuer=(listed.data||[]).find(x=>x.symbol===symbol);
   if(!issuer)throw new Error('官方上市櫃公司清單找不到此代號；不猜測市場別');
   if(issuer.exchange!=='TWSE'){
+    let historyStoreWarning=null;
     try{
       const persisted=await loadPersistedOfficialHistory(symbol,'TPEx');
       if(persisted.length>=60)return {data:persisted,source:'TPEx 官方 OpenAPI 每日快照（Supabase 歷史累積；未還原權值）',timestamp:now(),asOf:persisted.at(-1).time,indicators:indicators(persisted),dataMode:'END_OF_DAY',historicalCoverage:persisted.length,historyStart:persisted[0].time};
+      historyStoreWarning='官方 TPEx 歷史快照目前僅累積 '+persisted.length+' 根有效日K；至少需要 60 根才能計算技術指標';
     }catch(error){
       // Missing Supabase credentials or an unapplied migration must not block the official latest-day quote.
-      var historyStoreWarning=String(error.message||error).slice(0,180);
+      historyStoreWarning=String(error.message||error).slice(0,180);
     }
     const latest=await loadOfficialDailyQuotes();
     const quote=latest.data?.[symbol];
@@ -782,7 +784,7 @@ async function route(req,res){
       safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],error:e.message}))
     ]);
     const flowRows=Object.values(flows.data||{});
-    return json(res,200,{ok:!history.error&&history.historyCount>0,source:history.source||'open data archive',historyAsOf:history.historyAsOf,historyDays:history.historyDateCount||0,historyStocks:history.historyCount||0,listedCount:listed.data?.length||0,institutionalStocks:flowRows.filter(x=>x.institutionalNet!=null).length,marginStocks:flowRows.filter(x=>x.marginChange!=null||x.shortChange!=null).length,tdccStocks:flowRows.filter(x=>x.largeHolderPct!=null).length,institutionalAsOf:flows.asOf||null,marginAsOf:flows.marginAsOf||null,tdccAsOf:flows.tdccAsOf||null,errors:[history.error,flows.error,listed.error].filter(Boolean),serverTime:now()});
+    return json(res,200,{ok:!history.error&&history.historyCount>0,source:history.source||'official-history-not-configured',historyAsOf:history.historyAsOf,historyDays:history.historyDateCount||0,historyStocks:history.historyCount||0,listedCount:listed.data?.length||0,institutionalStocks:flowRows.filter(x=>x.institutionalNet!=null).length,marginStocks:flowRows.filter(x=>x.marginChange!=null||x.shortChange!=null).length,tdccStocks:flowRows.filter(x=>x.largeHolderPct!=null).length,institutionalAsOf:flows.asOf||null,marginAsOf:flows.marginAsOf||null,tdccAsOf:flows.tdccAsOf||null,errors:[history.error,flows.error,listed.error].filter(Boolean),serverTime:now()});
   }
   if(u.pathname==='/api/market/scan'){
     return json(res,503,{status:'official_history_required',data:{},source:'unavailable',timestamp:now(),scannedCount:0,error:'全市場技術掃描暫停：需先建立並驗證交易所官方歷史日K資料庫；目前不使用第三方行情庫或未核實的外部掃描服務。'});
