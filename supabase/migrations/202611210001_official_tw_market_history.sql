@@ -32,3 +32,28 @@ alter table public.tw_market_daily_bars enable row level security;
 grant all on table public.tw_market_daily_bars to service_role;
 -- The application writes and reads this table only with the server-side service role key.
 -- No anon/authenticated policies are intentionally created.
+
+-- Returns each symbol's most recent N official daily bars for the server-side scanner.
+create or replace function public.tw_market_scan_history(p_limit integer default 120)
+returns table(symbol text, exchange text, bars jsonb)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with ranked as (
+    select b.symbol, b.exchange, b.trade_date, b.open, b.high, b.low, b.close, b.volume,
+      row_number() over (partition by b.symbol, b.exchange order by b.trade_date desc) as rn
+    from public.tw_market_daily_bars b
+  )
+  select r.symbol, r.exchange,
+    jsonb_agg(jsonb_build_object(
+      'time', r.trade_date, 'open', r.open, 'high', r.high, 'low', r.low,
+      'close', r.close, 'volume', r.volume
+    ) order by r.trade_date asc) as bars
+  from ranked r
+  where r.rn <= greatest(60, least(coalesce(p_limit, 120), 500))
+  group by r.symbol, r.exchange;
+$$;
+revoke all on function public.tw_market_scan_history(integer) from public, anon, authenticated;
+grant execute on function public.tw_market_scan_history(integer) to service_role;
