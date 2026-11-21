@@ -31,6 +31,25 @@ function address(name) {
   if (!ethers.isAddress(value) || value === ethers.ZeroAddress) throw new Error('invalid_' + name);
   return ethers.getAddress(value);
 }
+function validateRpcEndpoints(rpcA, rpcB) {
+  let primary;
+  let secondary;
+  try {
+    primary = new URL(String(rpcA));
+    secondary = new URL(String(rpcB));
+  } catch (_) {
+    throw new Error('invalid_rpc_url');
+  }
+  for (const endpoint of [primary, secondary]) {
+    const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(endpoint.hostname);
+    if (!['https:', ...(loopback ? ['http:'] : [])].includes(endpoint.protocol) ||
+        endpoint.username || endpoint.password || endpoint.hash) {
+      throw new Error('insecure_or_invalid_rpc_url');
+    }
+  }
+  if (primary.origin === secondary.origin) throw new Error('rpc_providers_must_be_independent');
+  return true;
+}
 function config() {
   const cfg = {
     rpcA: required('BSC_TESTNET_RPC_URL'),
@@ -47,6 +66,7 @@ function config() {
     usdtDecimals: Number(required('ANT_USDT_DECIMALS')),
     antDecimals: 18
   };
+  validateRpcEndpoints(cfg.rpcA, cfg.rpcB);
   if (!Number.isInteger(cfg.usdtDecimals) || cfg.usdtDecimals < 0 || cfg.usdtDecimals > 18) throw new Error('invalid_ANT_USDT_DECIMALS');
   if (!Number.isSafeInteger(cfg.maxOracleAge) || cfg.maxOracleAge < 60) throw new Error('invalid_ANT_MAX_ORACLE_AGE');
   return cfg;
@@ -238,93 +258,110 @@ async function setCheckpoint(cfg, block, blockHash) {
   });
 }
 async function reconcileUnlinked(cfg, providers, head) {
-  const pending = await db(cfg, 'ant_payment_chain_events', {
-    query: 'select=id,chain_id,tx_hash,log_index,block_number,block_hash,buyer_wallet,gross_usdt_raw,fee_usdt_raw,net_usdt_raw,ant_out_raw,oracle_price_raw,raw_event&order_id=is.null&canonical=eq.true&limit=100'
-  });
-  for (const row of pending) {
-    const [orders, blockA, blockB] = await Promise.all([
-      db(cfg, 'ant_payment_orders', {
-        query: 'select=id,user_id,buyer_wallet,gross_usdt_raw,fee_usdt_raw,net_usdt_raw,quoted_ant_raw,min_ant_raw,status&chain_id=eq.97&tx_hash=eq.' + row.tx_hash + '&limit=2'
-      }),
-      providers[0].getBlock(Number(row.block_number)), providers[1].getBlock(Number(row.block_number))
-    ]);
-    if (!blockA || !blockB || blockA.hash !== blockB.hash || blockA.hash !== row.block_hash) {
-      await db(cfg, 'ant_payment_chain_events', { method: 'PATCH', query: 'id=eq.' + row.id, body: { canonical: false }, prefer: 'return=minimal' });
-      continue;
-    }
-    const order = orders.find(item => String(item.buyer_wallet).toLowerCase() === String(row.buyer_wallet).toLowerCase());
-    if (!order) continue;
-    const split = calculateUsdtSplit(order.gross_usdt_raw);
-    if (split.grossRaw !== String(row.gross_usdt_raw) || split.feeRaw !== String(row.fee_usdt_raw) ||
-        split.netRaw !== String(row.net_usdt_raw) || BigInt(row.ant_out_raw) < BigInt(order.min_ant_raw)) {
-      await db(cfg, 'ant_payment_orders', { method: 'PATCH', query: 'id=eq.' + order.id, body: { status: 'manual_review', failure_code: 'chain_order_amount_mismatch', updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
-      continue;
-    }
-    const event = {
-      transactionHash: row.tx_hash, logIndex: Number(row.log_index), buyer: String(row.buyer_wallet).toLowerCase(),
-      grossUsdtRaw: String(row.gross_usdt_raw), feeUsdtRaw: String(row.fee_usdt_raw),
-      netUsdtRaw: String(row.net_usdt_raw), antOutRaw: String(row.ant_out_raw)
-    };
-    await db(cfg, 'ant_payment_chain_events', { method: 'PATCH', query: 'id=eq.' + row.id, body: { order_id: order.id }, prefer: 'return=minimal' });
-    await db(cfg, 'ant_financial_ledger', {
-      method: 'POST', query: 'on_conflict=chain_id,tx_hash,log_index,entry_type',
-      body: ledgerRows(order, event, cfg), prefer: 'resolution=ignore-duplicates,return=minimal'
-    });
-    const confirmations = head - Number(row.block_number) + 1;
-    if (confirmations >= CONFIRMATIONS) {
-      await db(cfg, 'ant_payment_orders', {
-        method: 'PATCH', query: 'id=eq.' + order.id,
-        body: { status: 'delivered', tx_log_index: Number(row.log_index), block_number: Number(row.block_number), block_hash: blockA.hash, confirmations, failure_code: null, updated_at: new Date().toISOString() },
-        prefer: 'return=minimal'
+  let cursor = null;
+  let reconciled = 0;
+  while (true) {
+    const query = 'select=id,chain_id,tx_hash,log_index,block_number,block_hash,buyer_wallet,gross_usdt_raw,fee_usdt_raw,net_usdt_raw,ant_out_raw,oracle_price_raw,raw_event&order=id.asc&limit=100' +
+      (cursor ? '&id=gt.' + cursor : '') + '&order_id=is.null&canonical=eq.true';
+    const pending = await db(cfg, 'ant_payment_chain_events', { query });
+    if (!pending.length) break;
+    for (const row of pending) {
+      const [orders, blockA, blockB] = await Promise.all([
+        db(cfg, 'ant_payment_orders', {
+          query: 'select=id,user_id,buyer_wallet,gross_usdt_raw,fee_usdt_raw,net_usdt_raw,quoted_ant_raw,min_ant_raw,status&chain_id=eq.97&tx_hash=eq.' + row.tx_hash + '&limit=2'
+        }),
+        providers[0].getBlock(Number(row.block_number)), providers[1].getBlock(Number(row.block_number))
+      ]);
+      if (!blockA || !blockB || blockA.hash !== blockB.hash || blockA.hash !== row.block_hash) {
+        await db(cfg, 'ant_payment_chain_events', { method: 'PATCH', query: 'id=eq.' + row.id, body: { canonical: false }, prefer: 'return=minimal' });
+        continue;
+      }
+      const order = orders.find(item => String(item.buyer_wallet).toLowerCase() === String(row.buyer_wallet).toLowerCase());
+      if (!order) continue;
+      const split = calculateUsdtSplit(order.gross_usdt_raw);
+      if (split.grossRaw !== String(row.gross_usdt_raw) || split.feeRaw !== String(row.fee_usdt_raw) ||
+          split.netRaw !== String(row.net_usdt_raw) || BigInt(row.ant_out_raw) < BigInt(order.min_ant_raw)) {
+        await db(cfg, 'ant_payment_orders', { method: 'PATCH', query: 'id=eq.' + order.id, body: { status: 'manual_review', failure_code: 'chain_order_amount_mismatch', updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
+        continue;
+      }
+      const event = {
+        transactionHash: row.tx_hash, logIndex: Number(row.log_index), buyer: String(row.buyer_wallet).toLowerCase(),
+        grossUsdtRaw: String(row.gross_usdt_raw), feeUsdtRaw: String(row.fee_usdt_raw),
+        netUsdtRaw: String(row.net_usdt_raw), antOutRaw: String(row.ant_out_raw)
+      };
+      await db(cfg, 'ant_payment_chain_events', { method: 'PATCH', query: 'id=eq.' + row.id, body: { order_id: order.id }, prefer: 'return=minimal' });
+      await db(cfg, 'ant_financial_ledger', {
+        method: 'POST', query: 'on_conflict=chain_id,tx_hash,log_index,entry_type',
+        body: ledgerRows(order, event, cfg), prefer: 'resolution=ignore-duplicates,return=minimal'
       });
-      await db(cfg, 'ant_payment_audit_log', {
-        method: 'POST',
-        body: { actor_type: 'worker', action: 'ant_unlinked_event_reconciled', order_id: order.id, outcome: 'success', metadata: { chain_id: CHAIN_ID, tx_hash: row.tx_hash, log_index: Number(row.log_index), confirmations } },
-        prefer: 'return=minimal'
-      });
+      const confirmations = head - Number(row.block_number) + 1;
+      if (confirmations >= CONFIRMATIONS) {
+        await db(cfg, 'ant_payment_orders', {
+          method: 'PATCH', query: 'id=eq.' + order.id,
+          body: { status: 'delivered', tx_log_index: Number(row.log_index), block_number: Number(row.block_number), block_hash: blockA.hash, confirmations, failure_code: null, updated_at: new Date().toISOString() },
+          prefer: 'return=minimal'
+        });
+        await db(cfg, 'ant_payment_audit_log', {
+          method: 'POST',
+          body: { actor_type: 'worker', action: 'ant_unlinked_event_reconciled', order_id: order.id, outcome: 'success', metadata: { chain_id: CHAIN_ID, tx_hash: row.tx_hash, log_index: Number(row.log_index), confirmations } },
+          prefer: 'return=minimal'
+        });
+        reconciled++;
+      }
     }
+    cursor = String(pending[pending.length - 1].id);
+    if (pending.length < 100) break;
   }
+  return { reconciled };
 }
 async function reconcileRecentCanonical(cfg, providers, head) {
   const fromBlock = Math.max(Number(required('ANT_INDEXER_START_BLOCK')), head - REORG_LOOKBACK);
-  const rows = await db(cfg, 'ant_payment_chain_events', {
-    query: 'select=id,order_id,tx_hash,log_index,block_number,block_hash&canonical=eq.true&block_number=gte.' + fromBlock + '&limit=500'
-  });
-  const cache = new Map();
+  let cursor = null;
+  let checked = 0;
   let orphaned = 0;
-  for (const row of rows) {
-    const blockNumber = Number(row.block_number);
-    if (!cache.has(blockNumber)) {
-      cache.set(blockNumber, await Promise.all([
-        providers[0].getBlock(blockNumber), providers[1].getBlock(blockNumber)
-      ]));
-    }
-    const [a,b] = cache.get(blockNumber);
-    if (!a || !b || a.hash !== b.hash) throw new Error('rpc_canonical_block_unavailable_or_disagreement');
-    if (a.hash === row.block_hash) continue;
-    await db(cfg, 'ant_payment_chain_events', {
-      method: 'PATCH', query: 'id=eq.' + row.id,
-      body: { canonical: false }, prefer: 'return=minimal'
-    });
-    await db(cfg, 'ant_financial_ledger', {
-      method: 'PATCH', query: 'chain_id=eq.97&tx_hash=eq.' + row.tx_hash + '&log_index=eq.' + row.log_index,
-      body: { canonical: false }, prefer: 'return=minimal'
-    });
-    if (row.order_id) {
-      await db(cfg, 'ant_payment_orders', {
-        method: 'PATCH', query: 'id=eq.' + row.order_id,
-        body: { status: 'reorged', failure_code: 'chain_reorg', confirmations: 0, updated_at: new Date().toISOString() },
-        prefer: 'return=minimal'
+  const cache = new Map();
+  while (true) {
+    const query = 'select=id,order_id,tx_hash,log_index,block_number,block_hash&canonical=eq.true&block_number=gte.' + fromBlock +
+      '&order=id.asc&limit=500' + (cursor ? '&id=gt.' + cursor : '');
+    const rows = await db(cfg, 'ant_payment_chain_events', { query });
+    if (!rows.length) break;
+    for (const row of rows) {
+      const blockNumber = Number(row.block_number);
+      if (!cache.has(blockNumber)) {
+        cache.set(blockNumber, await Promise.all([
+          providers[0].getBlock(blockNumber), providers[1].getBlock(blockNumber)
+        ]));
+      }
+      const [a,b] = cache.get(blockNumber);
+      if (!a || !b || a.hash !== b.hash) throw new Error('rpc_canonical_block_unavailable_or_disagreement');
+      if (a.hash === row.block_hash) continue;
+      await db(cfg, 'ant_payment_chain_events', {
+        method: 'PATCH', query: 'id=eq.' + row.id,
+        body: { canonical: false }, prefer: 'return=minimal'
       });
-      await db(cfg, 'ant_payment_audit_log', {
-        method: 'POST',
-        body: { actor_type: 'worker', action: 'ant_chain_event_reorged', order_id: row.order_id, outcome: 'warning', metadata: { chain_id: CHAIN_ID, tx_hash: row.tx_hash, log_index: Number(row.log_index), block_number: blockNumber } },
-        prefer: 'return=minimal'
+      await db(cfg, 'ant_financial_ledger', {
+        method: 'PATCH', query: 'chain_id=eq.97&tx_hash=eq.' + row.tx_hash + '&log_index=eq.' + row.log_index,
+        body: { canonical: false }, prefer: 'return=minimal'
       });
+      if (row.order_id) {
+        await db(cfg, 'ant_payment_orders', {
+          method: 'PATCH', query: 'id=eq.' + row.order_id,
+          body: { status: 'reorged', failure_code: 'chain_reorg', confirmations: 0, updated_at: new Date().toISOString() },
+          prefer: 'return=minimal'
+        });
+        await db(cfg, 'ant_payment_audit_log', {
+          method: 'POST',
+          body: { actor_type: 'worker', action: 'ant_chain_event_reorged', order_id: row.order_id, outcome: 'warning', metadata: { chain_id: CHAIN_ID, tx_hash: row.tx_hash, log_index: Number(row.log_index), block_number: blockNumber } },
+          prefer: 'return=minimal'
+        });
+      }
+      orphaned++;
     }
-    orphaned++;
+    checked += rows.length;
+    cursor = String(rows[rows.length - 1].id);
+    if (rows.length < 500) break;
   }
-  return { checked: rows.length, orphaned, fromBlock };
+  return { checked, orphaned, fromBlock };
 }
 async function cycle(cfg, providers, cursor) {
   const [networkA, networkB, headA, headB] = await Promise.all([
@@ -384,4 +421,4 @@ async function main() {
   }
 }
 if (require.main === module) main().catch(error => { process.stderr.write(error.stack || String(error)); process.exitCode = 1; });
-module.exports = { config, decodeEvent, ledgerRows, verifyPurchaseReceipt, verifyContractConfiguration, cycle, recordFinalEvent, reconcileRecentCanonical, reconcileUnlinked, getCheckpoint, setCheckpoint };
+module.exports = { config, validateRpcEndpoints, decodeEvent, ledgerRows, verifyPurchaseReceipt, verifyContractConfiguration, cycle, recordFinalEvent, reconcileRecentCanonical, reconcileUnlinked, getCheckpoint, setCheckpoint };
