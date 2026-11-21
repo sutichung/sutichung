@@ -24,6 +24,10 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - name: Validate shell scripts
+        run: |
+          sh -n zentrax-network/devnet/init.sh
+          sh -n zentrax-network/devnet/verify.sh
       - name: Validate Compose configuration
         run: docker compose -f zentrax-network/devnet/compose.yaml config --quiet
       - name: Build and start four validators
@@ -32,18 +36,14 @@ jobs:
           export ZENTRAX_UID="$(id -u)"
           export ZENTRAX_GID="$(id -g)"
           mkdir -p .local-data
-          if ! docker compose -f compose.yaml up -d --build; then
+          if docker compose -f compose.yaml up -d --build; then
+            echo "Four validator containers started."
+          else
             echo "Devnet startup failed; collecting init and node diagnostics."
-            docker compose -f compose.yaml ps -a
-            docker compose -f compose.yaml logs --no-color init
-            docker compose -f compose.yaml logs --no-color node0 node1 node2 node3
-            exit 1
-          fi || {
-            echo "Devnet startup failed; dumping init and validator container logs."
             docker compose -f compose.yaml ps -a || true
             docker compose -f compose.yaml logs --no-color init node0 node1 node2 node3 || true
             exit 1
-          }
+          fi
       - name: Verify consensus and EVM RPC on all four nodes
         working-directory: zentrax-network/devnet
         run: |
