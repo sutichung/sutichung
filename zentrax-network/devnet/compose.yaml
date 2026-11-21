@@ -48,7 +48,7 @@ services:
             sed -i "s|^persistent_peers = .*|persistent_peers = \"$peers\"|" "/data/node$i/evmd/config/config.toml"
             # Cosmos EVM requires the CometBFT application mempool.
             sed -i 's/^type = "flood"$/type = "app"/' "/data/node$i/evmd/config/config.toml"
-            grep -q '^type = "app"
+            grep -Fq 'type = "app"' "/data/node$$i/evmd/config/config.toml" || { echo "Failed to configure app mempool for node $$i" >&2; exit 1; }
           done
         else
           echo "Existing local devnet genesis found; preserving node keys and state."
