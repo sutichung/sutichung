@@ -23,6 +23,7 @@ const globalIntelligence = require('./lib/intelligence');
 const marketIntelligence = require('./lib/market-intelligence');
 const { diagnoseProviders } = require('./lib/provider-diagnostics');
 const { loadOfficialDailyQuotes, diagnoseOfficialDailyQuotes } = require('./lib/official-tw-market');
+const { getOfficialFundamentals } = require('./lib/official-tw-fundamentals');
 const { epochMilliseconds, isStaleTimestamp } = require('./lib/market-timestamps');
 const { createDependencyVulnerabilityScanner } = require('./lib/dependency-vulnerabilities');
 const { verifyGitHubActionsToken } = require('./lib/github-oidc');
@@ -953,64 +954,12 @@ async function route(req,res){
         mopsUrl:'https://mops.twse.com.tw/mops/web/t05st03',
         twseProfileUrl:company.exchange==='TWSE'?'https://www.twse.com.tw/pdf/ch/'+symbol+'_ch.pdf':null
       };
-      if(!FINMIND_TOKEN)return {company:officialCompany,profile:{description:officialCompany.businessDescription,descriptionNote:'尚未設定 FinMind Token；財務報表、月營收與股利資料暫不可用。',mopsUrl:officialCompany.mopsUrl},financials:null,financialError:'未設定 FINMIND_TOKEN；財報資料暫不可用',source:'TWSE／TPEx 官方公司基本資料',timestamp:now()};
-      const startDate='2018-01-01';
-      const datasets=['TaiwanStockFinancialStatements','TaiwanStockBalanceSheet','TaiwanStockCashFlowsStatement','TaiwanStockMonthRevenue','TaiwanStockDividend','TaiwanStockPER'];
-      const datasetErrors={};
-      const loadDataset=async name=>{try{return await finmind(name,{data_id:symbol,start_date:name==='TaiwanStockDividend'?'2018-01-01':startDate},20000);}catch(error){datasetErrors[name]=String(error.message||error);return [];}};
-      const [income,balance,cash,revenue,dividends,valuationRows]=await Promise.all(datasets.map(loadDataset));
-      const datesOf=rows=>[...new Set((rows||[]).map(x=>String(x.date||'')))].filter(Boolean).sort();
-      const latestIncome=datesOf(income).at(-1)||null,latestBalance=datesOf(balance).at(-1)||null,latestCash=datesOf(cash).at(-1)||null;
-      const pick=(rows,date,keys)=>{const found=(rows||[]).filter(x=>String(x.date||'')===date);for(const key of keys){const row=found.find(x=>String(x.type||'').toLowerCase()===key.toLowerCase()||String(x.origin_name||'').toLowerCase()===key.toLowerCase());if(row&&Number.isFinite(Number(row.value)))return Number(row.value);}return null;};
-      const incomeSummary=latestIncome?{
-        revenue:pick(income,latestIncome,['Revenue','OperatingRevenue','Income','營業收入合計','收益']),
-        grossProfit:pick(income,latestIncome,['GrossProfit','營業毛利（毛損）淨額']),
-        operatingIncome:pick(income,latestIncome,['OperatingIncome','OperatingIncomeLoss','IncomeFromOperations','營業利益（損失）']),
-        netIncome:pick(income,latestIncome,['IncomeAfterTaxes','NetIncome','本期淨利（淨損）']),
-        eps:pick(income,latestIncome,['EPS','EarningsPerShare','基本每股盈餘（元）'])
-      }:null;
-      const balanceSummary=latestBalance?{
-        totalAssets:pick(balance,latestBalance,['TotalAssets','資產總計']),
-        totalLiabilities:pick(balance,latestBalance,['TotalLiabilities','負債總計']),
-        totalEquity:pick(balance,latestBalance,['TotalEquity','EquityAttributableToOwnersOfParent','權益總計']),
-        currentAssets:pick(balance,latestBalance,['CurrentAssets','流動資產合計']),
-        currentLiabilities:pick(balance,latestBalance,['CurrentLiabilities','流動負債合計'])
-      }:null;
-      const cashKeys={operatingCashFlow:['CashFlowsFromOperatingActivities','CashProvidedByOperatingActivities','營業活動之淨現金流入（流出）'],investingCashFlow:['CashFlowsFromInvestingActivities','CashProvidedByInvestingActivities','投資活動之淨現金流入(流出)'],financingCashFlow:['CashFlowsFromFinancingActivities','CashProvidedByFinancingActivities','籌資活動之淨現金流入（流出）']};
-      const cashYtd=latestCash?Object.fromEntries(Object.entries(cashKeys).map(([key,keys])=>[key,pick(cash,latestCash,keys)])):{};
-      const cashDate=latestCash?new Date(latestCash+'T00:00:00Z'):null,cashMonth=cashDate?cashDate.getUTCMonth()+1:0;
-      const priorCashDate=cashDate&&cashMonth>3?new Date(Date.UTC(cashDate.getUTCFullYear(),cashDate.getUTCMonth()-2,0)).toISOString().slice(0,10):null;
-      const hasPriorCash=!!priorCashDate&&datesOf(cash).includes(priorCashDate);
-      const cashQuarter=latestCash?Object.fromEntries(Object.entries(cashKeys).map(([key,keys])=>{const current=cashYtd[key],prior=hasPriorCash?pick(cash,priorCashDate,keys):cashMonth===3?0:null;return [key,current==null||prior==null?null:current-prior];})):{};
-      const cashSummary=latestCash?{...cashQuarter,operatingCashFlowYtd:cashYtd.operatingCashFlow,investingCashFlowYtd:cashYtd.investingCashFlow,financingCashFlowYtd:cashYtd.financingCashFlow,periodBasis:cashMonth===3||hasPriorCash?'single-quarter':'year-to-date',periodDate:latestCash}:null;
-      const debtRatio=balanceSummary?.totalAssets>0&&balanceSummary?.totalLiabilities!=null?balanceSummary.totalLiabilities/balanceSummary.totalAssets*100:null;
-      const currentRatio=balanceSummary?.currentLiabilities>0&&balanceSummary?.currentAssets!=null?balanceSummary.currentAssets/balanceSummary.currentLiabilities:null;
-      const grossMargin=incomeSummary?.revenue>0&&incomeSummary?.grossProfit!=null?incomeSummary.grossProfit/incomeSummary.revenue*100:null;
-      const operatingMargin=incomeSummary?.revenue>0&&incomeSummary?.operatingIncome!=null?incomeSummary.operatingIncome/incomeSummary.revenue*100:null;
-      const netMargin=incomeSummary?.revenue>0&&incomeSummary?.netIncome!=null?incomeSummary.netIncome/incomeSummary.revenue*100:null;
-      const latestValuation=valuationRows.filter(x=>String(x.date||'')).sort((a,b)=>String(b.date).localeCompare(String(a.date)))[0]||null;
-      const valuation=latestValuation?{asOf:latestValuation.date,pe:Number.isFinite(Number(latestValuation.PER))?Number(latestValuation.PER):null,pb:Number.isFinite(Number(latestValuation.PBR))?Number(latestValuation.PBR):null,dividendYield:Number.isFinite(Number(latestValuation.dividend_yield))?Number(latestValuation.dividend_yield):null}:null;
-      const months=(revenue||[]).map(x=>({date:String(x.date||''),revenue:Number(x.revenue),year:Number(x.revenue_year),month:Number(x.revenue_month)})).filter(x=>x.date&&Number.isFinite(x.revenue)).sort((a,b)=>a.date.localeCompare(b.date));
-      const monthMap=new Map(months.map(x=>[x.year+'-'+x.month,x.revenue]));
-      const monthlyRevenue=months.slice(-24).map(x=>({date:x.date,revenue:x.revenue,yoy:monthMap.has((x.year-1)+'-'+x.month)&&monthMap.get((x.year-1)+'-'+x.month)!==0?(x.revenue/monthMap.get((x.year-1)+'-'+x.month)-1)*100:null}));
-      const dividendHistory=(dividends||[]).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).slice(0,12);
-      const isFinancialIndustry=/金融|保險/.test(String(company.sector||''));
-      const healthCandidates=[
-        ['EPS',incomeSummary?.eps,v=>v>0?1:-1],
-        ['毛利率',grossMargin,v=>v>=30?1:v<10?-1:0],
-        ['營業利益率',operatingMargin,v=>v>=10?1:v<0?-1:0],
-        ['稅後淨利率',netMargin,v=>v>=5?1:v<0?-1:0],
-        ['負債比',debtRatio,v=>v<=40?1:v>=70?-1:0],
-        ['流動比率',currentRatio,v=>v>=1.5?1:v<1?-1:0],
-        ['營業現金流',cashSummary?.operatingCashFlow??cashSummary?.operatingCashFlowYtd,v=>v>0?1:-1],
-        ['月營收年增率',monthlyRevenue.at(-1)?.yoy,v=>v>5?1:v< -5?-1:0]
-      ];
-      const applicableHealthCandidates=isFinancialIndustry?healthCandidates.filter(x=>['EPS','稅後淨利率','月營收年增率'].includes(x[0])):healthCandidates;
-      const availableHealth=applicableHealthCandidates.filter(x=>x[1]!=null&&Number.isFinite(Number(x[1])));
-      const healthScore=availableHealth.length?Math.round(50+availableHealth.reduce((sum,x)=>sum+x[2](Number(x[1])),0)/availableHealth.length*50):null;
-      const healthMinimumCoverage=Math.min(4,applicableHealthCandidates.length);
-      const financialHealth={score:availableHealth.length>=healthMinimumCoverage?healthScore:null,coverage:availableHealth.length,total:applicableHealthCandidates.length,status:availableHealth.length<healthMinimumCoverage?'資料不足':healthScore>=65?'偏強':healthScore<=35?'偏弱':'中性',note:isFinancialIndustry?'金融保險業不套用一般產業負債比、流動比及現金流門檻。':'一般產業簡易財務檢查，未作同業標準化；需搭配產業特性與多年趨勢判讀。'};
-      return {company:officialCompany,profile:{description:officialCompany.businessDescription,descriptionNote:officialCompany.businessDescription?'公司業務簡介取自證交所公開公司基本資料。':'官方公司基本資料未提供可用的營業項目欄位；請以公開資訊觀測站公司基本資料／年報為準。',mopsUrl:officialCompany.mopsUrl},financials:{incomeAsOf:latestIncome,balanceAsOf:latestBalance,cashAsOf:latestCash,income:incomeSummary,balance:balanceSummary,cash:cashSummary,debtRatio,currentRatio,grossMargin,operatingMargin,netMargin,financialHealth,valuation,monthlyRevenue,dividends:dividendHistory},datasetErrors,source:'FinMind 財報／月營收／股利資料；公司清單 TWSE／TPEx',timestamp:now(),periodType:'財報為季資料；月營收為月資料'};
+      const officialFinancials=await getOfficialFundamentals({symbol,exchange:company.exchange,sector:company.sector});
+      return {
+        company:officialCompany,
+        profile:{description:officialCompany.businessDescription,descriptionNote:'公司基本資料取自證交所／櫃買中心；詳細營業內容請以公開資訊觀測站年報為準。',mopsUrl:officialCompany.mopsUrl},
+        ...officialFinancials
+      };
     },e=>({error:e.message,company:null,financials:null,source:'unavailable',timestamp:now()}));
     return json(res,result.error?503:200,result);
   }
