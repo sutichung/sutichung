@@ -33,42 +33,8 @@ services:
       HOME: /data
     volumes:
       - ${ZENTRAX_DEVNET_DATA:-./.local-data}:/data
-    entrypoint: ["/bin/sh", "-ec"]
-    command:
-      - |
-        if [ ! -s /data/node0/evmd/config/genesis.json ]; then
-          evmd testnet init-files --validator-count 4 --chain-id zentrax-devnet-1 --output-dir /data --node-daemon-home evmd --starting-ip-address 172.30.0.10 --keyring-backend test
-          for i in 0 1 2 3; do
-            peers=""
-            for j in 0 1 2 3; do
-              [ "$$$i" = "$$j" ] && continue
-              node_id="$$(evmd comet show-node-id --home "/data/node$$j/evmd")"
-              peers="${peers:+$$peers,}$$node_id@node$$j:26656"
-            done
-            sed -i "s|^persistent_peers = .*|persistent_peers = \"$$peers\"|" "/data/node$$$i/evmd/config/config.toml"
-            # Cosmos EVM requires the CometBFT application mempool.
-            sed -i 's/^type = "flood"$$/type = "app"/' "/data/node$$$i/evmd/config/config.toml"
-            grep -Fq 'type = "app"' "/data/node$$$i/evmd/config/config.toml" || { echo "Failed to configure app mempool for node $$$i" >&2; exit 1; }
-          done
-        else
-          echo "Existing local devnet genesis found; preserving node keys and state."
-        fi
-        # Apply the required client chain ID for fresh and pre-existing data directories.
-        # Preserve any other client.toml settings already present.
-        for i in 0 1 2 3; do
-          client_config="/data/node$$i/evmd/config/client.toml"
-          mkdir -p "$(dirname "$$client_config")"
-          if [ -f "$$client_config" ]; then
-            if grep -q '^chain-id[[:space:]]*=' "$$client_config"; then
-              sed -i 's/^chain-id[[:space:]]*=.*/chain-id = "zentrax-devnet-1"/' "$$client_config"
-            else
-              printf '%s\n' 'chain-id = "zentrax-devnet-1"' >> "$$client_config"
-            fi
-          else
-            printf '%s\n' 'chain-id = "zentrax-devnet-1"' > "$$client_config"
-          fi
-          grep -Fq 'chain-id = "zentrax-devnet-1"' "$$client_config" || { echo "Missing client chain ID for node $$i" >&2; exit 1; }
-        done
+      - ./init.sh:/usr/local/bin/zentrax-init.sh:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/zentrax-init.sh"]
     networks:
       zentrax:
         ipv4_address: 172.30.0.9
