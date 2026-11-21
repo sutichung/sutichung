@@ -35,9 +35,9 @@ Submit one accurate issuer application per asset, using only the official portal
 | Gate.com | https://www.gate.com/listrequest | Blocked: legal entity, representative, contract, supply, distribution, vesting, technical documentation, team and marketing details required. |
 | KuCoin | https://www.kucoin.com/listing?lang=en_US | Blocked: application requires project owner information and due diligence materials, including entity documents, legal opinion, whitepaper, audit and KYC. |
 | Bitget | https://www.bitget.com/launchhub/application-for-listing | Blocked: project diligence and official applicant information required. |
-| Upbit | https://listing.upbit.com/ | Blocked: only issuer/operator or formally authorized representative may apply; governance, security, legal, disclosures, tokenomics and sustainability reviewed. |
+| Upbit | https://listing.upbit.com/ | Blocked: only issuer/operator or formally authorized representative may apply; governance, security, legal, disclosures, tokenomics and sustainability reviewed. |\n| MEXC | https://www.mexc.com/token-listing-apply | Blocked: requires project, contract/explorer, official website/socials, market history and applicant/team details. Verify all contacts at https://www.mexc.com/official-verify. |\n| Crypto.com App / Exchange | https://crypto.com/listing | Blocked: legal and security reviews must be passed; regional product availability is determined by Crypto.com. |\n| BitMart | https://bitmart.zendesk.com/hc/en-us/articles/360001865554-Get-Listed-on-BitMart | Blocked: official guidance directs issuers to submit an application or contact the published service channel; independently verify any follow-up. |
 
-## 3. Required issuer information — must be supplied truthfully
+## 3. Market-data directories (not exchanges)\n\nThese are separate data/indexing requests and do not create trading markets or guarantee CEX listings:\n\n- CoinMarketCap token listing / asset updates: https://coinmarketcap.com/request/ . Use the official request form only; CMC notes many DEX assets may be auto-indexed via on-chain data.\n- CoinGecko token listing / preview listing: https://partner.coingecko.com/request-form/new . A newly listed exchange market can be added only after the exchange is tracked and a direct trading-pair URL exists.\n- GeckoTerminal: token/pool discovery is based on supported chain/DEX data; DEX/chain listing requests: https://about.geckoterminal.com/dex-chain-listing .\n\nA token data page, DEX pool, exchange listing application, exchange approval, enabled deposits and enabled trading are six different statuses. Track them separately.\n\n## 4. Required issuer information — must be supplied truthfully
 
 Do not invent or infer any of the following:
 
@@ -54,7 +54,7 @@ Do not invent or infer any of the following:
 11. Product status, actual users, usage metrics, roadmap, support channels and incident response contacts.
 12. Geographic restrictions and compliance disclosures.
 
-## 4. Release gates before applications are submitted
+## 5. Release gates before applications are submitted
 
 - [ ] Testnet website and API load reliably on desktop and mobile.
 - [ ] Dedicated testnet Supabase migrations applied and verified.
@@ -68,7 +68,7 @@ Do not invent or infer any of the following:
 - [ ] Whitepaper, website, support, incident response and ongoing disclosure channels ready.
 - [ ] Each exchange application reviewed by the issuer's authorized representative before submission.
 
-## 5. Submission integrity and anti-scam controls
+## 6. Submission integrity and anti-scam controls
 
 - Never claim an application is submitted unless the official portal confirms receipt and an application reference is recorded.
 - Never claim a token is listed until the exchange itself publishes the listing and supported deposit/trading network.
@@ -78,8 +78,9 @@ Do not invent or infer any of the following:
 - Do not ask communities to spam exchanges or submit duplicate applications.
 - A listing application is not approval, and an exchange listing does not guarantee liquidity or price performance.
 
-## 6. Application tracking template
+## 7. Application tracking template
 
 For each venue, record: submission date/time, submitting authorized person, portal receipt/reference, requested documents, exchange contact verified status, follow-up deadline, diligence questions, decision, permitted jurisdiction, supported chain, deposit/withdrawal activation, trading pair, market-maker obligations, and official announcement URL.
 
 **Current aggregate status:** 0 applications submitted; 0 approvals; 0 confirmed exchange listings.
+\n\n## 8. Current execution snapshot (2026-11-21)\n\n- Repository preparation: listing dossier and application checklist are present on `ant-token-testnet`.\n- ANT CI for commit `45bc15bf86bd0ed6ccd9fc1e111cff317df0018b`: backend checks, frontend build/server tests, Solidity compile and contract tests all completed successfully in the observed GitHub Actions runs. These are CI results only, not an audit or deployment.\n- ZENTRAX prediction-market PR #40 has separate passing backend and web CI runs, but it is still a draft PR and is not the deployed Render branch.\n- No mainnet token contract, external audit, legal opinion, issuer KYC pack, verified live DEX liquidity or exchange application receipt is evidenced by this repository snapshot.\n- No listing applications were submitted by this preparation task.\n
