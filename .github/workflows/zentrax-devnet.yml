@@ -31,6 +31,7 @@ jobs:
         run: |
           export ZENTRAX_UID="$(id -u)"
           export ZENTRAX_GID="$(id -g)"
+          mkdir -p .local-data
           docker compose -f compose.yaml up -d --build
       - name: Verify consensus and EVM RPC on all four nodes
         working-directory: zentrax-network/devnet
