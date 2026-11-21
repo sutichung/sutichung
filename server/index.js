@@ -320,7 +320,7 @@ async function loadOfficialMarketHistory(limit=120){
     const candles=bars.map(bar=>({
       time:String(bar.time||'').slice(0,10),open:Number(bar.open),high:Number(bar.high),
       low:Number(bar.low),close:Number(bar.close),volume:Number(bar.volume)
-    })).filter(bar=>bar.time&&[bar.open,bar.high,bar.low,bar.close,bar.volume].every(Number.isFinite)&&bar.close>0&&bar.high>=Math.max(bar.low,bar.open,bar.close)&&bar.low<=Math.min(bar.high,bar.open,bar.close)&&bar.volume>=0)
+    })).filter(bar=>bar.time&&[bar.open,bar.high,bar.low,bar.close,bar.volume].every(Number.isFinite)&&bar.open>0&&bar.high>0&&bar.low>0&&bar.close>0&&bar.high>=Math.max(bar.low,bar.open,bar.close)&&bar.low<=Math.min(bar.high,bar.open,bar.close)&&bar.volume>=0)
       .sort((a,b)=>a.time.localeCompare(b.time));
     for(const bar of candles)allDates.add(bar.time);
     if(candles.length<60)continue;
