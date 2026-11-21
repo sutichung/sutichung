@@ -35,6 +35,7 @@ const dependencyVulnerabilityScanner = createDependencyVulnerabilityScanner({ lo
 
 const PORT = Number(process.env.PORT || 8787);
 const CACHE = new Map();
+const PERSISTED_OFFICIAL_MARKET_DATES = new Set();
 const PENDING = new Map();
 const RATE = new Map();
 const TTL = { universe: 6*60*60*1000, snapshot: 5*60*1000, scan: 10000, history: 5*60*1000, flows: 30*60*1000, futures: 5*60*1000, sentiment: 30*60*1000, news: 5*60*1000 };
@@ -221,6 +222,12 @@ async function loadStockHistory(symbol){
   const issuer=(listed.data||[]).find(x=>x.symbol===symbol);
   if(!issuer)throw new Error('官方上市櫃公司清單找不到此代號；不猜測市場別');
   if(issuer.exchange!=='TWSE'){
+    try{
+      const persisted=await loadPersistedOfficialHistory(symbol,'TPEx');
+      if(persisted.length>=60)return {data:persisted,source:'TPEx 官方 OpenAPI 每日快照（Supabase 歷史累積；未還原權值）',timestamp:now(),asOf:persisted.at(-1).time,indicators:indicators(persisted),dataMode:'END_OF_DAY',historicalCoverage:persisted.length,historyStart:persisted[0].time};
+    }catch(error){
+      if(!/tw_market_daily_bars|relation .* does not exist|404/i.test(String(error.message||error)))throw error;
+    }
     const latest=await loadOfficialDailyQuotes();
     const quote=latest.data?.[symbol];
     if(!quote)throw new Error('TPEx 官方 OpenAPI 僅提供最新交易日快照；尚無可用的官方歷史日K介面或已授權歷史資料，拒絕使用第三方歷史資料補值');
@@ -256,15 +263,45 @@ async function readRequestJson(req,maxBytes=16384){
   try{return raw?JSON.parse(raw):{};}catch(_){throw new Error('invalid_json');}
 }
 function bearerToken(req){const h=String(req.headers.authorization||'');return /^Bearer\s+\S+$/i.test(h)?h.replace(/^Bearer\s+/i,''):'';}
-async function supabaseRequest(path,{method='GET',body,token,admin=false}={}){
+async function supabaseRequest(path,{method='GET',body,token,admin=false,extraHeaders={}}={}){
   if(!SUPABASE_CONFIGURED)throw new Error('Supabase 尚未設定');
   if(admin&&!SUPABASE_SERVICE_ROLE_KEY)throw new Error('管理員服務金鑰尚未在 Render 設定；會員登入不受影響');
   const key=admin?SUPABASE_SERVICE_ROLE_KEY:SUPABASE_ANON_KEY;
-  const headers={'apikey':key,'Authorization':'Bearer '+(token||(admin?SUPABASE_SERVICE_ROLE_KEY:key)),'Accept':'application/json'};
+  const headers={'apikey':key,'Authorization':'Bearer '+(token||(admin?SUPABASE_SERVICE_ROLE_KEY:key)),'Accept':'application/json',...extraHeaders};
   if(body!==undefined)headers['Content-Type']='application/json';
   const response=await fetch(SUPABASE_URL+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(12000)});
   const text=await response.text();let data={};try{data=text?JSON.parse(text):{};}catch(_){data={message:text};}
   if(!response.ok){const error=new Error(data.msg||data.message||data.error_description||data.error||'Supabase request failed');error.status=response.status;throw error;}
+  return data;
+}
+async function persistOfficialDailyBars(snapshot){
+  if(!SUPABASE_CONFIGURED)return {persisted:false,reason:'supabase_not_configured'};
+  if(!SUPABASE_SERVICE_ROLE_KEY)return {persisted:false,reason:'SUPABASE_SERVICE_ROLE_KEY_not_configured'};
+  const rows=Object.values(snapshot?.data||{}).filter(q=>q&&q.symbol&&['TWSE','TPEx'].includes(q.market)&&q.asOf&&Number(q.close||q.price)>0).map(q=>({
+    symbol:String(q.symbol),exchange:q.market,trade_date:String(q.asOf).slice(0,10),
+    open:q.open,high:q.high,low:q.low,close:Number(q.close||q.price),volume:Number(q.volume||0),
+    turnover:q.turnover,trades:q.trades,source:String(q.source||snapshot.source||''),
+    source_url:String(q.sourceUrl||''),received_at:q.receivedAt||now()
+  }));
+  if(!rows.length)return {persisted:false,reason:'no_valid_official_rows'};
+  const pending=rows.filter(row=>!PERSISTED_OFFICIAL_MARKET_DATES.has(row.exchange+'|'+row.trade_date));
+  if(!pending.length)return {persisted:true,inserted:0,skipped:rows.length,source:'Supabase official daily bars'};
+  try{
+    await supabaseRequest('/rest/v1/tw_market_daily_bars?on_conflict=symbol,exchange,trade_date',{
+      method:'POST',body:pending,admin:true,
+      extraHeaders:{'Prefer':'resolution=merge-duplicates,return=minimal'}
+    });
+    for(const row of pending)PERSISTED_OFFICIAL_MARKET_DATES.add(row.exchange+'|'+row.trade_date);
+    return {persisted:true,inserted:pending.length,skipped:rows.length-pending.length,source:'Supabase official daily bars'};
+  }catch(error){
+    return {persisted:false,reason:String(error.message||error).slice(0,220),migrationRequired:/tw_market_daily_bars|relation .* does not exist|404/i.test(String(error.message||error))};
+  }
+}
+async function loadPersistedOfficialHistory(symbol,exchange){
+  const query='/rest/v1/tw_market_daily_bars?symbol=eq.'+encodeURIComponent(symbol)+'&exchange=eq.'+encodeURIComponent(exchange)+'&select=trade_date,open,high,low,close,volume,turnover,trades,source,source_url&order=trade_date.asc&limit=500';
+  const rows=await supabaseRequest(query,{admin:true});
+  const data=(rows||[]).map(row=>({time:String(row.trade_date||'').slice(0,10),open:Number(row.open),high:Number(row.high),low:Number(row.low),close:Number(row.close),volume:Number(row.volume)}))
+    .filter(row=>row.time&&[row.open,row.high,row.low,row.close,row.volume].every(Number.isFinite)&&row.close>0&&row.high>=Math.max(row.low,row.close)&&row.low<=Math.min(row.high,row.close)&&row.volume>=0);
   return data;
 }
 async function authenticatedUser(req){
@@ -733,7 +770,8 @@ async function route(req,res){
   }
   if(u.pathname==='/api/market/snapshot'){
     const result=await safeLoad('snapshot',TTL.snapshot,loadOfficialDailyQuotes,e=>({data:{},source:'unavailable',timestamp:now(),dataMode:'END_OF_DAY',delayed:true,error:e.message,quoteCount:0}));
-    return json(res,200,result);
+    const historyPersistence=result.data&&Object.keys(result.data).length?await persistOfficialDailyBars(result):{persisted:false,reason:'no_official_snapshot'};
+    return json(res,200,{...result,historyPersistence});
   }
   if(u.pathname==='/api/diagnostics/analysis'){
     const [history,flows,listed]=await Promise.all([
