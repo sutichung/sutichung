@@ -9,6 +9,8 @@ on:
       - "package.json"
       - "package-lock.json"
       - "server/**"
+      - "Dockerfile"
+      - "render.yaml"
       - ".github/workflows/zentrax-web.yml"
   pull_request:
     paths:
