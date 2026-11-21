@@ -32,7 +32,13 @@ jobs:
           export ZENTRAX_UID="$(id -u)"
           export ZENTRAX_GID="$(id -g)"
           mkdir -p .local-data
-          docker compose -f compose.yaml up -d --build || {
+          if ! docker compose -f compose.yaml up -d --build; then
+            echo "Devnet startup failed; collecting init and node diagnostics."
+            docker compose -f compose.yaml ps -a
+            docker compose -f compose.yaml logs --no-color init
+            docker compose -f compose.yaml logs --no-color node0 node1 node2 node3
+            exit 1
+          fi || {
             echo "Devnet startup failed; dumping init and validator container logs."
             docker compose -f compose.yaml ps -a || true
             docker compose -f compose.yaml logs --no-color init node0 node1 node2 node3 || true
