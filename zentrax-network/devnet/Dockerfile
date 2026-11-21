@@ -1,7 +1,7 @@
 # Reproducible local-only devnet image based on the upstream Cosmos EVM example chain.
 # This is a reference devnet harness, not the production ZENTRAX chain binary.
 FROM golang:1.26.10-alpine AS build
-RUN apk add --no-cache git build-base
+RUN apk add --no-cache git build-base linux-headers
 WORKDIR /src
 RUN git clone https://github.com/cosmos/evm.git . && git checkout --detach ba66d3106a52f84b1c1ede8d9683c2df98d742ef
 WORKDIR /src/evmd
