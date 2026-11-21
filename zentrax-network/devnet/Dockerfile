@@ -5,10 +5,10 @@ RUN apk add --no-cache git build-base
 WORKDIR /src
 RUN git clone --depth 1 --branch v0.7.4 https://github.com/cosmos/evm.git .
 WORKDIR /src/evmd
-RUN CGO_ENABLED=1 go build -trimpath -buildvcs=false -ldflags="-s -w" -o /out/evmd ./cmd/evmd
+RUN mkdir -p /out && CGO_ENABLED=1 go build -trimpath -buildvcs=false -ldflags="-s -w" -o /out/evmd ./cmd/evmd
 
 FROM alpine:3.22
-RUN apk add --no-cache ca-certificates wget libgcc libstdc++
+RUN apk add --no-cache ca-certificates wget jq libgcc libstdc++
 COPY --from=build /out/evmd /usr/local/bin/evmd
 ENV HOME=/home/zentrax
 RUN addgroup -S zentrax && adduser -S -G zentrax -h /home/zentrax zentrax
