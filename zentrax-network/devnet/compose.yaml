@@ -43,7 +43,7 @@ services:
             for j in 0 1 2 3; do
               [ "$$i" = "$$j" ] && continue
               node_id="$$(evmd comet show-node-id --home "/data/node$$j/evmd")"
-              peers="${peers:+$peers,}$node_id@node$j:26656"
+              peers="$${peers:+$$peers,}$$node_id@node$$j:26656"
             done
             sed -i "s|^persistent_peers = .*|persistent_peers = \"$$peers\"|" "/data/node$$i/evmd/config/config.toml"
           done
