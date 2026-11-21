@@ -816,7 +816,48 @@ async function route(req,res){
     return json(res,200,{ok:!history.error&&history.historyCount>0,source:history.source||'official-history-not-configured',historyAsOf:history.historyAsOf,historyDays:history.historyDateCount||0,historyStocks:history.historyCount||0,listedCount:listed.data?.length||0,institutionalStocks:flowRows.filter(x=>x.institutionalNet!=null).length,marginStocks:flowRows.filter(x=>x.marginChange!=null||x.shortChange!=null).length,tdccStocks:flowRows.filter(x=>x.largeHolderPct!=null).length,institutionalAsOf:flows.asOf||null,marginAsOf:flows.marginAsOf||null,tdccAsOf:flows.tdccAsOf||null,errors:[history.error,flows.error,listed.error].filter(Boolean),serverTime:now()});
   }
   if(u.pathname==='/api/market/scan'){
-    return json(res,503,{status:'official_history_required',data:{},source:'unavailable',timestamp:now(),scannedCount:0,error:'全市場技術掃描暫停：需先建立並驗證交易所官方歷史日K資料庫；目前不使用第三方行情庫或未核實的外部掃描服務。'});
+    const result=await safeLoad('scan',TTL.scan,async()=>{
+      const base=await loadOfficialMarketHistory(120);
+      if(base.historyCount<1||base.historyDateCount<60)return {
+        status:'official_history_required',data:{},source:'official-history-not-ready',timestamp:now(),
+        scannedCount:0,historyDateCount:base.historyDateCount,historyCount:base.historyCount,
+        error:'官方歷史資料目前只有 '+base.historyDateCount+' 個有效交易日、'+base.historyCount+' 檔具備至少 60 根日K；全市場技術掃描需至少 60 個交易日。每日官方快照會持續累積，不使用第三方歷史庫補值。'
+      };
+      const snapshot=await safeLoad('snapshot',TTL.snapshot,loadOfficialDailyQuotes,e=>({data:{},error:e.message}));
+      const flowResult=await safeLoad('flows',TTL.flows,twseInstitutionalFlows,e=>({data:{},error:e.message}));
+      const futures=stale('futures')?.data||null;
+      const flows=flowResult.data||{};
+      const returns=Object.values(base.data).map(row=>Number(row.return5dPct)).filter(Number.isFinite);
+      const adv=returns.filter(value=>value>0).length,dec=returns.filter(value=>value<0).length;
+      const advanceDecline=adv/Math.max(1,dec);
+      const data={},markets={TWSE:0,TPEx:0};
+      for(const [symbol,technical] of Object.entries(base.data)){
+        const quote=snapshot.data?.[symbol]||{},flow=flows[symbol]||{};
+        const price=Number(quote.price)>0?Number(quote.price):technical.close;
+        const date=quote.asOf||technical.technicalAsOf;
+        const asOf=date?new Date(date+'T13:30:00+08:00').toISOString():null;
+        const row={
+          ...technical,...flow,price,quoteIsLive:false,quoteDelayed:true,
+          quoteSource:quote.source||'Supabase 儲存之交易所官方日行情',
+          changePct:quote.changePct??technical.dailyChangePct,
+          volume:quote.volume??technical.latestVolume,asOf,
+          priceVsEma20Pct:technical.ema20?((price/technical.ema20)-1)*100:null,
+          priceVsEma60Pct:technical.ema60?((price/technical.ema60)-1)*100:null,
+          priceVsVwap20Pct:technical.vwap20?((price/technical.vwap20)-1)*100:null
+        };
+        row.scorecard=scoreStock({...row,asOf,maxAgeMs:36*60*60*1000,technicalAsOf:technical.technicalAsOf,quoteIsLive:false,marketSessionOpen:false,advanceDecline,futuresChangePct:futures?.changePct});
+        data[symbol]=row;
+        if(markets[technical.exchange]!==undefined)markets[technical.exchange]+=1;
+      }
+      return {
+        status:'ready',data,source:'TWSE／TPEx 官方日行情快照 + Supabase 官方歷史日K',
+        timestamp:now(),scannedCount:Object.keys(data).length,historyAsOf:base.historyAsOf,
+        historyDateCount:base.historyDateCount,historyCount:base.historyCount,markets,
+        advanceDecline,flowCoverage:flowResult.coverage||null,
+        warning:'全部價格與技術指標均以官方日收盤資料計算；不是盤中即時訊號。'
+      };
+    },error=>({status:'official_history_required',data:{},source:'unavailable',timestamp:now(),scannedCount:0,error:String(error.message||error).slice(0,240)}));
+    return json(res,result.status==='ready'?200:503,result);
   }
   if(u.pathname.startsWith('/api/market/fundamentals/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop()||'');
