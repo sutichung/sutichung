@@ -242,7 +242,9 @@ async function loadStockHistory(symbol){
   const pages=await mapLimit(months,3,async month=>{
     const date=month.replace(/-/g,'').slice(0,6)+'01';
     const url='https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date='+date+'&stockNo='+encodeURIComponent(symbol)+'&response=json';
-    const payload=await fetchJson(url,15000,{'User-Agent':'TaiwanStockHunter/1.0','Referer':'https://www.twse.com.tw/','Accept':'application/json'});
+    let payload;
+    try{payload=await fetchJson(url,15000,{'User-Agent':'TaiwanStockHunter/1.0','Referer':'https://www.twse.com.tw/','Accept':'application/json'});}
+    catch(_){return [];}
     if(payload.stat&&payload.stat!=='OK')return [];
     return (payload.data||[]).map(r=>{
       const parts=String(r[0]||'').trim().split('/');
