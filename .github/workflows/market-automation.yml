@@ -69,6 +69,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           MARKET_APP_URL: https://taiwan-stock-hunter-o3tt.onrender.com
         run: |
+          OIDC_TOKEN=$(curl --fail --silent --show-error --get --data-urlencode \"audience=taiwan-stock-hunter-automation\" \"$ACTIONS_ID_TOKEN_REQUEST_URL\" -H \"Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN\" | jq -r '.value')
+          test -n \"$OIDC_TOKEN\" && test \"$OIDC_TOKEN\" != \"null\" || { echo \"Unable to obtain GitHub Actions OIDC token\"; exit 1; }
+          echo \"::add-mask::$OIDC_TOKEN\"
+          curl --silent --show-error --max-time 180 -H \"Authorization: Bearer $OIDC_TOKEN\" \"$MARKET_APP_URL/api/market/scan\" -o /tmp/scan-status.json
+          SCAN_STATUS=$(node -e \"const x=JSON.parse(require('fs').readFileSync('/tmp/scan-status.json','utf8')); process.stdout.write(x.status||'')\")
+          if [ \"$SCAN_STATUS\" = \"official_history_required\" ]; then
+            echo \"Skipping outcome evaluation: official history is not ready; do not score old third-party snapshots.\"
+            exit 0
+          fi
           mkdir -p reports previous-report
           curl --fail --silent --show-error -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" -o /tmp/artifacts.json
           node server/jobs/select-intraday-artifact.js /tmp/artifacts.json "$GITHUB_RUN_ID" > reports/selected-intraday-horizon.json
