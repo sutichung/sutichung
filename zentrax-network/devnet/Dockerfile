@@ -8,7 +8,7 @@ WORKDIR /src/evmd
 RUN CGO_ENABLED=1 go build -trimpath -buildvcs=false -ldflags="-s -w" -o /out/evmd ./cmd/evmd
 
 FROM alpine:3.22
-RUN apk add --no-cache ca-certificates wget
+RUN apk add --no-cache ca-certificates wget libgcc libstdc++
 COPY --from=build /out/evmd /usr/local/bin/evmd
 ENV HOME=/home/zentrax
 RUN addgroup -S zentrax && adduser -S -G zentrax -h /home/zentrax zentrax
