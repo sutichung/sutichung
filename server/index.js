@@ -212,7 +212,7 @@ async function twseInstitutionalFlows(){
       x.largeHolderPct=holder.largeHolderPct;x.retailHolderPct=holder.retailHolderPct;x.tdccAsOf=holder.date;
     }
   }catch(_){}
-  return {data,source:'TWSE T86 + TPEx 官方歸檔三大法人 + TWSE/TPEx 融資融券 + TDCC 集保資料',timestamp:now(),asOf:valid.at(-1).date,days:valid.map(x=>x.date),tpexInstitutionalAsOf,marginAsOf,tdccAsOf};
+  return {data,source:'TWSE 官方 T86 三大法人 + TDCC 官方集保資料（僅上市市場法人資料；未提供上櫃法人與融資融券）',timestamp:now(),asOf:valid.at(-1).date,days:valid.map(x=>x.date),coverage:{TWSE:true,TPEx:false,margin:false},tdccAsOf};
 }
 function validateSymbol(s){return /^[0-9A-Z]{2,10}$/.test(s||'');}
 function rateLimit(req){const ip=req.socket.remoteAddress||'unknown';const t=Date.now();let a=RATE.get(ip)||[];a=a.filter(x=>t-x<60000);if(a.length>=480)return false;a.push(t);RATE.set(ip,a);return true;}
