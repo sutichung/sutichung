@@ -149,3 +149,18 @@ ANT 專案的全球自然流量推廣執行計畫已整理於 [ANT Global Growth
 - [ANT Creator Revenue & Fair-Launch Policy](./docs/ANT_CREATOR_REVENUE_POLICY.md)：5% 平台佣金、創造者收入、財庫分流、反狙擊公平發行規範與公開銷售前驗收門檻。此為規格文件，不代表銷售已上線。
 
 - [ANT Security Operations & Incident Response](./docs/ANT_SECURITY_OPERATIONS.md)：管理員分權、多簽與金鑰保護、Oracle／USDT 驗證、監控告警及事故處理流程。
+
+
+## ZENTRAX Network — 獨立 Layer-1 工程
+
+ZENTRAX Network 的鏈工程工作區與既有 ANT 應用／BNB Smart Chain 測試網分離。此工作區目前是架構與安全規格骨架，**不是已運作的區塊鏈**。
+
+- [Network 工作區](./zentrax-network/README.md)
+- [Layer-1 架構與交付路線圖](./docs/ZENTRAX_LAYER1_ARCHITECTURE_ROADMAP.md)
+- [Phase 0 工程驗收清單](./docs/ZENTRAX_NETWORK_PHASE0_ENGINEERING_BACKLOG.md)
+- [架構決策紀錄](./zentrax-network/docs/ARCHITECTURE_DECISION_RECORD.md)
+- [威脅模型](./zentrax-network/docs/THREAT_MODEL.md)
+- [Genesis 參數](./zentrax-network/docs/GENESIS_PARAMETERS.md)
+- [節點營運規範](./zentrax-network/docs/OPERATIONS.md)
+
+執行 `npm run zentrax:check` 可檢查工作區必要文件及安全狀態；GitHub Actions 的 ZENTRAX Network workflow 會在相關檔案變更時自動執行。通過這項檢查只代表規格骨架完整，不代表鏈核心已編譯、共識已運作或測試網已部署。
