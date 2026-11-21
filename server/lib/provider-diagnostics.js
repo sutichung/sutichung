@@ -55,13 +55,13 @@ async function request(url, options = {}, timeoutMs = CHECK_TIMEOUT_MS) {
   }
 }
 
-async function probe(id, label, run) {
+async function probe(id, label, run, metadata = {}) {
   const started = Date.now();
   const checkedAt = new Date().toISOString();
   try {
     const result = await run();
     return {
-      id, label, status: result.status || 'connected',
+      id, label, ...metadata, status: result.status || 'connected',
       httpStatus: result.httpStatus || null,
       latencyMs: Date.now() - started,
       checkedAt,
@@ -73,7 +73,7 @@ async function probe(id, label, run) {
     const message = providerErrorMessage(id, error);
     const http = String(error && error.message || '').match(/upstream_http_(\d{3})/i);
     return {
-      id, label,
+      id, label, ...metadata,
       status: /逾時/.test(message) ? 'timeout' :
         http ? statusForHttp(Number(http[1])) :
         'error',
@@ -206,7 +206,8 @@ async function diagnoseProviders(env = process.env) {
   ];
   for (const [id, label, endpoint, valid, message] of cryptoQuotes) {
     const provider = id.startsWith('binance') ? 'Binance' : id === 'bybit' ? 'Bybit' : id.startsWith('okx') ? 'OKX' : id === 'coinbase' ? 'Coinbase' : id === 'kraken' ? 'Kraken' : id === 'kraken-futures' ? 'Kraken Futures' : null;
-    if (provider && !isMarketDataLicensed(provider, env)) { checks.push(notConfigured(id, label, '未取得或未設定此來源的會員展示／再分發書面授權；請先確認條款並設定 ' + licenseEnvName(provider) + '=true')); continue; }
+    const metadata = provider ? { licenseStatus: isMarketDataLicensed(provider, env) ? 'confirmed' : 'not_confirmed', licenseEnv: licenseEnvName(provider), usageGate: 'market_data_entitlement' } : {};
+    if (provider && !isMarketDataLicensed(provider, env)) { checks.push({ ...notConfigured(id, label, '未取得或未設定此來源的會員展示／再分發書面授權；請先確認條款並設定 ' + licenseEnvName(provider) + '=true'), ...metadata }); continue; }
     checks.push(probe(id, label, async () => {
       const candidates = id === 'bybit'
         ? ['https://api.bybit.com/v5/market/tickers?category=spot&symbol=BTCUSDT', 'https://api.bytick.com/v5/market/tickers?category=spot&symbol=BTCUSDT']
@@ -221,16 +222,17 @@ async function diagnoseProviders(env = process.env) {
           const payload = JSON.parse(body);
           if (!valid(payload)) throw new Error(id + ' 報價回應格式錯誤或價格無效');
           const host = new URL(candidate).host;
-          return { httpStatus: response.status, dataCount: 1, message: message + '（實際端點：' + host + '）' };
+          return { httpStatus: response.status, dataCount: 1, message: message + '（實際端點：' + host + '）' + (provider && !isMarketDataLicensed(provider, env) ? '；技術連線成功，但商業展示／再分發權限尚未確認' : '') };
         } catch (error) { errors.push(error); }
       }
       throw errors[errors.length - 1] || new Error(id + ' 所有官方端點均無回應');
-    }));
+    }, metadata));
   }
-  if (!isMarketDataLicensed('Kraken Futures', env)) {
-    checks.push(notConfigured('kraken-futures', 'Kraken Futures 官方永續行情 API', '未取得或未設定此來源的會員展示／再分發書面授權；請先確認條款並設定 ' + licenseEnvName('Kraken Futures') + '=true'));
-  } else {
-    checks.push(probe('kraken-futures', 'Kraken Futures 官方永續行情 API', async () => {
+  {
+    const provider = 'Kraken Futures';
+    const metadata = { licenseStatus: isMarketDataLicensed(provider, env) ? 'confirmed' : 'not_confirmed', licenseEnv: licenseEnvName(provider), usageGate: 'market_data_entitlement' };
+    if (!isMarketDataLicensed(provider, env)) { checks.push({ ...notConfigured('kraken-futures', 'Kraken Futures 官方永續行情 API', '未取得或未設定此來源的會員展示／再分發書面授權；請先確認條款並設定 ' + licenseEnvName(provider) + '=true'), ...metadata }); }
+    else checks.push(probe('kraken-futures', 'Kraken Futures 官方永續行情 API', async () => {
       const { response, body } = await request('https://futures.kraken.com/derivatives/api/v3/tickers', { headers: { accept: 'application/json' } });
       if (!response.ok) throw new Error('upstream_http_' + response.status);
       const payload = JSON.parse(body);
@@ -238,8 +240,8 @@ async function diagnoseProviders(env = process.env) {
       const perpetuals = tickers.filter(x => x && x.tag === 'perpetual' && Number(x.last) > 0 && Number(x.markPrice) > 0);
       if (!perpetuals.length) throw new Error('Kraken Futures 回應缺少有效永續商品報價');
       const btc = perpetuals.find(x => /XBT:USD|BTC:USD/i.test(String(x.pair || '')));
-      return { httpStatus: response.status, dataCount: perpetuals.length, sourceTime: btc && Number.isFinite(Number(btc.time)) ? new Date(Number(btc.time)).toISOString() : null, message: '官方公開永續商品報價有效；實際可用商品依帳戶與地區資格而異' };
-    }));
+      return { httpStatus: response.status, dataCount: perpetuals.length, sourceTime: btc && Number.isFinite(Number(btc.time)) ? new Date(Number(btc.time)).toISOString() : null, message: '官方公開永續商品報價有效；實際可用商品依帳戶與地區資格而異' + (!isMarketDataLicensed(provider, env) ? '；技術連線成功，但商業展示／再分發權限尚未確認' : '') };
+    }, metadata));
   }
   checks.push(notConfigured(
     'us-equities-official',
