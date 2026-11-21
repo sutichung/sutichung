@@ -48,14 +48,33 @@ jobs:
       - name: Build production Docker image
         run: docker build -t zentrax-ci .
       - name: Smoke-test production container and static frontend
+        shell: bash
         run: |
+          set -Eeuo pipefail
           docker run -d --name zentrax-ci -p 8787:8787 -e NODE_ENV=production -e CRYPTO_STREAM_EMBEDDED=false zentrax-ci
-          trap 'docker rm -f zentrax-ci >/dev/null 2>&1 || true' EXIT
-          for attempt in $(seq 1 20); do
-            if curl --fail --silent http://127.0.0.1:8787/api/health >/dev/null; then break; fi
+          cleanup() {
+            status=$?
+            if [ "$status" -ne 0 ]; then
+              echo "::group::Container diagnostics"
+              docker ps -a --filter name=zentrax-ci
+              docker logs --tail 200 zentrax-ci || true
+              docker inspect zentrax-ci --format '{{json .State}}' || true
+              echo "::endgroup::"
+            fi
+            docker rm -f zentrax-ci >/dev/null 2>&1 || true
+            exit "$status"
+          }
+          trap cleanup EXIT
+          healthy=false
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:8787/api/health >/dev/null 2>&1; then healthy=true; break; fi
+            if [ "$(docker inspect -f '{{.State.Running}}' zentrax-ci 2>/dev/null || echo false)" != "true" ]; then break; fi
             sleep 2
           done
-          curl --fail --silent http://127.0.0.1:8787/api/health >/dev/null
-          curl --fail --silent http://127.0.0.1:8787/ | grep -q 'id="root"'
+          if [ "$healthy" != "true" ]; then
+            echo "Container did not pass /api/health within 60 seconds"
+            exit 1
+          fi
+          curl --fail --silent --show-error http://127.0.0.1:8787/ | grep -q 'id="root"'
       - name: Run backend tests
         run: npm run test:server

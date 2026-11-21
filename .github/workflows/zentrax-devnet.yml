@@ -1,0 +1,51 @@
+name: ZENTRAX four-validator devnet
+
+on:
+  pull_request:
+    paths:
+      - 'zentrax-network/devnet/**'
+      - '.github/workflows/zentrax-devnet.yml'
+  push:
+    branches: [zentrax-network-integration]
+    paths:
+      - 'zentrax-network/devnet/**'
+      - '.github/workflows/zentrax-devnet.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zentrax-devnet-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  four-validator-devnet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Compose configuration
+        run: docker compose -f zentrax-network/devnet/compose.yaml config --quiet
+      - name: Build and start four validators
+        working-directory: zentrax-network/devnet
+        run: |
+          export ZENTRAX_UID="$(id -u)"
+          export ZENTRAX_GID="$(id -g)"
+          mkdir -p .local-data
+          docker compose -f compose.yaml up -d --build
+      - name: Verify consensus and EVM RPC on all four nodes
+        working-directory: zentrax-network/devnet
+        run: |
+          set -e
+          for attempt in $(seq 1 90); do
+            if sh verify.sh; then exit 0; fi
+            sleep 5
+          done
+          echo "Four-validator devnet did not pass acceptance within 7.5 minutes."
+          docker compose -f compose.yaml ps
+          docker compose -f compose.yaml logs --no-color --tail=200
+          exit 1
+      - name: Stop local devnet
+        if: always()
+        working-directory: zentrax-network/devnet
+        run: docker compose -f compose.yaml down -v

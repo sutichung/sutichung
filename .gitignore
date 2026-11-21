@@ -5,3 +5,6 @@ build/
 !.env.example
 .DS_Store
 npm-debug.log*
+
+# Local ZENTRAX devnet contains disposable validator keys and generated genesis state.
+zentrax-network/devnet/.local-data/

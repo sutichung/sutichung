@@ -1,0 +1,36 @@
+name: ZENTRAX network scaffold checks
+
+on:
+  push:
+    branches: [ant-token-testnet]
+    paths:
+      - 'zentrax-network/**'
+      - 'scripts/check-zentrax-network.mjs'
+      - 'package.json'
+      - '.github/workflows/zentrax-network.yml'
+  pull_request:
+    paths:
+      - 'zentrax-network/**'
+      - 'scripts/check-zentrax-network.mjs'
+      - 'package.json'
+      - '.github/workflows/zentrax-network.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zentrax-network-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scaffold:
+    name: Validate network workspace and safety gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Validate required architecture and security files
+        run: node scripts/check-zentrax-network.mjs

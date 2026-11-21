@@ -25,7 +25,8 @@
     "test:token": "hardhat test",
     "deploy:token:testnet": "hardhat run scripts/deploy-ant.js --network bscTestnet",
     "deploy:sale:testnet": "hardhat run scripts/deploy-ant-sale-testnet.js --network bscTestnet",
-    "deploy:ant:e2e:testnet": "hardhat run scripts/deploy-ant-testnet-suite.js --network bscTestnet"
+    "deploy:ant:e2e:testnet": "hardhat run scripts/deploy-ant-testnet-suite.js --network bscTestnet",
+    "zentrax:check": "node scripts/check-zentrax-network.mjs"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "5.2.0",

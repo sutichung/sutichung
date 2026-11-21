@@ -149,3 +149,26 @@ ANT 專案的全球自然流量推廣執行計畫已整理於 [ANT Global Growth
 - [ANT Creator Revenue & Fair-Launch Policy](./docs/ANT_CREATOR_REVENUE_POLICY.md)：5% 平台佣金、創造者收入、財庫分流、反狙擊公平發行規範與公開銷售前驗收門檻。此為規格文件，不代表銷售已上線。
 
 - [ANT Security Operations & Incident Response](./docs/ANT_SECURITY_OPERATIONS.md)：管理員分權、多簽與金鑰保護、Oracle／USDT 驗證、監控告警及事故處理流程。
+
+
+## ZENTRAX Network — 獨立 Layer-1 工程
+
+ZENTRAX Network 的鏈工程工作區與既有 ANT 應用／BNB Smart Chain 測試網分離。此工作區目前是架構與安全規格骨架，**不是已運作的區塊鏈**。
+
+- [Network 工作區](./zentrax-network/README.md)
+- [Layer-1 架構與交付路線圖](./docs/ZENTRAX_LAYER1_ARCHITECTURE_ROADMAP.md)
+- [Phase 0 工程驗收清單](./docs/ZENTRAX_NETWORK_PHASE0_ENGINEERING_BACKLOG.md)
+- [架構決策紀錄](./zentrax-network/docs/ARCHITECTURE_DECISION_RECORD.md)
+- [威脅模型](./zentrax-network/docs/THREAT_MODEL.md)
+- [Genesis 參數](./zentrax-network/docs/GENESIS_PARAMETERS.md)
+- [節點營運規範](./zentrax-network/docs/OPERATIONS.md)
+
+執行 `npm run zentrax:check` 可檢查工作區必要文件及安全狀態；GitHub Actions 的 ZENTRAX Network workflow 會在相關檔案變更時自動執行。通過這項檢查只代表規格骨架完整，不代表鏈核心已編譯、共識已運作或測試網已部署。
+
+
+### 本地四驗證者 Devnet
+
+- [四節點 Devnet 操作與驗收](./zentrax-network/devnet/README.md)：以 Docker Compose 啟動四個獨立驗證者，提供 CometBFT RPC 與 EVM JSON-RPC。
+- 啟動：進入 `zentrax-network/devnet` 後執行 `sh up.sh`；驗證執行 `sh verify.sh`；停止執行 `sh down.sh`。
+- 這是以 Cosmos EVM 上游範例鏈建立的本機參考測試網，不是已完成的 ZENTRAX 客製鏈，不是公開測試網，也不可用於真實資產。
+- GitHub Actions `ZENTRAX four-validator devnet` 會建置映像、啟動四節點並驗證共識高度、驗證者數量及 EVM RPC。必須等 CI 真正通過，才可稱本機四節點驗收通過。
