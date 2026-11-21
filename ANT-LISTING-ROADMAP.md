@@ -1,6 +1,8 @@
 # Ant Colony (ANT) — Operations, Launch and Binance Futures Readiness
 
 > Status: engineering plan and acceptance criteria. This document is not evidence of deployment, audit, exchange approval, legal clearance, market liquidity, or sales availability.
+>
+> Exchange-by-exchange route analysis, DEX / aggregator / CEX distinctions, due-diligence dossier, post-listing controls and current evidence gaps: [ANT Exchange Listing Playbook](./docs/ANT_EXCHANGE_LISTING_PLAYBOOK.md).
 
 ## Product baseline
 
