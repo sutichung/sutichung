@@ -35,6 +35,15 @@ services:
       - |
         if [ ! -s /data/node0/evmd/config/genesis.json ]; then
           evmd testnet init-files --validator-count 4 --chain-id zentrax-devnet-1 --output-dir /data --node-daemon-home evmd --starting-ip-address 172.30.0.10 --keyring-backend test
+          for i in 0 1 2 3; do
+            peers=""
+            for j in 0 1 2 3; do
+              [ "$i" = "$j" ] && continue
+              node_id="$(evmd tendermint show-node-id --home "/data/node$j/evmd")"
+              peers="${peers:+$peers,}$node_id@node$j:26656"
+            done
+            sed -i "s|^persistent_peers = .*|persistent_peers = \"$peers\"|" "/data/node$i/evmd/config/config.toml"
+          done
         else
           echo "Existing local devnet genesis found; preserving node keys and state."
         fi
