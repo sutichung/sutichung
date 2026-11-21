@@ -68,5 +68,23 @@ jobs:
           fi
           curl --fail --silent --show-error http://127.0.0.1:8787/ -o /tmp/index.html
           grep -q 'id="root"' /tmp/index.html
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const html = fs.readFileSync('/tmp/index.html', 'utf8');
+          const assets = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+\.(?:js|css))"/g)].map(match => match[1]);
+          if (!assets.some(asset => asset.endsWith('.js'))) throw new Error('production_index_missing_javascript_bundle');
+          if (!assets.some(asset => asset.endsWith('.css'))) throw new Error('production_index_missing_stylesheet_bundle');
+          for (const asset of assets) {
+            const response = await fetch('http://127.0.0.1:8787' + asset, { signal: AbortSignal.timeout(5000) });
+            if (!response.ok) throw new Error('production_asset_http_' + response.status + ':' + asset);
+            const body = await response.arrayBuffer();
+            if (!body.byteLength) throw new Error('production_asset_empty:' + asset);
+            const expected = asset.endsWith('.js') ? 'javascript' : 'css';
+            if (!response.headers.get('content-type')?.toLowerCase().includes(expected)) {
+              throw new Error('production_asset_wrong_content_type:' + asset + ':' + response.headers.get('content-type'));
+            }
+            console.log('Verified production asset', asset, body.byteLength, 'bytes');
+          }
+          NODE
       - name: Run backend tests
         run: npm run test:server
