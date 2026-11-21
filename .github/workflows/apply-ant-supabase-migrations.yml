@@ -1,0 +1,44 @@
+name: Apply ANT BSC testnet Supabase migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type APPLY BSC TESTNET MIGRATIONS to apply pending migrations to the dedicated testnet database
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ant-bsc-testnet-supabase-migrations
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: ${{ inputs.confirm == 'APPLY BSC TESTNET MIGRATIONS' && vars.ANT_DB_ENVIRONMENT == 'bsc-testnet' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Require dedicated testnet database secret
+        env:
+          SUPABASE_TESTNET_DB_URL: ${{ secrets.SUPABASE_TESTNET_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_TESTNET_DB_URL" ]; then
+            echo "::error::Repository secret SUPABASE_TESTNET_DB_URL is not configured."
+            exit 1
+          fi
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Apply pending testnet migrations
+        env:
+          SUPABASE_TESTNET_DB_URL: ${{ secrets.SUPABASE_TESTNET_DB_URL }}
+        run: supabase db push --db-url "$SUPABASE_TESTNET_DB_URL" --yes
