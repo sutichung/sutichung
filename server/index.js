@@ -388,6 +388,8 @@ const antApiHandler=createAntApi({supabaseUrl:SUPABASE_URL,anonKey:SUPABASE_ANON
 
 async function route(req,res){
   const u=new URL(req.url,'http://localhost');
+  // Keep liveness probes ahead of all optional handlers and auth integrations.
+  if(req.method==='GET'&&['/api/health/live','/api/health'].includes(u.pathname))return json(res,200,buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}));
   if(await antApiHandler(req,res,u))return;
   if(req.method==='POST'&&u.pathname==='/api/automation/research/outcomes'){
     if(!await verifyGitHubActionsToken(bearerToken(req)))return json(res,401,{error:'automation_authentication_required'});
@@ -572,11 +574,7 @@ async function route(req,res){
     const result=await safeLoad('research-outcomes',60000,()=>researchStorage.listReports(30),e=>({status:'unavailable',source:'Supabase private Storage',fetchedAt:now(),count:0,data:[],error:e.message}));
     return json(res,result.status==='unavailable'?503:200,result);
   }
-  // Render's health check must remain a cheap process-liveness probe. Keep all
-  // storage/provider inspection on the separate details endpoint so a slow
-  // optional dependency can never make a healthy HTTP process fail startup.
-  if(u.pathname==='/api/health/live'||u.pathname==='/api/health')return json(res,200,buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}));
-  if(u.pathname==='/api/health/ready'){const readiness=buildDependencyReadiness();return json(res,200,{...buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}),...readiness});}
+  if(u.pathname==='/api/health/ready'&&req.method==='GET'){const readiness=buildDependencyReadiness();return json(res,200,{...buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}),...readiness});}
   if(u.pathname==='/api/health/details'){let cryptoStatus=cryptoRealtimeFeed.status();if(process.env.CRYPTO_STREAM_EMBEDDED==='false'){try{cryptoStatus=await cryptoEventStorage.readStatus();}catch(error){cryptoStatus={...cryptoStatus,workerStatusError:error.message};}}return json(res,200,{...buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}),auth:{configured:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY},provider:FINMIND_TOKEN?'FinMind token configured':'FinMind token missing',trading:getTradingReadiness(),cryptoStreaming:cryptoStatus,providers:{finmind:!!FINMIND_TOKEN,youtubeApiKeyConfigured:!!process.env.YOUTUBE_API_KEY,youtubeLiveResolver:!!process.env.YOUTUBE_API_KEY,youtubeChannelEmbedFallback:true,openrouter:!!process.env.OPENROUTER_API_KEY,gemini:!!process.env.GEMINI_API_KEY,groq:!!process.env.GROQ_API_KEY,xai:!!process.env.XAI_API_KEY,deepseek:!!process.env.DEEPSEEK_API_KEY,cloudflare:!!(process.env.CLOUDFLARE_API_TOKEN&&process.env.CLOUDFLARE_ACCOUNT_ID),realtime:cryptoStatus.connectedFeedCount>0,realtimeProviderConfigured:(cryptoStatus.exchanges||[]).length>0,officialDailyMarketData:true,twseOfficialOpenApi:true,tpexOfficialOpenApi:true,licensedRealtimeFeedConfigured:(cryptoStatus.exchanges||[]).length>0,cryptoEventStorageConfigured:cryptoStatus.storage?.configured===true,telegramAlertsConfigured:cryptoStatus.telegramConfigured===true,scan:true,flows:true,futures:true,sentiment:true,news:true,openDataArchive:true}});}
   if(SUPABASE_CONFIGURED&&u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/api/auth/')){
     const automationPaths=new Set(['/api/market/snapshot','/api/market/institutional-flows','/api/market/futures','/api/market/sentiment','/api/market/scan','/api/market/news','/api/market/calendar','/api/diagnostics/providers','/api/diagnostics/vulnerabilities','/api/diagnostics/market','/api/crypto/market','/api/crypto/realtime/status','/api/crypto/realtime/quotes','/api/crypto/risk/BTCUSDT','/api/us/market']);
