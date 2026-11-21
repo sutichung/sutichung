@@ -2,7 +2,7 @@ name: ANT token CI
 
 on:
   push:
-    branches: [ant-token-testnet]
+    branches: [main, ant-token-testnet]
     paths:
       - "contracts/**"
       - "test/**"
@@ -22,12 +22,13 @@ on:
 jobs:
   compile-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm install
+      - run: npm install --no-audit --no-fund
       - name: Syntax-check deployment scripts
         run: for file in scripts/*.js; do node --check "$file"; done
       - run: npm run compile:token
