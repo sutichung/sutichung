@@ -437,6 +437,6 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
     json(res, 404, { error: 'ant_endpoint_not_found' });
     return true;
   }
-  return false;
+  return handle;
 }
 module.exports = { createAntApi, buildWalletMessage, parseRaw, assuranceLevel, requireConditionalUpdate, hasFinanceAccess, buildOrderHistoryQuery };
