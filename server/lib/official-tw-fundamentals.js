@@ -64,7 +64,7 @@ function mapIncome(row) {
     operatingIncome: pick([/營業利益.*損失/, /^營業利益$/, /^OperatingIncome$/i]),
     netIncome: pick([/本期淨利.*損益/, /^本期淨利$/, /^IncomeAfterTaxes$/i, /^NetIncome$/i]),
     eps: pick([/基本每股盈餘/, /^EPS$/i, /每股盈餘/]),
-    period: periodOf(row)
+    period: periodOf(row), unit: '新臺幣千元（每股盈餘除外）'
   };
 }
 function mapBalance(row) {
@@ -76,7 +76,7 @@ function mapBalance(row) {
     totalEquity: pick([/^權益總計$/, /^TotalEquity$/i]),
     currentAssets: pick([/^流動資產合計$/, /^CurrentAssets$/i]),
     currentLiabilities: pick([/^流動負債合計$/, /^CurrentLiabilities$/i]),
-    period: periodOf(row)
+    period: periodOf(row), unit: '新臺幣千元'
   };
 }
 function mapRevenue(row) {
@@ -87,6 +87,15 @@ function mapRevenue(row) {
     yoy: numberOf(valueOf(row, [/營業收入-去年同月增減/, /去年同月增減/, /^YoY$/i])),
     mom: numberOf(valueOf(row, [/營業收入-上月比較增減/, /上月比較增減/, /^MoM$/i])),
     unit: '新臺幣千元（依官方月營收資料欄位）'
+  };
+}
+function mapDividend(row) {
+  return {
+    year: valueOf(row, [/股利所屬期間/, /^年度$/, /^年$/]) || periodOf(row),
+    CashEarningsDistribution: numberOf(valueOf(row, [/現金股利.*元.?股/, /現金股利/ ])),
+    StockEarningsDistribution: numberOf(valueOf(row, [/股票股利.*元.?股/, /股票股利/ ])),
+    CashExDividendTradingDate: valueOf(row, [/除息交易日/, /除權息交易日/]) || null,
+    source: '官方股利分派資料'
   };
 }
 function mapValuation(row, exchange) {
@@ -132,7 +141,7 @@ async function getOfficialFundamentals({ symbol, exchange, sector }) {
   const grossMargin = income?.revenue > 0 && income.grossProfit != null ? income.grossProfit / income.revenue * 100 : null;
   const operatingMargin = income?.revenue > 0 && income.operatingIncome != null ? income.operatingIncome / income.revenue * 100 : null;
   const netMargin = income?.revenue > 0 && income.netIncome != null ? income.netIncome / income.revenue * 100 : null;
-  const dividendHistory = bySymbol(sourceRows.dividends, symbol).slice(-12).reverse();
+  const dividendHistory = bySymbol(sourceRows.dividends, symbol).slice(-12).reverse().map(mapDividend);
   const health = [
     ['EPS', income?.eps, v => v > 0 ? 1 : -1],
     ['毛利率', grossMargin, v => v >= 30 ? 1 : v < 10 ? -1 : 0],
