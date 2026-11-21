@@ -1188,7 +1188,7 @@ async function route(req,res){
 }
 const server=http.createServer(async(req,res)=>{
   if(!applyFirewall(req,res))return;
-  try{await route(req,res);}catch(e){json(res,500,{error:'internal_error',message:process.env.NODE_ENV==='production'?'服務暫時無法處理請求':e.message});}
+  try{await route(req,res);}catch(e){if(bootDiagnostics)process.stderr.write('[request-error] '+(e.stack||e.message)+'\\n');json(res,500,{error:'internal_error',message:process.env.NODE_ENV==='production'?'服務暫時無法處理請求':e.message});}
 });
 bootLog('binding HTTP server on port ' + PORT);
 server.on('error',error=>bootLog('HTTP server error: ' + error.message));
