@@ -57,3 +57,15 @@ Before pinning dependencies:
 - No public testnet or mainnet deployment is authorized.
 - OP Stack remains an alternative only if the project explicitly changes to an Ethereum L2.
 - ANT remains a separate application token unless a separately audited migration decision is made.
+
+
+## Prototype dependency pin and compatibility note
+
+The local-only reference devnet pins the upstream Cosmos EVM `v0.7.4` source commit `ba66d3106a52f84b1c1ede8d9683c2df98d742ef`. Its `evmd/go.mod` currently declares Cosmos SDK `v0.54.3`, CometBFT `v0.39.3`, and Go `1.25.9`. This is the dependency set actually used by that tagged example application; do not infer a newer compatibility set from a product-level release-family label.
+
+The Cosmos Stack release-family page currently lists the 2026.1 family as Cosmos SDK `0.55.x`, CometBFT `0.40.x`, and Cosmos EVM `0.7.x`. The discrepancy must be resolved by reviewing the exact published modules and a supported compatibility matrix before selecting the production ZENTRAX stack. The v0.7.4 example is used only to validate a disposable local multi-validator workflow; it is not the approved production dependency set.
+
+References:
+- Cosmos Stack release families: https://docs.cosmos.network/sdk/latest/release-family
+- Cosmos EVM v0.7.4 release: https://github.com/cosmos/evm/releases/tag/v0.7.4
+- Pinned evmd module manifest: https://github.com/cosmos/evm/blob/ba66d3106a52f84b1c1ede8d9683c2df98d742ef/evmd/go.mod
