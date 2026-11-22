@@ -18,7 +18,7 @@ async function main() {
   const saleEndAt = Number(process.env.ANT_SALE_END_AT);
   const hardCapRaw = process.env.ANT_SALE_HARD_CAP_RAW;
   const walletCapRaw = process.env.ANT_SALE_WALLET_CAP_RAW;
-  if (!Number.isSafeInteger(saleStartAt) || saleStartAt <= 0 || !Number.isSafeInteger(saleEndAt) || saleEndAt <= saleStartAt) throw new Error("ANT_SALE_START_AT and ANT_SALE_END_AT must be valid Unix timestamps.");
+  if (!Number.isSafeInteger(saleStartAt) || saleStartAt <= 0 || !Number.isSafeInteger(saleEndAt) || saleEndAt <= saleStartAt || saleEndAt <= Math.floor(Date.now() / 1000)) throw new Error("ANT_SALE_START_AT and ANT_SALE_END_AT must define a valid future-ending Unix timestamp window.");
   if (!/^\d{1,78}$/.test(hardCapRaw || "") || BigInt(hardCapRaw) <= 0n || !/^\d{1,78}$/.test(walletCapRaw || "") || BigInt(walletCapRaw) <= 0n || BigInt(walletCapRaw) > BigInt(hardCapRaw)) throw new Error("ANT_SALE_HARD_CAP_RAW and ANT_SALE_WALLET_CAP_RAW must be valid raw USDT amounts, with wallet cap <= hard cap.");
   if (!Number.isInteger(decimals) || decimals < 0 || decimals > 18) throw new Error("ANT_USDT_DECIMALS must be verified and between 0 and 18.");
   if (!Number.isSafeInteger(maxAge) || maxAge < 60) throw new Error("ANT_MAX_ORACLE_AGE must be at least 60 seconds.");
