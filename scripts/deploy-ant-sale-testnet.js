@@ -14,6 +14,12 @@ async function main() {
   const treasuryWallet = requiredAddress("ANT_TREASURY_WALLET");
   const decimals = Number(process.env.ANT_USDT_DECIMALS);
   const maxAge = Number(process.env.ANT_MAX_ORACLE_AGE || 3600);
+  const saleStartAt = Number(process.env.ANT_SALE_START_AT);
+  const saleEndAt = Number(process.env.ANT_SALE_END_AT);
+  const hardCapRaw = process.env.ANT_SALE_HARD_CAP_RAW;
+  const walletCapRaw = process.env.ANT_SALE_WALLET_CAP_RAW;
+  if (!Number.isSafeInteger(saleStartAt) || saleStartAt <= 0 || !Number.isSafeInteger(saleEndAt) || saleEndAt <= saleStartAt) throw new Error("ANT_SALE_START_AT and ANT_SALE_END_AT must be valid Unix timestamps.");
+  if (!/^\\d{1,78}$/.test(hardCapRaw || "") || BigInt(hardCapRaw) <= 0n || !/^\\d{1,78}$/.test(walletCapRaw || "") || BigInt(walletCapRaw) <= 0n || BigInt(walletCapRaw) > BigInt(hardCapRaw)) throw new Error("ANT_SALE_HARD_CAP_RAW and ANT_SALE_WALLET_CAP_RAW must be valid raw USDT amounts, with wallet cap <= hard cap.");
   if (!Number.isInteger(decimals) || decimals < 0 || decimals > 18) throw new Error("ANT_USDT_DECIMALS must be verified and between 0 and 18.");
   if (!Number.isSafeInteger(maxAge) || maxAge < 60) throw new Error("ANT_MAX_ORACLE_AGE must be at least 60 seconds.");
   if (feeWallet.toLowerCase() === treasuryWallet.toLowerCase()) throw new Error("Fee and treasury recipients must be separate Safe wallets.");
@@ -34,7 +40,7 @@ async function main() {
   if (priceData[0] <= 0n || priceData[1] > BigInt(Math.floor(Date.now()/1000)) ||
       BigInt(Math.floor(Date.now()/1000)) - priceData[1] > BigInt(maxAge)) throw new Error("Oracle is zero, future-dated or stale; refusing deployment.");
   const Sale = await ethers.getContractFactory("AntColonySale");
-  const sale = await Sale.deploy(usdtAddress, antAddress, oracleAddress, feeWallet, treasuryWallet, maxAge);
+  const sale = await Sale.deploy(usdtAddress, antAddress, oracleAddress, feeWallet, treasuryWallet, maxAge, saleStartAt, saleEndAt, hardCapRaw, walletCapRaw);
   await sale.waitForDeployment();
   const address = await sale.getAddress();
   const antToken = new ethers.Contract(antAddress, ["function balanceOf(address) view returns(uint256)"], provider);
@@ -47,7 +53,7 @@ async function main() {
   }
   console.log(JSON.stringify({
     network:network.name,chainId:97,sale:address,usdt:usdtAddress,usdtDecimals:decimals,
-    ant:antAddress,oracle:oracleAddress,feeWallet,treasuryWallet,maxOracleAge:maxAge,
+    ant:antAddress,oracle:oracleAddress,feeWallet,treasuryWallet,maxOracleAge:maxAge,saleStartAt,saleEndAt,hardCapRaw,walletCapRaw,
     feeBps:(await sale.FEE_BPS()).toString(),
     saleInventoryRaw:saleInventory.toString(),
     activationStatus:saleInventory > 0n ? "inventory funded; verify API status and test a purchase" : "disabled until the Safe funds ANT inventory",
