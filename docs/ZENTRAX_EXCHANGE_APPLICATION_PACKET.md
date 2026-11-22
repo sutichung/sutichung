@@ -136,3 +136,8 @@ For each venue, record:
 **Confirmed exchange listings: 0.**
 
 The packet is a structured draft. The mainnet asset, audit, legal applicant/KYC package, verified project contact, production website, and market evidence remain blocking items. The next valid step is to complete the actual issuer/applicant and technical evidence truthfully, then have the authorized applicant review each venue-specific form before submission.
+
+
+## H. Automated integrity check
+
+The dedicated ANT branch now runs [ANT Listing Readiness Gate](https://github.com/sutichung/sutichung/actions/workflows/ant-listing-readiness.yml) on relevant code/document changes. The checker verifies the testnet-only chain guards, selected token/sale invariants, and truthful zero-submission / zero-approval / no-mainnet disclosures. Latest run: [45011156352](https://github.com/sutichung/sutichung/actions/runs/45011156352) — passed. This is a static integrity check only, not an audit, application submission, deployment or listing approval.
