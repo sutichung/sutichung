@@ -21,6 +21,13 @@ function buildOrderHistoryQuery(userId) {
   return 'select=id,chain_id,buyer_wallet,gross_usdt_raw,fee_usdt_raw,net_usdt_raw,quoted_ant_raw,min_ant_raw,status,tx_hash,block_number,confirmations,created_at,updated_at' +
     '&user_id=eq.' + encodeURIComponent(String(userId)) + '&order=created_at.desc&limit=100';
 }
+function resolveMinimumAntOut(quotedAntRaw, requestedMinRaw) {
+  const quoted = BigInt(quotedAntRaw);
+  const floor = quoted * 9900n / 10000n;
+  const minimum = requestedMinRaw === undefined ? floor : BigInt(parseRaw(requestedMinRaw, 'min_ant'));
+  if (minimum <= 0n || minimum < floor || minimum > quoted) throw new Error('invalid_min_ant_out');
+  return minimum;
+}
 function requireConditionalUpdate(rows, errorCode) {
   if (!Array.isArray(rows) || rows.length !== 1) {
     const error = new Error(errorCode);
@@ -257,15 +264,6 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
     }
     if (pathname === '/api/ant/orders' && req.method === 'GET') {
       try {
-        const rows = await db('ant_payment_orders', {
-          query: 'select=id,buyer_wallet,gross_usdt_raw,fee_usdt_raw,net_usdt_raw,quoted_ant_raw,min_ant_raw,status,tx_hash,block_number,confirmations,created_at,updated_at&user_id=eq.' + encodeURIComponent(user.id) + '&order=created_at.desc&limit=100'
-        });
-        json(res, 200, { orders: rows });
-      } catch (error) { json(res, error.status || 503, { error: error.message }); }
-      return true;
-    }
-    if (pathname === '/api/ant/orders' && req.method === 'GET') {
-      try {
         // The authenticated Supabase user ID is always part of the database filter.
         // Never accept a user_id supplied by the browser for this endpoint.
         const orders = await db('ant_payment_orders', {
@@ -294,8 +292,7 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
           const quote = await sale.quote(gross);
           const fee = quote.feeUsdt, net = quote.netUsdt, antOut = quote.antOut, price = quote.price;
           if (fee + net !== BigInt(gross) || antOut <= 0n) { json(res, 503, { error: 'invalid_onchain_quote' }); return true; }
-          const minimum = body.minAntRaw === undefined ? antOut * 9900n / 10000n : BigInt(parseRaw(body.minAntRaw, 'min_ant'));
-          if (minimum <= 0n || minimum > antOut) { json(res, 400, { error: 'invalid_min_ant_out' }); return true; }
+          const minimum = resolveMinimumAntOut(antOut, body.minAntRaw);
           const expires = new Date(Date.now() + 5 * 60 * 1000).toISOString();
           const deadline = Math.floor(Date.parse(expires) / 1000);
           const orders = await db('ant_payment_orders', {
