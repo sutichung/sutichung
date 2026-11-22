@@ -17,9 +17,14 @@ This review records source-level changes made on `ant-token-testnet`. It is not 
 
 ## CI evidence
 
-- Commit `e59eb765be1279a7e2530dbcb1090b60208750e8`: ANT token CI completed successfully; 21 Solidity files compiled and 20 tests passed after the dependency-address validation changes.
-- Subsequent commits add the on-chain deadline, API/UI integration, fee-rounding protection, and API slippage floor. Their latest CI result must be checked against the current branch head before claiming the complete revision is green.
+Latest verified code commit: `7f8c7c1ac97795ba1f1d3550305818f1c877fcea`.
+
+- ANT token CI: **passed**. 21 Solidity files compiled successfully and all 22 contract tests passed, including expired-deadline, EOA dependency, recipient collision, zero-fee rounding, and minimum-fee-boundary cases. Run: [45000660377](https://github.com/sutichung/sutichung/actions/runs/45000660377).
+- Backend checks: **passed**. Server tests, syntax checks, production build, and dependency checks completed successfully. Run: [45000660378](https://github.com/sutichung/sutichung/actions/runs/45000660378).
+- ZENTRAX web CI: **passed**. Production frontend build, Docker image build, and static frontend smoke test completed successfully. Run: [45000633408](https://github.com/sutichung/sutichung/actions/runs/45000633408).
+- Dependency audit: 11 low-severity findings across the full dependency tree; the production-runtime audit reported 0 vulnerabilities (0 low/moderate/high/critical). The low-severity development/transitive findings remain recorded and should be reviewed.
 - Earlier testnet deployment attempt failed because the deployer had zero tBNB. This is a test-gas limitation, not evidence that a deployment occurred.
+
 
 ## Remaining release blockers
 
