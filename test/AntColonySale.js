@@ -106,7 +106,7 @@ async function saleConfig(usdt, overrides = {}) {
   });
 
   it("enforces the immutable per-wallet and global hard caps", async function () {
-    const { buyer, usdt, sale } = await setup(6, {
+    const { admin, buyer, usdt, sale } = await setup(6, {
       hardCap: ethers.parseUnits("150", 6),
       walletCap: ethers.parseUnits("120", 6)
     });
@@ -114,7 +114,8 @@ async function saleConfig(usdt, overrides = {}) {
     await expect(sale.connect(buyer).buy(ethers.parseUnits("21", 6), 0, ethers.MaxUint256))
       .to.be.revertedWithCustomError(sale, "WalletCapExceeded");
 
-    const [, , , , secondBuyer] = await ethers.getSigners();
+    const secondBuyer = ethers.Wallet.createRandom().connect(ethers.provider);
+    await admin.sendTransaction({ to: secondBuyer.address, value: ethers.parseEther("1") });
     await usdt.mint(secondBuyer.address, ethers.parseUnits("100", 6));
     await usdt.connect(secondBuyer).approve(await sale.getAddress(), ethers.MaxUint256);
     await expect(sale.connect(secondBuyer).buy(ethers.parseUnits("51", 6), 0, ethers.MaxUint256))
