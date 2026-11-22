@@ -7,7 +7,7 @@ const SALE_ABI = [
   'function quote(uint256 grossUsdt) view returns (uint256 antOut,uint256 feeUsdt,uint256 netUsdt,uint256 price)',
   'function usdt() view returns (address)', 'function ant() view returns (address)',
   'function oracle() view returns (address)', 'function feeRecipient() view returns (address)', 'function proceedsRecipient() view returns (address)', 'function usdtDecimals() view returns (uint8)', 'function maxOracleAge() view returns (uint256)',
-  'function buy(uint256 grossUsdt,uint256 minAntOut) returns (uint256 antOut)'
+  'function buy(uint256 grossUsdt,uint256 minAntOut,uint256 deadline) returns (uint256 antOut)'
 ];
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const RAW_RE = /^\d{1,78}$/;
@@ -297,6 +297,7 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
           const minimum = body.minAntRaw === undefined ? antOut * 9900n / 10000n : BigInt(parseRaw(body.minAntRaw, 'min_ant'));
           if (minimum <= 0n || minimum > antOut) { json(res, 400, { error: 'invalid_min_ant_out' }); return true; }
           const expires = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+          const deadline = Math.floor(Date.parse(expires) / 1000);
           const orders = await db('ant_payment_orders', {
             method: 'POST',
             body: {
@@ -313,7 +314,7 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
             orderId: order.id, chainId: CHAIN_ID, saleContract: contracts.sale, usdtContract: contracts.usdt,
             antContract: contracts.ant, grossUsdtRaw: gross, feeUsdtRaw: fee.toString(), netUsdtRaw: net.toString(),
             quotedAntRaw: antOut.toString(), minAntRaw: minimum.toString(), oraclePriceRaw: price.toString(),
-            expiresAt: expires, buyFunction: 'buy(uint256,uint256)', approvalAmountRaw: gross
+            expiresAt: expires, deadline, buyFunction: 'buy(uint256,uint256,uint256)', approvalAmountRaw: gross
           });
         } finally { await provider.destroy(); }
       } catch (error) { json(res, error.status || 400, { error: error.message }); }
@@ -339,8 +340,9 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
         }
         const iface = new ethers.Interface(SALE_ABI);
         const decoded = iface.parseTransaction({ data: tx.data, value: tx.value });
+        const expectedDeadline = Math.floor(Date.parse(order.quote_expires_at) / 1000);
         if (!decoded || decoded.name !== 'buy' || decoded.args[0].toString() !== String(order.gross_usdt_raw) ||
-            decoded.args[1].toString() !== String(order.min_ant_raw)) {
+            decoded.args[1].toString() !== String(order.min_ant_raw) || decoded.args[2].toString() !== String(expectedDeadline)) {
           json(res, 400, { error: 'transaction_call_data_mismatch' }); return true;
         }
         const updated = await db('ant_payment_orders', {
