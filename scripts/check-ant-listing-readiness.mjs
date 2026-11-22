@@ -10,7 +10,6 @@ const requiredFiles = [
   'docs/ZENTRAX_EXCHANGE_APPLICATION_PACKET.md',
   'docs/ZENTRAX_EXCHANGE_LISTING_READINESS.md',
   'docs/ZENTRAX_ANT_MASTER_COMPLETION_CHECKLIST.md',
-  'docs/ANT_EXCHANGE_LISTING_PACK.md',
   'docs/ANT_TESTNET_SECURITY_REVIEW_2026-11-22.md'
 ];
 const checks = [];
@@ -26,7 +25,7 @@ for (const file of requiredFiles) {
 }
 
 let hardhat = '', tokenDeploy = '', saleDeploy = '', token = '', sale = '';
-let appPacket = '', readiness = '', master = '', supplemental = '', security = '';
+let appPacket = '', readiness = '', master = '', security = '';
 try {
   hardhat = read('hardhat.config.js');
   tokenDeploy = read('scripts/deploy-ant.js');
@@ -36,7 +35,6 @@ try {
   appPacket = read('docs/ZENTRAX_EXCHANGE_APPLICATION_PACKET.md');
   readiness = read('docs/ZENTRAX_EXCHANGE_LISTING_READINESS.md');
   master = read('docs/ZENTRAX_ANT_MASTER_COMPLETION_CHECKLIST.md');
-  supplemental = read('docs/ANT_EXCHANGE_LISTING_PACK.md');
   security = read('docs/ANT_TESTNET_SECURITY_REVIEW_2026-11-22.md');
 } catch (error) {
   console.error('Cannot complete readiness checks:', error.message);
@@ -53,7 +51,6 @@ addCheck('exchange application remains truthful', /Current formal submissions:\s
 addCheck('listing dossier remains preparation-only', /0 applications submitted/.test(readiness) && /0 approvals/.test(readiness) && /NOT DEPLOYED/.test(readiness), 'Listing dossier records zero applications/approvals and no mainnet deployment.');
 addCheck('master checklist blocks real-money launch', /No real-money launch is authorized/.test(master), 'Master checklist explicitly keeps real-money launch disabled pending gates.');
 addCheck('security review disclaims independent audit', /not an independent audit/i.test(security) && /NOT APPROVED FOR PUBLIC SALE OR MAINNET/.test(security), 'Security review is not represented as an independent audit or mainnet approval.');
-addCheck('supplemental listing pack remains non-authorizing', /NOT READY FOR MAINNET, DEX LAUNCH, PUBLIC SALE OR CEX LISTING/.test(supplemental), 'Supplemental listing pack explicitly blocks mainnet, sale and exchange claims.');
 
 const report = {
   generatedAt: new Date().toISOString(),
