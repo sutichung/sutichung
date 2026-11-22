@@ -79,3 +79,13 @@ test('ANT API factory returns a callable handler and passes through unrelated ro
   );
   assert.equal(handled, false);
 });
+
+test('ANT quote minimum output cannot be weakened below the 1% slippage floor', () => {
+  const { resolveMinimumAntOut } = require('../lib/ant-api');
+  const quoted = 1000000n;
+  assert.equal(resolveMinimumAntOut(quoted), 990000n);
+  assert.equal(resolveMinimumAntOut(quoted, '995000'), 995000n);
+  assert.throws(() => resolveMinimumAntOut(quoted, '989999'), /invalid_min_ant_out/);
+  assert.throws(() => resolveMinimumAntOut(quoted, '1000001'), /invalid_min_ant_out/);
+  assert.throws(() => resolveMinimumAntOut(quoted, '0'), /invalid_min_ant_out/);
+});
