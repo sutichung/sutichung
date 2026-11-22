@@ -87,3 +87,12 @@ For each venue, record: submission date/time, submitting authorized person, port
 
 **Current aggregate status:** 0 applications submitted; 0 approvals; 0 confirmed exchange listings.
 \n\n## 8. Current execution snapshot (2026-11-21)\n\n- Repository preparation: listing dossier and application checklist are present on `ant-token-testnet`.\n- ANT CI for commit `45bc15bf86bd0ed6ccd9fc1e111cff317df0018b`: backend checks, frontend build/server tests, Solidity compile and contract tests all completed successfully in the observed GitHub Actions runs. These are CI results only, not an audit or deployment.\n- ZENTRAX prediction-market PR #40 has separate passing backend and web CI runs, but it is still a draft PR and is not the deployed Render branch.\n- No mainnet token contract, external audit, legal opinion, issuer KYC pack, verified live DEX liquidity or exchange application receipt is evidenced by this repository snapshot.\n- No listing applications were submitted by this preparation task.\n
+
+## 9. Automated listing-readiness guardrail
+
+- Static readiness checker: `scripts/check-ant-listing-readiness.mjs`.
+- GitHub Actions workflow: [ANT Listing Readiness Gate](https://github.com/sutichung/sutichung/actions/workflows/ant-listing-readiness.yml).
+- Latest verified run: [45011156352](https://github.com/sutichung/sutichung/actions/runs/45011156352) — passed.
+- The workflow checks that BSC Testnet (chain ID 97) remains the only configured deployment network, deployment scripts reject other chain IDs, token/sale source invariants remain present, and listing materials continue to disclose zero submissions/approvals and no verified mainnet deployment.
+- It uploads a machine-readable `ant-listing-readiness` JSON artifact and records current release blockers.
+- **Important:** a successful guardrail run means the checks and disclosures are consistent. It is not a mainnet readiness approval, audit, exchange application, deployment or listing.
