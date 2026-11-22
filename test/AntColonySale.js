@@ -123,6 +123,18 @@ async function saleConfig(usdt, overrides = {}) {
     expect(await sale.walletGrossPurchased(buyer.address)).to.equal(ethers.parseUnits("100", 6));
   });
 
+  it("rejects invalid immutable sale windows and caps at deployment", async function () {
+    const { usdt, ant, oracle, fee, proceeds } = await setup(6);
+    const Sale = await ethers.getContractFactory("AntColonySale");
+    const [maxAge, start, end, hardCap, walletCap] = await saleConfig(usdt);
+    await expect(Sale.deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), fee.address, proceeds.address,
+      maxAge, start, start, hardCap, walletCap)).to.be.revertedWithCustomError(Sale, "InvalidSaleWindow");
+    await expect(Sale.deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), fee.address, proceeds.address,
+      maxAge, start, end, hardCap, hardCap + 1n)).to.be.revertedWithCustomError(Sale, "InvalidSaleCap");
+    await expect(Sale.deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), fee.address, proceeds.address,
+      maxAge, start, end, 0n, 0n)).to.be.revertedWithCustomError(Sale, "InvalidSaleCap");
+  });
+
   it("prevents fee and proceeds recipients from buying against themselves", async function () {
     const { fee, proceeds, sale, usdt } = await setup(6);
     await usdt.mint(fee.address, ethers.parseUnits("100", 6));
@@ -213,6 +225,8 @@ async function saleConfig(usdt, overrides = {}) {
     expect(await usdt.balanceOf(buyer.address)).to.equal(ethers.parseUnits("100", 6));
     expect(await usdt.balanceOf(proceeds.address)).to.equal(0n);
     expect(await ant.balanceOf(buyer.address)).to.equal(0n);
+    expect(await sale.totalGrossSold()).to.equal(0n);
+    expect(await sale.walletGrossPurchased(buyer.address)).to.equal(0n);
   });
 
   it("rolls back the fee transfer if the proceeds recipient transfer fails", async function () {
@@ -229,6 +243,8 @@ async function saleConfig(usdt, overrides = {}) {
     expect(await usdt.balanceOf(buyer.address)).to.equal(ethers.parseUnits("100", 6));
     expect(await usdt.balanceOf(fee.address)).to.equal(0n);
     expect(await ant.balanceOf(buyer.address)).to.equal(0n);
+    expect(await sale.totalGrossSold()).to.equal(0n);
+    expect(await sale.walletGrossPurchased(buyer.address)).to.equal(0n);
   });
 
   it("rolls back both USDT transfers if ANT delivery fails", async function () {
@@ -247,6 +263,8 @@ async function saleConfig(usdt, overrides = {}) {
     expect(await usdt.balanceOf(proceeds.address)).to.equal(0n);
     expect(await ant.balanceOf(await sale.getAddress())).to.equal(ethers.parseUnits("1000", 18));
     expect(await ant.balanceOf(buyer.address)).to.equal(0n);
+    expect(await sale.totalGrossSold()).to.equal(0n);
+    expect(await sale.walletGrossPurchased(buyer.address)).to.equal(0n);
   });
 
 });
