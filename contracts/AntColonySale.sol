@@ -34,6 +34,7 @@ contract AntColonySale is ReentrancyGuard {
     error InvalidPrice();
     error StalePrice();
     error InvalidAmount();
+    error QuoteExpired();
     error ZeroAntOutput();
     error SlippageExceeded(uint256 actual, uint256 minimum);
     error InsufficientInventory(uint256 available, uint256 required);
@@ -71,7 +72,8 @@ contract AntColonySale is ReentrancyGuard {
         if (antOut == 0) revert ZeroAntOutput();
     }
 
-    function buy(uint256 grossUsdt, uint256 minAntOut) external nonReentrant returns (uint256 antOut) {
+    function buy(uint256 grossUsdt, uint256 minAntOut, uint256 deadline) external nonReentrant returns (uint256 antOut) {
+        if (block.timestamp > deadline) revert QuoteExpired();
         uint256 feeUsdt;
         uint256 netUsdt;
         uint256 price;
