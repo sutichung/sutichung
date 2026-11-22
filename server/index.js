@@ -512,6 +512,7 @@ async function route(req,res){
     }
   }
   if(req.method!=='GET'){return json(res,405,{error:'method_not_allowed'});}
+  // This is the stock/market research swarm engine, not a token or blockchain endpoint.
   if(u.pathname==='/api/colony/status')return json(res,200,antColony.getStatus());
   if(u.pathname==='/api/diagnostics/historical-coverage'){
     try{
