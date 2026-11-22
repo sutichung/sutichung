@@ -28,7 +28,10 @@ async function main() {
   const Sale = await ethers.getContractFactory("AntColonySale");
   const sale = await Sale.deploy(
     await testUsdt.getAddress(), await ant.getAddress(), await oracle.getAddress(),
-    feeWallet, treasuryWallet, 3600
+    feeWallet, treasuryWallet, 3600,
+    BigInt(Math.floor(Date.now() / 1000) - 60),
+    BigInt(Math.floor(Date.now() / 1000) + 86400),
+    ethers.parseUnits("1000", 18), ethers.parseUnits("200", 18)
   );
   await sale.waitForDeployment();
 
