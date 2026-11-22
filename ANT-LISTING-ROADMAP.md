@@ -1,4 +1,4 @@
-# Ant Colony (ANT) — Operations, Launch and Binance Futures Readiness
+# Ant Colony (ANT) — Operations, Launch and International Spot-Listing Readiness
 
 > Status: engineering plan and acceptance criteria. This document is not evidence of deployment, audit, exchange approval, legal clearance, market liquidity, or sales availability.
 
@@ -81,7 +81,7 @@ Collect and retain timestamped evidence, not promotional estimates:
 
 Never fabricate volume, holders, users, partnerships, audits, exchange interest, or token utility. Exclude wash trading, self-trading, paid fake followers and coordinated price manipulation. Publish methodology and disclose paid promotion.
 
-## Binance Futures preparation
+## International spot-listing preparation
 
 - Maintain a factual project dossier: team and contact verification, token contract and chain, tokenomics, vesting/allocations, treasury policy, product usage, security audits, legal/compliance status, market venues, liquidity and community analytics.
 - Maintain verified weekly and monthly metrics with source evidence and methodology.
@@ -89,6 +89,15 @@ Never fabricate volume, holders, users, partnerships, audits, exchange interest,
 - Submit through Binance's official channels only. Do not pay brokers or agents claiming guaranteed listing.
 - Binance controls all listing decisions and may request additional information. No public fixed metric threshold guarantees Futures listing.
 - No listing promise, timetable or price target may be advertised.
+
+
+## Exchange listing preparation
+
+- The separate `ant-listing-readiness` branch contains `docs/ANT_EXCHANGE_LISTING_PACK.md`, an evidence-backed preparation pack for DEX, CEX spot applications and market-data aggregators.
+- Listing materials are preparation only. No mainnet contract, live pool, CEX approval, market-maker agreement or aggregator approval is currently verified.
+- Prioritize legitimate spot-market readiness; derivatives/futures applications are deferred until a live, compliant spot market and reliable market evidence exist.
+- Do not pay listing brokers or anyone promising guaranteed exchange approval. Use only official exchange application channels.
+- Never fabricate volume, holders, users, partnerships, audits, exchange interest or liquidity.
 
 ## Launch status ledger
 
