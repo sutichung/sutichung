@@ -514,7 +514,6 @@ async function route(req,res){
     }
   }
   if(req.method!=='GET'){return json(res,405,{error:'method_not_allowed'});}
-  if(u.pathname==='/api/colony/status')return json(res,200,antColony.getStatus());
   if(u.pathname==='/api/diagnostics/historical-coverage'){
     try{
       const range=validateHistoryRange({from:u.searchParams.get('from')||'1990-01-01',to:u.searchParams.get('to')||now().slice(0,10)});
