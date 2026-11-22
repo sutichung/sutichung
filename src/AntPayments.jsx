@@ -6,7 +6,7 @@ const ERC20_ABI = [
   'function approve(address spender,uint256 amount) returns (bool)',
   'function decimals() view returns (uint8)'
 ];
-const SALE_ABI = ['function buy(uint256 grossUsdt,uint256 minAntOut) returns (uint256 antOut)'];
+const SALE_ABI = ['function buy(uint256 grossUsdt,uint256 minAntOut,uint256 deadline) returns (uint256 antOut)'];
 const token = () => localStorage.getItem('ts_access_token') || '';
 async function api(path, body) {
   const headers = { Accept: 'application/json' };
@@ -89,7 +89,7 @@ export default function AntPayments() {
       }
       setMessage('請在錢包確認 ANT 購買交易…');
       const sale = new Contract(quote.saleContract,SALE_ABI,signer);
-      const tx = await sale.buy(quote.grossUsdtRaw,quote.minAntRaw);
+      const tx = await sale.buy(quote.grossUsdtRaw,quote.minAntRaw,quote.deadline);
       setOrder({...order,status:'submitted',txHash:tx.hash});
       await api('/api/ant/orders/'+order.id+'/submit',{txHash:tx.hash});refreshHistory();
       setMessage('交易已送出；等待雙 RPC 鏈上監控與 12 個區塊確認。');
