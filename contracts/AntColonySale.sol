@@ -67,6 +67,7 @@ contract AntColonySale is ReentrancyGuard {
         if (price == 0 || updatedAt > block.timestamp) revert InvalidPrice();
         if (block.timestamp - updatedAt > maxOracleAge) revert StalePrice();
         feeUsdt = Math.mulDiv(grossUsdt, FEE_BPS, BPS);
+        if (feeUsdt == 0) revert InvalidAmount();
         netUsdt = grossUsdt - feeUsdt;
         antOut = Math.mulDiv(netUsdt, ANT_SCALE * PRICE_SCALE, price * (10 ** usdtDecimals));
         if (antOut == 0) revert ZeroAntOutput();
