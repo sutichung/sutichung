@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://taiwan-stock-hunter-o3tt.onrender.com/api/$1"
+    }
+  ]
+}
