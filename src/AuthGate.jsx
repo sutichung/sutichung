@@ -75,8 +75,8 @@ export default function AuthGate({children}){
   const toggleMember=async(member)=>{setMemberBusy(true);setError('');try{await request('/admin/members/'+member.id+'/'+(member.banned_until?'enable':'disable'),{method:'POST'});await loadMembers();}catch(err){setError(err.message);}finally{setMemberBusy(false);}};
   if(busy&&!user)return <div style={styles.center}>正在安全連線會員服務…</div>;
   if(!user)return <div style={styles.page}><style>{responsiveCss}</style><div className="auth-card" style={styles.card}>
-    <div style={styles.mark}>ZX</div><div style={styles.eyebrow}>ZENTRAX ECOSYSTEM</div>
-    <h1 style={styles.heading}>ZENTRAX 安全會員入口</h1><p style={styles.sub}>全球市場情報與 ANT 生態系會員登入</p>
+    <div style={styles.mark}>TSH</div><div style={styles.eyebrow}>TAIWAN STOCK HUNTER</div>
+    <h1 style={styles.heading}>Taiwan Stock Hunter 會員登入</h1><p style={styles.sub}>台灣證券市場行情與量化研究會員入口</p>
     <div style={styles.tabs}><button style={mode==='login'?styles.activeTab:styles.tab} onClick={()=>{setMode('login');setError('');setNotice('');}}>會員登入</button><button style={mode==='signup'?styles.activeTab:styles.tab} disabled={config?.registrationEnabled===false} onClick={()=>{setMode('signup');setError('');setNotice('');}}>建立帳號</button></div>
     <form onSubmit={submit} style={{display:'grid',gap:13}}>
       <label style={styles.label}>Email<input style={styles.input} type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} required placeholder="name@example.com"/></label>
