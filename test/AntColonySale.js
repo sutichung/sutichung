@@ -123,6 +123,7 @@ describe("AntColonySale", function () {
   it("rejects zero payment and has immutable fee and recipients", async function () {
     const { sale, fee, proceeds } = await setup();
     await expect(sale.quote(0)).to.be.revertedWithCustomError(sale, "InvalidAmount");
+    await expect(sale.quote(19n)).to.be.revertedWithCustomError(sale, "InvalidAmount"); // prevents rounding the 5% fee to zero
     expect(await sale.FEE_BPS()).to.equal(500);
     expect(await sale.feeRecipient()).to.equal(fee.address);
     expect(await sale.proceedsRecipient()).to.equal(proceeds.address);
