@@ -38,6 +38,7 @@ function resolveMinimumAntOut(quotedAntRaw, requestedMinRaw) {
 function calculateInventoryReadiness(inventoryRaw, requiredRaw) {
   const inventory = BigInt(inventoryRaw);
   const required = BigInt(requiredRaw);
+  if (inventory < 0n || required < 0n) throw new Error('invalid_inventory_amount');
   return { sufficient: inventory >= required, shortfallRaw: inventory >= required ? '0' : (required - inventory).toString() };
 }
 function resolveQuoteExpiry(nowMs, saleEndAtSeconds) {
