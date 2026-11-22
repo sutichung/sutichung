@@ -307,9 +307,14 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
           if (BigInt(walletPurchased) + BigInt(gross) > BigInt(walletCap)) { json(res, 409, { error:'wallet_cap_exceeded', remainingRaw:(BigInt(walletCap)-BigInt(walletPurchased)).toString() }); return true; }
           const quote = await sale.quote(gross);
           const fee = quote.feeUsdt, net = quote.netUsdt, antOut = quote.antOut, price = quote.price;
+          const antToken = new ethers.Contract(contracts.ant, ['function balanceOf(address) view returns(uint256)'], provider);
+          const inventory = await antToken.balanceOf(contracts.sale);
+          if (inventory < antOut) { json(res, 409, { error:'insufficient_sale_inventory', availableAntRaw:inventory.toString(), requiredAntRaw:antOut.toString() }); return true; }
           if (fee + net !== BigInt(gross) || antOut <= 0n) { json(res, 503, { error: 'invalid_onchain_quote' }); return true; }
           const minimum = resolveMinimumAntOut(antOut, body.minAntRaw);
-          const expires = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+          const expiresAtMs = Math.min(Date.now() + 5 * 60 * 1000, Number(saleEndAt) * 1000);
+          if (expiresAtMs <= Date.now()) { json(res, 409, { error:'sale_ended' }); return true; }
+          const expires = new Date(expiresAtMs).toISOString();
           const deadline = Math.floor(Date.parse(expires) / 1000);
           const orders = await db('ant_payment_orders', {
             method: 'POST',
