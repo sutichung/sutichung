@@ -25,6 +25,12 @@ contract AntColonySale is ReentrancyGuard {
     address public immutable proceedsRecipient;
     uint8 public immutable usdtDecimals;
     uint256 public immutable maxOracleAge;
+    uint256 public immutable saleStartAt;
+    uint256 public immutable saleEndAt;
+    uint256 public immutable maxGrossUsdt;
+    uint256 public immutable maxWalletGrossUsdt;
+    uint256 public totalGrossSold;
+    mapping(address => uint256) public walletGrossPurchased;
 
     error InvalidAddress();
     error InvalidOracleAge();
@@ -38,16 +44,24 @@ contract AntColonySale is ReentrancyGuard {
     error ZeroAntOutput();
     error SlippageExceeded(uint256 actual, uint256 minimum);
     error InsufficientInventory(uint256 available, uint256 required);
+    error InvalidSaleWindow();
+    error InvalidSaleCap();
+    error SaleNotStarted();
+    error SaleEnded();
+    error HardCapExceeded(uint256 sold, uint256 requested, uint256 cap);
+    error WalletCapExceeded(uint256 purchased, uint256 requested, uint256 cap);
 
     event AntPurchased(address indexed buyer, uint256 grossUsdt, uint256 feeUsdt, uint256 netUsdt, uint256 antOut, uint256 priceUsdtPerAnt);
 
-    constructor(address usdt_, address ant_, address oracle_, address feeRecipient_, address proceedsRecipient_, uint256 maxOracleAge_) {
+    constructor(address usdt_, address ant_, address oracle_, address feeRecipient_, address proceedsRecipient_, uint256 maxOracleAge_, uint256 saleStartAt_, uint256 saleEndAt_, uint256 maxGrossUsdt_, uint256 maxWalletGrossUsdt_) {
         if (usdt_ == address(0) || ant_ == address(0) || oracle_ == address(0) || feeRecipient_ == address(0) || proceedsRecipient_ == address(0) || usdt_ == ant_) revert InvalidAddress();
         // ERC-20 and oracle dependencies must be deployed contracts, not EOAs.
         // This catches common address/configuration mistakes at deployment time.
         if (usdt_.code.length == 0 || ant_.code.length == 0 || oracle_.code.length == 0) revert InvalidAddress();
         if (feeRecipient_ == proceedsRecipient_ || feeRecipient_ == usdt_ || feeRecipient_ == ant_ || feeRecipient_ == oracle_ || proceedsRecipient_ == usdt_ || proceedsRecipient_ == ant_ || proceedsRecipient_ == oracle_) revert RecipientCollision();
         if (maxOracleAge_ == 0) revert InvalidOracleAge();
+        if (saleStartAt_ == 0 || saleEndAt_ <= saleStartAt_) revert InvalidSaleWindow();
+        if (maxGrossUsdt_ == 0 || maxWalletGrossUsdt_ == 0 || maxWalletGrossUsdt_ > maxGrossUsdt_) revert InvalidSaleCap();
         uint8 d = IERC20Metadata(usdt_).decimals();
         if (d > 18) revert InvalidUsdtDecimals();
         if (IERC20Metadata(ant_).decimals() != 18) revert InvalidAntDecimals();
@@ -58,10 +72,15 @@ contract AntColonySale is ReentrancyGuard {
         proceedsRecipient = proceedsRecipient_;
         usdtDecimals = d;
         maxOracleAge = maxOracleAge_;
+        saleStartAt = saleStartAt_;
+        saleEndAt = saleEndAt_;
+        maxGrossUsdt = maxGrossUsdt_;
+        maxWalletGrossUsdt = maxWalletGrossUsdt_;
     }
 
     function quote(uint256 grossUsdt) public view returns (uint256 antOut, uint256 feeUsdt, uint256 netUsdt, uint256 price) {
         if (grossUsdt == 0) revert InvalidAmount();
+        if (totalGrossSold + grossUsdt > maxGrossUsdt) revert HardCapExceeded(totalGrossSold, grossUsdt, maxGrossUsdt);
         uint256 updatedAt;
         (price, updatedAt) = oracle.latestPrice();
         if (price == 0 || updatedAt > block.timestamp) revert InvalidPrice();
@@ -75,11 +94,17 @@ contract AntColonySale is ReentrancyGuard {
 
     function buy(uint256 grossUsdt, uint256 minAntOut, uint256 deadline) external nonReentrant returns (uint256 antOut) {
         if (block.timestamp > deadline) revert QuoteExpired();
+        if (block.timestamp < saleStartAt) revert SaleNotStarted();
+        if (block.timestamp > saleEndAt) revert SaleEnded();
+        uint256 purchased = walletGrossPurchased[msg.sender];
+        if (purchased + grossUsdt > maxWalletGrossUsdt) revert WalletCapExceeded(purchased, grossUsdt, maxWalletGrossUsdt);
         uint256 feeUsdt;
         uint256 netUsdt;
         uint256 price;
         (antOut, feeUsdt, netUsdt, price) = quote(grossUsdt);
         if (antOut < minAntOut) revert SlippageExceeded(antOut, minAntOut);
+        totalGrossSold += grossUsdt;
+        walletGrossPurchased[msg.sender] = purchased + grossUsdt;
         uint256 inventory = ant.balanceOf(address(this));
         if (inventory < antOut) revert InsufficientInventory(inventory, antOut);
         usdt.safeTransferFrom(msg.sender, feeRecipient, feeUsdt);
