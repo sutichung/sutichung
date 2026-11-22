@@ -15,7 +15,7 @@ async function saleConfig(usdt, overrides = {}) {
   }
 
 
-  async function setup(usdtDecimals = 18) {
+  async function setup(usdtDecimals = 18, saleOverrides = {}) {
     const [admin, buyer, proceeds, fee] = await ethers.getSigners();
     const Mock = await ethers.getContractFactory("MockERC20");
     const usdt = await Mock.deploy("Mock USDT", "USDT", usdtDecimals);
@@ -23,7 +23,7 @@ async function saleConfig(usdt, overrides = {}) {
     const Oracle = await ethers.getContractFactory("MockAntUsdtOracle");
     const oracle = await Oracle.deploy(10n ** 8n); // 1 USDT per ANT
     const Sale = await ethers.getContractFactory("AntColonySale");
-    const sale = await Sale.deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), fee.address, proceeds.address, ...await saleConfig(usdt));
+    const sale = await Sale.deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), fee.address, proceeds.address, ...await saleConfig(usdt, saleOverrides));
     await ant.mint(await sale.getAddress(), ethers.parseUnits("100000", 18));
     await usdt.mint(buyer.address, ethers.parseUnits("1000", usdtDecimals));
     await usdt.connect(buyer).approve(await sale.getAddress(), ethers.MaxUint256);
@@ -105,6 +105,39 @@ async function saleConfig(usdt, overrides = {}) {
     expect(out).to.equal(19n);
   });
 
+  it("enforces the immutable per-wallet and global hard caps", async function () {
+    const { buyer, usdt, sale } = await setup(6, {
+      hardCap: ethers.parseUnits("150", 6),
+      walletCap: ethers.parseUnits("120", 6)
+    });
+    await sale.connect(buyer).buy(ethers.parseUnits("100", 6), 0, ethers.MaxUint256);
+    await expect(sale.connect(buyer).buy(ethers.parseUnits("21", 6), 0, ethers.MaxUint256))
+      .to.be.revertedWithCustomError(sale, "WalletCapExceeded");
+
+    const [, , secondBuyer] = await ethers.getSigners();
+    await usdt.mint(secondBuyer.address, ethers.parseUnits("100", 6));
+    await usdt.connect(secondBuyer).approve(await sale.getAddress(), ethers.MaxUint256);
+    await expect(sale.connect(secondBuyer).buy(ethers.parseUnits("51", 6), 0, ethers.MaxUint256))
+      .to.be.revertedWithCustomError(sale, "HardCapExceeded");
+    expect(await sale.totalGrossSold()).to.equal(ethers.parseUnits("100", 6));
+    expect(await sale.walletGrossPurchased(buyer.address)).to.equal(ethers.parseUnits("100", 6));
+  });
+
+  it("rejects purchases before the start time and after the end time", async function () {
+    const future = await setup(6, { start: (await ethers.provider.getBlock("latest")).timestamp + 300 });
+    await expect(future.sale.connect(future.buyer).buy(
+      ethers.parseUnits("10", 6), 0, ethers.MaxUint256
+    )).to.be.revertedWithCustomError(future.sale, "SaleNotStarted");
+
+    const closing = await setup(6);
+    const end = Number(await closing.sale.saleEndAt());
+    await ethers.provider.send("evm_setNextBlockTimestamp", [end + 1]);
+    await ethers.provider.send("evm_mine", []);
+    await expect(closing.sale.connect(closing.buyer).buy(
+      ethers.parseUnits("10", 6), 0, ethers.MaxUint256
+    )).to.be.revertedWithCustomError(closing.sale, "SaleEnded");
+  });
+
   it("quotes using updated market oracle price", async function () {
     const { oracle, sale } = await setup();
     await oracle.setPrice(2n * 10n ** 8n);
@@ -158,7 +191,7 @@ async function saleConfig(usdt, overrides = {}) {
     const usdt = await (await ethers.getContractFactory("MockFailingERC20")).deploy(6);
     const ant = await (await ethers.getContractFactory("MockERC20")).deploy("Ant Colony", "ANT", 18);
     const oracle = await (await ethers.getContractFactory("MockAntUsdtOracle")).deploy(10n ** 8n);
-    const sale = await (await ethers.getContractFactory("AntColonySale")).deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), fee.address, proceeds.address, 3600);
+    const sale = await (await ethers.getContractFactory("AntColonySale")).deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), fee.address, proceeds.address, ...await saleConfig(usdt));
     await ant.mint(await sale.getAddress(), ethers.parseUnits("1000", 18));
     await usdt.mint(buyer.address, ethers.parseUnits("100", 6));
     await usdt.connect(buyer).approve(await sale.getAddress(), ethers.MaxUint256);
