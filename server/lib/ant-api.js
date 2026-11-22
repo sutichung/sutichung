@@ -35,6 +35,11 @@ function resolveMinimumAntOut(quotedAntRaw, requestedMinRaw) {
   if (minimum <= 0n || minimum < floor || minimum > quoted) throw new Error('invalid_min_ant_out');
   return minimum;
 }
+function resolveQuoteExpiry(nowMs, saleEndAtSeconds) {
+  const endMs = Number(saleEndAtSeconds) * 1000;
+  if (!Number.isFinite(nowMs) || !Number.isFinite(endMs) || endMs <= nowMs) throw new Error('sale_ended');
+  return new Date(Math.min(nowMs + 5 * 60 * 1000, endMs)).toISOString();
+}
 function requireConditionalUpdate(rows, errorCode) {
   if (!Array.isArray(rows) || rows.length !== 1) {
     const error = new Error(errorCode);
@@ -312,9 +317,9 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
           if (inventory < antOut) { json(res, 409, { error:'insufficient_sale_inventory', availableAntRaw:inventory.toString(), requiredAntRaw:antOut.toString() }); return true; }
           if (fee + net !== BigInt(gross) || antOut <= 0n) { json(res, 503, { error: 'invalid_onchain_quote' }); return true; }
           const minimum = resolveMinimumAntOut(antOut, body.minAntRaw);
-          const expiresAtMs = Math.min(Date.now() + 5 * 60 * 1000, Number(saleEndAt) * 1000);
-          if (expiresAtMs <= Date.now()) { json(res, 409, { error:'sale_ended' }); return true; }
-          const expires = new Date(expiresAtMs).toISOString();
+          let expires;
+          try { expires = resolveQuoteExpiry(Date.now(), saleEndAt); }
+          catch (_) { json(res, 409, { error:'sale_ended' }); return true; }
           const deadline = Math.floor(Date.parse(expires) / 1000);
           const orders = await db('ant_payment_orders', {
             method: 'POST',
@@ -459,4 +464,4 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
   }
   return handle;
 }
-module.exports = { createAntApi, buildWalletMessage, parseRaw, assuranceLevel, requireConditionalUpdate, hasFinanceAccess, buildOrderHistoryQuery, resolveMinimumAntOut };
+module.exports = { createAntApi, buildWalletMessage, parseRaw, assuranceLevel, requireConditionalUpdate, hasFinanceAccess, buildOrderHistoryQuery, resolveMinimumAntOut, resolveQuoteExpiry };
