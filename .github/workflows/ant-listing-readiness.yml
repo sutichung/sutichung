@@ -1,0 +1,57 @@
+name: ANT Listing Readiness Gate
+
+on:
+  push:
+    branches: [ant-token-testnet]
+    paths:
+      - "contracts/AntColony.sol"
+      - "contracts/AntColonySale.sol"
+      - "scripts/deploy-ant.js"
+      - "scripts/deploy-ant-sale-testnet.js"
+      - "scripts/check-ant-listing-readiness.mjs"
+      - "hardhat.config.js"
+      - "docs/ZENTRAX_EXCHANGE_APPLICATION_PACKET.md"
+      - "docs/ZENTRAX_EXCHANGE_LISTING_READINESS.md"
+      - "docs/ZENTRAX_ANT_MASTER_COMPLETION_CHECKLIST.md"
+      - "docs/ANT_EXCHANGE_LISTING_PACK.md"
+      - "docs/ANT_TESTNET_SECURITY_REVIEW_2026-11-22.md"
+      - ".github/workflows/ant-listing-readiness.yml"
+  pull_request:
+    branches: [ant-token-testnet]
+    paths:
+      - "contracts/**"
+      - "scripts/**"
+      - "hardhat.config.js"
+      - "docs/*LISTING*"
+      - "docs/ZENTRAX_EXCHANGE_APPLICATION_PACKET.md"
+      - "docs/ZENTRAX_EXCHANGE_LISTING_READINESS.md"
+      - "docs/ZENTRAX_ANT_MASTER_COMPLETION_CHECKLIST.md"
+      - ".github/workflows/ant-listing-readiness.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ant-listing-readiness-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax-check readiness gate
+        run: node --check scripts/check-ant-listing-readiness.mjs
+      - name: Verify listing claims and deployment guardrails
+        run: node scripts/check-ant-listing-readiness.mjs
+      - name: Upload machine-readable readiness evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: ant-listing-readiness
+          path: artifacts/ant-listing-readiness.json
+          if-no-files-found: error
+          retention-days: 30
