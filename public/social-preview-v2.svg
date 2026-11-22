@@ -11,11 +11,11 @@
 <rect x="64" y="58" width="1072" height="514" rx="30" fill="#0B0B0D" fill-opacity=".88" stroke="#D6B56D" stroke-opacity=".38"/>
 <path d="M100 105 L130 75 L160 105 L160 145 L130 175 L100 145Z" fill="none" stroke="url(#gold)" stroke-width="4"/>
 <path d="M116 128 L130 100 L144 128 L130 150Z" fill="url(#gold)" opacity=".92"/>
-<text x="188" y="132" fill="#E8D5A5" font-size="26" font-family="Arial,sans-serif" font-weight="700" letter-spacing="5">ZENTRAX</text>
+<text x="188" y="132" fill="#E8D5A5" font-size="22" font-family="Arial,sans-serif" font-weight="700" letter-spacing="2">TAIWAN STOCK HUNTER</text>
 <text x="96" y="260" fill="#F5F1E8" font-size="66" font-family="Arial,sans-serif" font-weight="700" letter-spacing="1">NEXT-GEN</text>
 <text x="96" y="337" fill="#F5F1E8" font-size="66" font-family="Arial,sans-serif" font-weight="700" letter-spacing="1">FINANCIAL TECHNOLOGY</text>
-<text x="100" y="390" fill="#B8B1A2" font-size="22" font-family="Arial,sans-serif" letter-spacing="1.4">AI INTELLIGENCE  /  QUANT RESEARCH  /  BLOCKCHAIN</text>
+<text x="100" y="390" fill="#B8B1A2" font-size="22" font-family="Arial,sans-serif" letter-spacing="1.4">TAIWAN STOCKS  /  OFFICIAL DATA  /  QUANT RESEARCH</text>
 <path d="M100 490 L220 455 L320 468 L430 402 L535 420 L645 365 L750 378 L865 300 L965 320 L1080 248" fill="none" stroke="#D6B56D" stroke-width="18" opacity=".16" filter="url(#glow)" stroke-linecap="round" stroke-linejoin="round"/>
 <path d="M100 490 L220 455 L320 468 L430 402 L535 420 L645 365 L750 378 L865 300 L965 320 L1080 248" fill="none" stroke="url(#gold)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-<text x="1090" y="540" fill="#8D7442" font-size="14" text-anchor="end" font-family="Arial,sans-serif" letter-spacing="3">ANT ECOSYSTEM</text>
+<text x="1090" y="540" fill="#8D7442" font-size="14" text-anchor="end" font-family="Arial,sans-serif" letter-spacing="3">TAIWAN EQUITIES</text>
 </svg>

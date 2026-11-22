@@ -8,7 +8,6 @@ const { scoreStock } = require('./lib/scoring');
 const { getTradingReadiness } = require('./lib/trading-readiness');
 const { buildAiCommittee } = require('./lib/agents');
 const { applyFirewall, getTelemetry } = require('./lib/firewall');
-const antColony = require('./lib/ant-colony');
 const { createAntApi } = require('./lib/ant-api');
 const { loadMarket: loadUsMarket, getChart: getUsChart, searchSymbols: searchUsSymbols, getUniversePage: getUsUniversePage } = require('./lib/us-market');
 const cryptoMarket = require('./lib/crypto-market');
@@ -505,7 +504,7 @@ async function route(req,res){
       return json(res,404,{error:'not_found'});
     }catch(e){return json(res,e.status||502,{error:e.message});}
   }
-  if(['/api/colony/status','/api/diagnostics/providers','/api/diagnostics/vulnerabilities'].includes(u.pathname)) {
+  if(['/api/diagnostics/providers','/api/diagnostics/vulnerabilities'].includes(u.pathname)) {
     const automationAuthorized=req.method==='GET'&&['/api/diagnostics/providers','/api/diagnostics/vulnerabilities'].includes(u.pathname)&&await verifyGitHubActionsToken(bearerToken(req),{allowProductionSmoke:true});
     if(!automationAuthorized){
       if(!SUPABASE_CONFIGURED)return json(res,503,{error:'developer_console_auth_unavailable'});
@@ -634,7 +633,6 @@ async function route(req,res){
         return {...item,technical:{status:'research-ready',direction,score,confidence:Math.round(available.length/checks.length*100),checks:checks.map(x=>({name:x[0],bullish:x[1],bearish:x[2]})),indicators:v,asOf:h.asOf}};
       }catch(e){return {...item,technical:{status:'error',direction:'資料暫缺',score:null,error:e.message}};}
     }));
-    antColony.enqueue('CRYPTO',results,String(market.timestamp||'market')+':'+offset);
     return json(res,200,{results,offset,nextOffset:offset+batch.length,total:(market.markets||[]).length,done:offset+batch.length>=(market.markets||[]).length,source:'多交易所逐市場日K技術掃描',timestamp:now()});
   }
   if(u.pathname==='/api/crypto/news'){
@@ -761,7 +759,6 @@ async function route(req,res){
   }
   if(u.pathname==='/api/us/market'){
     const result=await safeLoad('us-market',60*1000,loadUsMarket,e=>({market:'US',data:{},indices:[],scan:[],source:'unavailable',timestamp:now(),error:e.message,coverage:{stocks:0,universe:30,indices:0}}));
-    if(!result.error&&!result.stale)antColony.enqueue('US',Array.isArray(result.scan)?result.scan:[],result.timestamp||result.asOf||null);
     return json(res,result.error?503:200,result);
   }
   if(u.pathname.startsWith('/api/us/history/')){
