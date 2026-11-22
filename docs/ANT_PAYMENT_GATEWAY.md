@@ -12,12 +12,25 @@ The gateway is deliberately restricted to BNB Smart Chain Testnet (chain ID 97).
 2. `POST /api/ant/wallet/nonce` creates a single-use, five-minute challenge bound to the configured domain, member, wallet and chain ID 97.
 3. Browser wallet signs the challenge locally. `POST /api/ant/wallet/verify` recovers the signer, consumes the nonce once, and binds the wallet to the authenticated member. The server never receives a seed phrase or private key.
 4. `POST /api/ant/orders` verifies the wallet link, reads the deployed sale contract's immutable USDT, ANT, fee and treasury addresses, and obtains the quote from the on-chain oracle. It stores raw integer units and a five-minute expiry.
-5. Browser wallet approves only the quoted USDT amount and calls `buy(grossUsdt,minAntOut)`. The API never signs or submits the buyer's transaction.
+5. Browser wallet approves only the quoted USDT amount and calls `buy(grossUsdt,minAntOut,deadline)`. The contract also enforces the immutable sale window, global gross-USDT hard cap, and per-wallet gross-USDT cap; counters update atomically with the purchase. The API never signs or submits the buyer's transaction.
 6. `POST /api/ant/orders/:id/submit` checks the transaction sender, target and decoded calldata before attaching the transaction hash to the order.
 7. The indexer checks two independent RPCs, chain ID, matching logs, successful receipts, canonical block hashes, exact 5% fee split, and all three ERC-20 Transfer logs (USDT fee, USDT proceeds, ANT delivery). It waits for 12 confirmations by default.
 8. The worker writes idempotent chain events and four ledger entries (gross USDT, fee, net proceeds, ANT delivery), then marks the order delivered. If an event arrives before its order, the worker retains it unlinked and retries reconciliation. Any amount mismatch enters manual review.
 
 The React gateway is `src/AntPayments.jsx`, mounted from the main app navigation. It supports wallet verification, quote/order creation, exact USDT approval, purchase submission, order polling and member purchase history. The admin finance endpoint is `GET /api/ant/admin/finance`; it is restricted to `SUPER_ADMIN` or `FINANCE_VIEWER` rows in `ant_admin_roles` and requires a Supabase MFA `aal2` access token. No browser-side role assignment is exposed.
+
+
+## Immutable sale limits and refund boundary
+
+The current testnet sale contract constructor fixes four additional sale terms for the lifetime of that deployment:
+
+- `saleStartAt` and `saleEndAt` (Unix timestamps). Purchases revert before the start or after the end.
+- `maxGrossUsdt` (global gross-USDT hard cap) and `maxWalletGrossUsdt` (per-wallet gross-USDT cap). The contract counts gross USDT, including the 5% fee, and enforces both limits on-chain. The API checks the wallet's remaining allowance before creating an order; the contract remains authoritative.
+- `totalGrossSold` and `walletGrossPurchased(address)` are public on-chain counters. The UI displays the active window, sold amount and caps; quote creation is disabled outside the active window or after the hard cap is reached.
+
+The cap values are deployment inputs, not business recommendations. Do not select production values until the offering terms, inventory, jurisdictional review and consumer disclosures are approved. A new sale configuration requires a new contract deployment; these values cannot be edited after deployment.
+
+**Refund/cancellation limitation:** the present contract immediately transfers USDT to the fee and proceeds wallets and transfers ANT to the buyer atomically. It does not escrow proceeds, provide a cancellation path, or implement refunds. A failed transaction reverts all transfers, but a successful purchase is not refundable through this contract. Do not advertise a refund promise or use this design for a public sale until the legally required cancellation/refund policy has been determined and an independently reviewed escrow/refund design is implemented where required.
 
 ## Supabase migrations
 
@@ -42,6 +55,7 @@ Set these as server-side secrets/environment variables only; never commit values
 - Contracts: `ANT_SALE_CONTRACT`, `ANT_USDT_CONTRACT`, `ANT_TOKEN_CONTRACT`, `ANT_ORACLE_CONTRACT`
 - Recipients: `ANT_FEE_WALLET`, `ANT_TREASURY_WALLET`
 - Decimals and safety: `ANT_USDT_DECIMALS` (must match the token's on-chain decimals), `ANT_MAX_ORACLE_AGE`, `ANT_INDEXER_START_BLOCK`
+- Immutable sale rules for `npm run deploy:sale:testnet`: `ANT_SALE_START_AT` and `ANT_SALE_END_AT` (Unix seconds), `ANT_SALE_HARD_CAP_RAW` and `ANT_SALE_WALLET_CAP_RAW` (integer raw USDT units; wallet cap must not exceed global cap)
 - Deployment signer, only when deploying testnet contracts: `DEPLOYER_PRIVATE_KEY` (store only in a secret manager; never in chat or GitHub source)
 
 The API verifies the sale contract's immutable USDT, ANT, fee and treasury addresses before issuing a quote. The indexer repeats the same configuration check on both RPCs before processing logs.
