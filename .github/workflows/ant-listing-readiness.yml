@@ -9,6 +9,8 @@ on:
       - "scripts/deploy-ant.js"
       - "scripts/deploy-ant-sale-testnet.js"
       - "scripts/check-ant-listing-readiness.mjs"
+      - "scripts/generate-ant-tokenomics-evidence.mjs"
+      - "docs/ANT_TOKENOMICS_EVIDENCE.md"
       - "hardhat.config.js"
       - "docs/ZENTRAX_EXCHANGE_APPLICATION_PACKET.md"
       - "docs/ZENTRAX_EXCHANGE_LISTING_READINESS.md"
@@ -46,6 +48,8 @@ jobs:
           node-version: 22
       - name: Syntax-check readiness gate
         run: node --check scripts/check-ant-listing-readiness.mjs
+      - name: Syntax-check tokenomics evidence generator
+        run: node --check scripts/generate-ant-tokenomics-evidence.mjs
       - name: Verify listing claims and deployment guardrails
         run: node scripts/check-ant-listing-readiness.mjs
       - name: Upload machine-readable readiness evidence
