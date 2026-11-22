@@ -182,6 +182,10 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
       const [threshold, owners] = await Promise.all([safe.getThreshold(), safe.getOwners()]);
       if (threshold < 2n || owners.length < 3) throw new Error('sale_recipient_safe_threshold_invalid');
     }
+    const oracleFeed = new ethers.Contract(contracts.oracle, ['function latestPrice() view returns(uint256,uint256)'], provider);
+    const [priceData, observedAt] = await oracleFeed.latestPrice();
+    const nowSeconds = BigInt(Math.floor(Date.now() / 1000));
+    if (priceData <= 0n || observedAt > nowSeconds || nowSeconds - observedAt > BigInt(contracts.maxAge)) throw new Error('oracle_price_zero_future_or_stale');
     const antToken = new ethers.Contract(contracts.ant, ['function balanceOf(address) view returns(uint256)'], provider);
     const inventory = await antToken.balanceOf(contracts.sale);
     if (inventory === 0n) throw new Error('sale_inventory_not_funded');
