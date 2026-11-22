@@ -39,11 +39,11 @@ async function saleConfig(usdt, overrides = {}) {
     const oracle = await (await ethers.getContractFactory("MockAntUsdtOracle")).deploy(10n ** 8n);
     const Sale = await ethers.getContractFactory("AntColonySale");
 
-    await expect(Sale.deploy(admin.address, await ant.getAddress(), await oracle.getAddress(), fee.address, proceeds.address, 3600))
+    await expect(Sale.deploy(admin.address, await ant.getAddress(), await oracle.getAddress(), fee.address, proceeds.address, ...await saleConfig(usdt)))
       .to.be.revertedWithCustomError(Sale, "InvalidAddress");
-    await expect(Sale.deploy(await usdt.getAddress(), admin.address, await oracle.getAddress(), fee.address, proceeds.address, 3600))
+    await expect(Sale.deploy(await usdt.getAddress(), admin.address, await oracle.getAddress(), fee.address, proceeds.address, ...await saleConfig(usdt)))
       .to.be.revertedWithCustomError(Sale, "InvalidAddress");
-    await expect(Sale.deploy(await usdt.getAddress(), await ant.getAddress(), admin.address, fee.address, proceeds.address, 3600))
+    await expect(Sale.deploy(await usdt.getAddress(), await ant.getAddress(), admin.address, fee.address, proceeds.address, ...await saleConfig(usdt)))
       .to.be.revertedWithCustomError(Sale, "InvalidAddress");
   });
 
@@ -55,9 +55,9 @@ async function saleConfig(usdt, overrides = {}) {
     const oracle = await (await ethers.getContractFactory("MockAntUsdtOracle")).deploy(10n ** 8n);
     const Sale = await ethers.getContractFactory("AntColonySale");
 
-    await expect(Sale.deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), await usdt.getAddress(), proceeds.address, 3600))
+    await expect(Sale.deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), await usdt.getAddress(), proceeds.address, ...await saleConfig(usdt)))
       .to.be.revertedWithCustomError(Sale, "RecipientCollision");
-    await expect(Sale.deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), fee.address, await ant.getAddress(), 3600))
+    await expect(Sale.deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), fee.address, await ant.getAddress(), ...await saleConfig(usdt)))
       .to.be.revertedWithCustomError(Sale, "RecipientCollision");
   });
 
@@ -68,10 +68,10 @@ async function saleConfig(usdt, overrides = {}) {
     const wrongAnt = await Mock.deploy("Wrong ANT", "WANT", 6);
     const oracle = await (await ethers.getContractFactory("MockAntUsdtOracle")).deploy(10n ** 8n);
     const Sale = await ethers.getContractFactory("AntColonySale");
-    await expect(Sale.deploy(await usdt.getAddress(), await wrongAnt.getAddress(), await oracle.getAddress(), fee.address, proceeds.address, 3600))
+    await expect(Sale.deploy(await usdt.getAddress(), await wrongAnt.getAddress(), await oracle.getAddress(), fee.address, proceeds.address, ...await saleConfig(usdt)))
       .to.be.revertedWithCustomError(Sale, "InvalidAntDecimals");
     const ant = await Mock.deploy("Ant Colony", "ANT", 18);
-    await expect(Sale.deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), fee.address, fee.address, 3600))
+    await expect(Sale.deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), fee.address, fee.address, ...await saleConfig(usdt)))
       .to.be.revertedWithCustomError(Sale, "RecipientCollision");
   });
 
