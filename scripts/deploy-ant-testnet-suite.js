@@ -63,6 +63,8 @@ async function main() {
     ant: await ant.getAddress(), testUsdt: await testUsdt.getAddress(),
     oracle: await oracle.getAddress(), sale: await sale.getAddress(),
     feeWallet, treasuryWallet,
+    saleStartAt: Number(await sale.saleStartAt()), saleEndAt: Number(await sale.saleEndAt()),
+    hardCapRaw: (await sale.maxGrossUsdt()).toString(), walletCapRaw: (await sale.maxWalletGrossUsdt()).toString(),
     buyer: deployer.address, purchaseTx: receipt.hash,
     grossUsdtRaw: gross.toString(), feeUsdtRaw: ethers.parseUnits("5",18).toString(),
     netUsdtRaw: ethers.parseUnits("95",18).toString(), antDeliveredRaw: buyerAnt.toString(),
