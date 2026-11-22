@@ -64,7 +64,7 @@ describe("AntColonySale", function () {
 
   it("splits 100 USDT into 5 fee and 95 proceeds, delivering 95 ANT at $1", async function () {
     const { buyer, proceeds, fee, usdt, ant, sale } = await setup();
-    await expect(sale.connect(buyer).buy(ethers.parseUnits("100", 18), ethers.parseUnits("95", 18))).to.emit(sale, "AntPurchased");
+    await expect(sale.connect(buyer).buy(ethers.parseUnits("100", 18), ethers.parseUnits("95", 18), ethers.MaxUint256)).to.emit(sale, "AntPurchased");
     expect(await usdt.balanceOf(fee.address)).to.equal(ethers.parseUnits("5", 18));
     expect(await usdt.balanceOf(proceeds.address)).to.equal(ethers.parseUnits("95", 18));
     expect(await ant.balanceOf(buyer.address)).to.equal(ethers.parseUnits("95", 18));
@@ -72,7 +72,7 @@ describe("AntColonySale", function () {
 
   it("supports six-decimal USDT without mispricing ANT output", async function () {
     const { buyer, proceeds, fee, usdt, ant, sale } = await setup(6);
-    await expect(sale.connect(buyer).buy(ethers.parseUnits("100", 6), ethers.parseUnits("95", 18))).to.emit(sale, "AntPurchased");
+    await expect(sale.connect(buyer).buy(ethers.parseUnits("100", 6), ethers.parseUnits("95", 18), ethers.MaxUint256)).to.emit(sale, "AntPurchased");
     expect(await usdt.balanceOf(fee.address)).to.equal(ethers.parseUnits("5", 6));
     expect(await usdt.balanceOf(proceeds.address)).to.equal(ethers.parseUnits("95", 6));
     expect(await ant.balanceOf(buyer.address)).to.equal(ethers.parseUnits("95", 18));
@@ -106,9 +106,18 @@ describe("AntColonySale", function () {
 
   it("enforces minimum output and inventory", async function () {
     const { buyer, sale, ant } = await setup();
-    await expect(sale.connect(buyer).buy(ethers.parseUnits("100", 18), ethers.parseUnits("96", 18))).to.be.revertedWithCustomError(sale, "SlippageExceeded");
+    await expect(sale.connect(buyer).buy(ethers.parseUnits("100", 18), ethers.parseUnits("96", 18), ethers.MaxUint256)).to.be.revertedWithCustomError(sale, "SlippageExceeded");
     await (await ethers.getContractAt("MockAntUsdtOracle", await sale.oracle())).setPrice(1); // quote far exceeds the 100,000 ANT inventory
-    await expect(sale.connect(buyer).buy(ethers.parseUnits("100", 18), 0)).to.be.revertedWithCustomError(sale, "InsufficientInventory");
+    await expect(sale.connect(buyer).buy(ethers.parseUnits("100", 18), 0, ethers.MaxUint256)).to.be.revertedWithCustomError(sale, "InsufficientInventory");
+  });
+
+  it("rejects a purchase after its on-chain quote deadline", async function () {
+    const { buyer, sale } = await setup();
+    const latest = await ethers.provider.getBlock("latest");
+    const expiredDeadline = latest.timestamp - 1;
+    await expect(sale.connect(buyer).buy(
+      ethers.parseUnits("10", 18), ethers.parseUnits("9.5", 18), expiredDeadline
+    )).to.be.revertedWithCustomError(sale, "QuoteExpired");
   });
 
   it("rejects zero payment and has immutable fee and recipients", async function () {
@@ -132,7 +141,7 @@ describe("AntColonySale", function () {
     await usdt.mint(buyer.address, ethers.parseUnits("100", 6));
     await usdt.connect(buyer).approve(await sale.getAddress(), ethers.MaxUint256);
     await usdt.setBlockedRecipient(fee.address);
-    await expect(sale.connect(buyer).buy(ethers.parseUnits("100", 6), 0)).to.be.revertedWithCustomError(usdt, "BlockedRecipient");
+    await expect(sale.connect(buyer).buy(ethers.parseUnits("100", 6), 0, ethers.MaxUint256)).to.be.revertedWithCustomError(usdt, "BlockedRecipient");
     expect(await usdt.balanceOf(buyer.address)).to.equal(ethers.parseUnits("100", 6));
     expect(await usdt.balanceOf(proceeds.address)).to.equal(0n);
     expect(await ant.balanceOf(buyer.address)).to.equal(0n);
@@ -148,7 +157,7 @@ describe("AntColonySale", function () {
     await usdt.mint(buyer.address, ethers.parseUnits("100", 6));
     await usdt.connect(buyer).approve(await sale.getAddress(), ethers.MaxUint256);
     await usdt.setBlockedRecipient(proceeds.address);
-    await expect(sale.connect(buyer).buy(ethers.parseUnits("100", 6), 0)).to.be.revertedWithCustomError(usdt, "BlockedRecipient");
+    await expect(sale.connect(buyer).buy(ethers.parseUnits("100", 6), 0, ethers.MaxUint256)).to.be.revertedWithCustomError(usdt, "BlockedRecipient");
     expect(await usdt.balanceOf(buyer.address)).to.equal(ethers.parseUnits("100", 6));
     expect(await usdt.balanceOf(fee.address)).to.equal(0n);
     expect(await ant.balanceOf(buyer.address)).to.equal(0n);
@@ -164,7 +173,7 @@ describe("AntColonySale", function () {
     await usdt.mint(buyer.address, ethers.parseUnits("100", 6));
     await usdt.connect(buyer).approve(await sale.getAddress(), ethers.MaxUint256);
     await ant.setBlockedRecipient(buyer.address);
-    await expect(sale.connect(buyer).buy(ethers.parseUnits("100", 6), 0)).to.be.revertedWithCustomError(ant, "BlockedRecipient");
+    await expect(sale.connect(buyer).buy(ethers.parseUnits("100", 6), 0, ethers.MaxUint256)).to.be.revertedWithCustomError(ant, "BlockedRecipient");
     expect(await usdt.balanceOf(buyer.address)).to.equal(ethers.parseUnits("100", 6));
     expect(await usdt.balanceOf(fee.address)).to.equal(0n);
     expect(await usdt.balanceOf(proceeds.address)).to.equal(0n);
