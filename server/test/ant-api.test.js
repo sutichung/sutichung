@@ -97,3 +97,11 @@ test('ANT quote expiry never extends beyond the immutable sale end', () => {
   assert.equal(resolveQuoteExpiry(now, Math.floor(now / 1000) + 120), new Date(now + 120000).toISOString());
   assert.throws(() => resolveQuoteExpiry(now, Math.floor(now / 1000)), /sale_ended/);
 });
+
+test('ANT inventory readiness reports exact shortfall without rounding', () => {
+  const { calculateInventoryReadiness } = require('../lib/ant-api');
+  assert.deepEqual(calculateInventoryReadiness('150','100'), { sufficient:true, shortfallRaw:'0' });
+  assert.deepEqual(calculateInventoryReadiness('99','100'), { sufficient:false, shortfallRaw:'1' });
+  assert.deepEqual(calculateInventoryReadiness('0','0'), { sufficient:true, shortfallRaw:'0' });
+  assert.throws(() => calculateInventoryReadiness('-1','10'));
+});
