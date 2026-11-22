@@ -7,7 +7,10 @@ const SALE_ABI = [
   'function quote(uint256 grossUsdt) view returns (uint256 antOut,uint256 feeUsdt,uint256 netUsdt,uint256 price)',
   'function usdt() view returns (address)', 'function ant() view returns (address)',
   'function oracle() view returns (address)', 'function feeRecipient() view returns (address)', 'function proceedsRecipient() view returns (address)', 'function usdtDecimals() view returns (uint8)', 'function maxOracleAge() view returns (uint256)',
-  'function buy(uint256 grossUsdt,uint256 minAntOut,uint256 deadline) returns (uint256 antOut)'
+  'function buy(uint256 grossUsdt,uint256 minAntOut,uint256 deadline) returns (uint256 antOut)',
+  'function saleStartAt() view returns(uint256)', 'function saleEndAt() view returns(uint256)',
+  'function maxGrossUsdt() view returns(uint256)', 'function maxWalletGrossUsdt() view returns(uint256)',
+  'function totalGrossSold() view returns(uint256)', 'function walletGrossPurchased(address) view returns(uint256)'
 ];
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const RAW_RE = /^\d{1,78}$/;
@@ -187,8 +190,12 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
       try {
         const contracts = saleConfig();
         const provider = await providerForTestnet();
-        try { await verifySaleConfiguration(provider, contracts); saleConfigured = true; }
-        finally { await provider.destroy(); }
+        try {
+          const sale = await verifySaleConfiguration(provider, contracts);
+          const [saleStartAt, saleEndAt, maxGrossUsdt, maxWalletGrossUsdt, totalGrossSold] = await Promise.all([sale.saleStartAt(), sale.saleEndAt(), sale.maxGrossUsdt(), sale.maxWalletGrossUsdt(), sale.totalGrossSold()]);
+          saleConfigured = true;
+          return json(res, 200, { enabled:true, network:'BSC Testnet', chainId:CHAIN_ID, feeBps:500, walletLinkConfigured:!!(base && anonKey && serviceKey && process.env.ANT_WALLET_DOMAIN), saleConfigured, usdtDecimals:contracts.usdtDecimals, mainnetEnabled:false, saleStartAt:Number(saleStartAt), saleEndAt:Number(saleEndAt), maxGrossUsdtRaw:maxGrossUsdt.toString(), maxWalletGrossUsdtRaw:maxWalletGrossUsdt.toString(), totalGrossSoldRaw:totalGrossSold.toString(), saleActive:Math.floor(Date.now()/1000)>=Number(saleStartAt)&&Math.floor(Date.now()/1000)<=Number(saleEndAt) });
+        } finally { await provider.destroy(); }
       } catch (_) { saleConfigured = false; }
       return json(res, 200, {
         enabled: true, network: 'BSC Testnet', chainId: CHAIN_ID, feeBps: 500,
@@ -293,6 +300,11 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
         const provider = await providerForTestnet();
         try {
           const sale = await verifySaleConfiguration(provider, contracts);
+          const now = Math.floor(Date.now() / 1000);
+          const [saleStartAt, saleEndAt, walletCap, walletPurchased] = await Promise.all([sale.saleStartAt(), sale.saleEndAt(), sale.maxWalletGrossUsdt(), sale.walletGrossPurchased(wallet)]);
+          if (now < Number(saleStartAt)) { json(res, 409, { error:'sale_not_started', saleStartAt:Number(saleStartAt) }); return true; }
+          if (now > Number(saleEndAt)) { json(res, 409, { error:'sale_ended', saleEndAt:Number(saleEndAt) }); return true; }
+          if (BigInt(walletPurchased) + BigInt(gross) > BigInt(walletCap)) { json(res, 409, { error:'wallet_cap_exceeded', remainingRaw:(BigInt(walletCap)-BigInt(walletPurchased)).toString() }); return true; }
           const quote = await sale.quote(gross);
           const fee = quote.feeUsdt, net = quote.netUsdt, antOut = quote.antOut, price = quote.price;
           if (fee + net !== BigInt(gross) || antOut <= 0n) { json(res, 503, { error: 'invalid_onchain_quote' }); return true; }
