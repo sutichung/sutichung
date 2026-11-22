@@ -83,7 +83,7 @@ contract AntColonySale is ReentrancyGuard {
         if (totalGrossSold + grossUsdt > maxGrossUsdt) revert HardCapExceeded(totalGrossSold, grossUsdt, maxGrossUsdt);
         uint256 updatedAt;
         (price, updatedAt) = oracle.latestPrice();
-        if (price == 0 || updatedAt > block.timestamp) revert InvalidPrice();
+        if (price == 0 || updatedAt > block.timestamp || price > type(uint256).max / (10 ** usdtDecimals)) revert InvalidPrice();
         if (block.timestamp - updatedAt > maxOracleAge) revert StalePrice();
         feeUsdt = Math.mulDiv(grossUsdt, FEE_BPS, BPS);
         if (feeUsdt == 0) revert InvalidAmount();
