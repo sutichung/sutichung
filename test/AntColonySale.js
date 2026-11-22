@@ -2,6 +2,19 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
 describe("AntColonySale", function () {
+async function saleConfig(usdt, overrides = {}) {
+    const block = await ethers.provider.getBlock("latest");
+    const decimals = await usdt.decimals();
+    return [
+      3600,
+      overrides.start ?? block.timestamp - 1,
+      overrides.end ?? block.timestamp + 86400,
+      overrides.hardCap ?? ethers.parseUnits("1000", decimals),
+      overrides.walletCap ?? ethers.parseUnits("200", decimals)
+    ];
+  }
+
+
   async function setup(usdtDecimals = 18) {
     const [admin, buyer, proceeds, fee] = await ethers.getSigners();
     const Mock = await ethers.getContractFactory("MockERC20");
@@ -10,7 +23,7 @@ describe("AntColonySale", function () {
     const Oracle = await ethers.getContractFactory("MockAntUsdtOracle");
     const oracle = await Oracle.deploy(10n ** 8n); // 1 USDT per ANT
     const Sale = await ethers.getContractFactory("AntColonySale");
-    const sale = await Sale.deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), fee.address, proceeds.address, 3600);
+    const sale = await Sale.deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), fee.address, proceeds.address, ...await saleConfig(usdt));
     await ant.mint(await sale.getAddress(), ethers.parseUnits("100000", 18));
     await usdt.mint(buyer.address, ethers.parseUnits("1000", usdtDecimals));
     await usdt.connect(buyer).approve(await sale.getAddress(), ethers.MaxUint256);
