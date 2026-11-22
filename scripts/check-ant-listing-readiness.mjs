@@ -10,7 +10,9 @@ const requiredFiles = [
   'docs/ZENTRAX_EXCHANGE_APPLICATION_PACKET.md',
   'docs/ZENTRAX_EXCHANGE_LISTING_READINESS.md',
   'docs/ZENTRAX_ANT_MASTER_COMPLETION_CHECKLIST.md',
-  'docs/ANT_TESTNET_SECURITY_REVIEW_2026-11-22.md'
+  'docs/ANT_TESTNET_SECURITY_REVIEW_2026-11-22.md',
+  'docs/ANT_TOKENOMICS_EVIDENCE.md',
+  'scripts/generate-ant-tokenomics-evidence.mjs'
 ];
 const checks = [];
 const blockers = [];
@@ -25,7 +27,7 @@ for (const file of requiredFiles) {
 }
 
 let hardhat = '', tokenDeploy = '', saleDeploy = '', token = '', sale = '';
-let appPacket = '', readiness = '', master = '', security = '';
+let appPacket = '', readiness = '', master = '', security = '', tokenomics = '', evidenceScript = '';
 try {
   hardhat = read('hardhat.config.js');
   tokenDeploy = read('scripts/deploy-ant.js');
@@ -36,6 +38,8 @@ try {
   readiness = read('docs/ZENTRAX_EXCHANGE_LISTING_READINESS.md');
   master = read('docs/ZENTRAX_ANT_MASTER_COMPLETION_CHECKLIST.md');
   security = read('docs/ANT_TESTNET_SECURITY_REVIEW_2026-11-22.md');
+  tokenomics = read('docs/ANT_TOKENOMICS_EVIDENCE.md');
+  evidenceScript = read('scripts/generate-ant-tokenomics-evidence.mjs');
 } catch (error) {
   console.error('Cannot complete readiness checks:', error.message);
   process.exit(1);
@@ -51,6 +55,9 @@ addCheck('exchange application remains truthful', /Current formal submissions:\s
 addCheck('listing dossier remains preparation-only', /0 applications submitted/.test(readiness) && /0 approvals/.test(readiness) && /NOT DEPLOYED/.test(readiness), 'Listing dossier records zero applications/approvals and no mainnet deployment.');
 addCheck('master checklist blocks real-money launch', /No real-money launch is authorized/.test(master), 'Master checklist explicitly keeps real-money launch disabled pending gates.');
 addCheck('security review disclaims independent audit', /not an independent audit/i.test(security) && /NOT APPROVED FOR PUBLIC SALE OR MAINNET/.test(security), 'Security review is not represented as an independent audit or mainnet approval.');
+addCheck('tokenomics distinguishes initial and circulating supply', /Current total supply/.test(tokenomics) && /Circulating supply:\*\* NOT DETERMINED/.test(tokenomics) && /Allocation:\*\* NOT VERIFIED/.test(tokenomics), 'Tokenomics register does not invent allocations or circulating supply.');
+addCheck('tokenomics evidence generator is testnet-only and reconciles balances', /network\.chainId !== 97n/.test(evidenceScript) && /getLogs/.test(evidenceScript) && /reconstructedSupply !== totalSupply/.test(evidenceScript), 'Evidence generator restricts itself to BSC Testnet and reconciles Transfer logs to totalSupply.');
+addCheck('vesting status is disclosed, not implied', /NO_VESTING_CONTRACT_FOUND/.test(evidenceScript) && /NOT IMPLEMENTED/.test(tokenomics), 'Current source limitations on vesting are disclosed explicitly.');
 
 const report = {
   generatedAt: new Date().toISOString(),
