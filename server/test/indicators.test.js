@@ -34,3 +34,14 @@ test('technical engine rejects malformed OHLCV rather than manufacturing values'
  candles[10].volume=-1;
  assert.equal(indicators(candles),null);
 });
+test('technical engine excludes unfinished candles from confirmed indicators',()=>{
+ const closedCandles=Array.from({length:60},(_,i)=>{
+  const close=100+i*0.5+Math.sin(i/3);
+  return {time:String(i),open:close-0.1,high:close+1,low:close-1,close,volume:1000+i,closed:true};
+ });
+ const formingCandle={time:'forming',open:1000,high:5000,low:999,close:4500,volume:999999,closed:false};
+ const expected=indicators(closedCandles);
+ assert.ok(expected);
+ assert.deepEqual(indicators([...closedCandles,formingCandle]),expected);
+ assert.equal(indicators([...closedCandles.slice(1),formingCandle]),null);
+});
