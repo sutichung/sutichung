@@ -1,0 +1,64 @@
+name: Deploy ANT to BNB Smart Chain Testnet
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type DEPLOY ANT TESTNET to deploy the test token (never mainnet)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ant-bsc-testnet-token-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy-testnet-token:
+    if: ${{ inputs.confirm == 'DEPLOY ANT TESTNET' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout ANT testnet branch
+        uses: actions/checkout@v4
+        with:
+          ref: ant-token-testnet
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate testnet-only deployment configuration
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          ANT_TESTNET_INITIAL_HOLDER: ${{ vars.ANT_TESTNET_INITIAL_HOLDER }}
+        run: |
+          if [ -z "$DEPLOYER_PRIVATE_KEY" ]; then
+            echo "::error::Configure repository Actions secret DEPLOYER_PRIVATE_KEY. Never paste it into chat or commit it."
+            exit 1
+          fi
+          if [ -z "$ANT_TESTNET_INITIAL_HOLDER" ]; then
+            echo "::error::Configure repository Actions variable ANT_TESTNET_INITIAL_HOLDER with the approved testnet wallet address."
+            exit 1
+          fi
+          echo "Testnet-only deploy configuration is present. The deploy script will verify the holder matches the signer."
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Compile ANT contracts
+        run: npm run compile:token
+
+      - name: Run ANT contract tests
+        run: npm run test:token
+
+      - name: Deploy fixed-supply ANT to BSC Testnet
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          ANT_TESTNET_INITIAL_HOLDER: ${{ vars.ANT_TESTNET_INITIAL_HOLDER }}
+          BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL }}
+          BSCSCAN_API_KEY: ${{ secrets.BSCSCAN_API_KEY }}
+        run: npm run deploy:token:testnet
