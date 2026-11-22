@@ -131,6 +131,9 @@ async function saleConfig(usdt, overrides = {}) {
     await expect(Sale.deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), fee.address, proceeds.address,
       maxAge, start, start, hardCap, walletCap)).to.be.revertedWithCustomError(Sale, "InvalidSaleWindow");
     await expect(Sale.deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), fee.address, proceeds.address,
+      maxAge, start, (await ethers.provider.getBlock("latest")).timestamp - 1, hardCap, walletCap))
+      .to.be.revertedWithCustomError(Sale, "InvalidSaleWindow");
+    await expect(Sale.deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), fee.address, proceeds.address,
       maxAge, start, end, hardCap, hardCap + 1n)).to.be.revertedWithCustomError(Sale, "InvalidSaleCap");
     await expect(Sale.deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), fee.address, proceeds.address,
       maxAge, start, end, 0n, 0n)).to.be.revertedWithCustomError(Sale, "InvalidSaleCap");
