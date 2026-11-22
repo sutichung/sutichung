@@ -18,6 +18,36 @@ describe("AntColonySale", function () {
   }
 
 
+  it("rejects EOAs as token or oracle dependencies", async function () {
+    const [admin, , proceeds, fee] = await ethers.getSigners();
+    const Mock = await ethers.getContractFactory("MockERC20");
+    const usdt = await Mock.deploy("Mock USDT", "USDT", 6);
+    const ant = await Mock.deploy("Ant Colony", "ANT", 18);
+    const oracle = await (await ethers.getContractFactory("MockAntUsdtOracle")).deploy(10n ** 8n);
+    const Sale = await ethers.getContractFactory("AntColonySale");
+
+    await expect(Sale.deploy(admin.address, await ant.getAddress(), await oracle.getAddress(), fee.address, proceeds.address, 3600))
+      .to.be.revertedWithCustomError(Sale, "InvalidAddress");
+    await expect(Sale.deploy(await usdt.getAddress(), admin.address, await oracle.getAddress(), fee.address, proceeds.address, 3600))
+      .to.be.revertedWithCustomError(Sale, "InvalidAddress");
+    await expect(Sale.deploy(await usdt.getAddress(), await ant.getAddress(), admin.address, fee.address, proceeds.address, 3600))
+      .to.be.revertedWithCustomError(Sale, "InvalidAddress");
+  });
+
+  it("rejects proceeds or fee recipients that alias a sale dependency", async function () {
+    const [, , proceeds, fee] = await ethers.getSigners();
+    const Mock = await ethers.getContractFactory("MockERC20");
+    const usdt = await Mock.deploy("Mock USDT", "USDT", 6);
+    const ant = await Mock.deploy("Ant Colony", "ANT", 18);
+    const oracle = await (await ethers.getContractFactory("MockAntUsdtOracle")).deploy(10n ** 8n);
+    const Sale = await ethers.getContractFactory("AntColonySale");
+
+    await expect(Sale.deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), await usdt.getAddress(), proceeds.address, 3600))
+      .to.be.revertedWithCustomError(Sale, "RecipientCollision");
+    await expect(Sale.deploy(await usdt.getAddress(), await ant.getAddress(), await oracle.getAddress(), fee.address, await ant.getAddress(), 3600))
+      .to.be.revertedWithCustomError(Sale, "RecipientCollision");
+  });
+
   it("rejects non-18-decimal ANT and colliding fee/treasury recipients", async function () {
     const [, , proceeds, fee] = await ethers.getSigners();
     const Mock = await ethers.getContractFactory("MockERC20");
