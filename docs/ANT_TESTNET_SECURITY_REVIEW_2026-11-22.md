@@ -33,7 +33,7 @@ Latest verified contract/test commit: `8aa88915bdd408eb7bf420f985a4a82736c9dca7`
 
 ## Remaining release blockers
 
-1. **No production oracle.** The included oracle is a freely configurable test mock. Production needs an independently reviewed, manipulation-resistant source (for example, a sufficiently liquid TWAP with minimum liquidity/observation coverage, freshness checks, deviation circuit breakers, and a fail-closed policy).
+1. **No approved production primary-sale pricing model.** The included oracle is a freely configurable test mock. Because the primary sale is intended to precede broad DEX liquidity, do not assume an ANT/USDT TWAP exists. The issuer must approve a disclosed fixed price, published price tiers, or a genuinely independent external reference; any retained oracle requires independent review, freshness checks, manipulation resistance and fail-closed behavior.
 2. **No official production stablecoin verification.** Verify the exact official BSC USDT contract address and decimals from authoritative sources at deployment time. A token name or ticker is not proof.
 3. **No independent smart-contract audit.** Review the exact source commit, compiler settings, deployed bytecode, and all findings before any public sale.
 4. **Primary-sale mechanics remain incomplete.** Immutable sale start/end, global hard cap, and per-wallet cap are now implemented and tested. An allowlist/staged-access policy, cancellation process, and escrow/refund mechanism are still absent. The current contract immediately transfers USDT and ANT; a successful purchase cannot be refunded through it. Decide and publish the terms before implementation; do not imply these missing controls exist.
