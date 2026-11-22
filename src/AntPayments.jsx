@@ -125,9 +125,9 @@ export default function AntPayments() {
       <label style={{fontSize:12,color:'#b8b1a2'}}>購買金額（USDT）
         <input style={{...input,display:'block',marginTop:6}} inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="10.00"/>
       </label>
-      <button style={button} disabled={busy||!verified||!status?.saleConfigured} onClick={makeQuote}>取得鏈上報價</button>
+      <button style={button} disabled={busy||!verified||!status?.saleConfigured||!status?.saleActive} onClick={makeQuote}>取得鏈上報價</button>
     </div>
-    {status?.saleConfigured&&<div style={{...muted,marginTop:8}}>銷售狀態：{status.saleActive?'開放期間':'非開放期間'}｜單錢包上限 {display(status.maxWalletGrossUsdtRaw,decimals)} USDT｜總額上限 {display(status.maxGrossUsdtRaw,decimals)} USDT</div>}
+    {status?.saleConfigured&&<div style={{...muted,marginTop:8}}>銷售狀態：{status.saleActive?'開放期間':'非開放期間'}｜已售 {display(status.totalGrossSoldRaw,decimals)} / {display(status.maxGrossUsdtRaw,decimals)} USDT｜單錢包上限 {display(status.maxWalletGrossUsdtRaw,decimals)} USDT｜總額上限 {display(status.maxGrossUsdtRaw,decimals)} USDT</div>}
     {quote&&<div style={{marginTop:12,padding:12,background:'#1b1710',border:'1px solid #594728',borderRadius:10}}>
       <b style={{color:'#D6B56D'}}>報價明細（有效 5 分鐘）</b>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:8,fontSize:12}}>
