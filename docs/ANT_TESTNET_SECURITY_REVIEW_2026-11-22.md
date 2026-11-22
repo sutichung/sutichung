@@ -22,10 +22,10 @@ This review records source-level changes made on `ant-token-testnet`. It is not 
 
 ## CI evidence
 
-Latest verified contract/test commit: `ddc032ae40d9e5cf7e60c3e79ea021cc92e8d152`. The follow-up isolated-wallet test adjustment is running in commit `4529400c1a18bb0f42db48dd218d060c9b713b57`.
+Latest verified contract/test commit: `4529400c1a18bb0f42db48dd218d060c9b713b57`.
 
-- ANT token CI: **passed**. 21 Solidity files compiled successfully and all 26 contract tests passed, including immutable sale window, global/per-wallet caps, invalid constructor settings, recipient self-purchase prevention, atomic rollback, expired-deadline, EOA dependency, recipient collision, and fee-rounding cases. Run: [45009874408](https://github.com/sutichung/sutichung/actions/runs/45009874408).
-- Backend checks: **passed**. Server tests, syntax checks, production build, and dependency checks completed successfully. Run: [45009505240](https://github.com/sutichung/sutichung/actions/runs/45009505240).
+- ANT token CI: **passed**. 21 Solidity files compiled successfully and all 26 contract tests passed, including immutable sale window, global/per-wallet caps, invalid constructor settings, recipient self-purchase prevention, atomic rollback, expired-deadline, EOA dependency, recipient collision, and fee-rounding cases. Run: [45009918736](https://github.com/sutichung/sutichung/actions/runs/45009918736).
+- Backend checks: **passed**. Server tests, syntax checks, production build, and dependency checks completed successfully. Run: [45009918741](https://github.com/sutichung/sutichung/actions/runs/45009918741).
 - ZENTRAX web CI: **passed**. Production frontend build, Docker image build, and static frontend smoke test completed successfully. Run: [45009505027](https://github.com/sutichung/sutichung/actions/runs/45009505027).
 - Dependency audit: 11 low-severity findings across the full dependency tree; the production-runtime audit reported 0 vulnerabilities (0 low/moderate/high/critical). The low-severity development/transitive findings remain recorded and should be reviewed.
 - Earlier testnet deployment attempt failed because the deployer had zero tBNB. This is a test-gas limitation, not evidence that a deployment occurred.
