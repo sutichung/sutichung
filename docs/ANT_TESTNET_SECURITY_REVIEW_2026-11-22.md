@@ -22,9 +22,9 @@ This review records source-level changes made on `ant-token-testnet`. It is not 
 
 ## CI evidence
 
-Latest verified contract/test commit: `4529400c1a18bb0f42db48dd218d060c9b713b57`.
+Latest verified contract/test commit: `8aa88915bdd408eb7bf420f985a4a82736c9dca7`.
 
-- ANT token CI: **passed**. 21 Solidity files compiled successfully and all 26 contract tests passed, including immutable sale window, global/per-wallet caps, invalid constructor settings, recipient self-purchase prevention, atomic rollback, expired-deadline, EOA dependency, recipient collision, and fee-rounding cases. Run: [45009918736](https://github.com/sutichung/sutichung/actions/runs/45009918736).
+- ANT token CI: **passed**. 21 Solidity files compiled successfully and all 26 contract tests passed, including immutable sale window, global/per-wallet caps, invalid constructor settings, recipient self-purchase prevention, atomic rollback, expired-deadline, EOA dependency, recipient collision, and fee-rounding cases. Run: [45010052384](https://github.com/sutichung/sutichung/actions/runs/45010052384).
 - Backend checks: **passed**. Server tests, syntax checks, production build, and dependency checks completed successfully. Run: [45009918741](https://github.com/sutichung/sutichung/actions/runs/45009918741).
 - ZENTRAX web CI: **passed**. Production frontend build, Docker image build, and static frontend smoke test completed successfully. Run: [45009505027](https://github.com/sutichung/sutichung/actions/runs/45009505027).
 - Dependency audit: 11 low-severity findings across the full dependency tree; the production-runtime audit reported 0 vulnerabilities (0 low/moderate/high/critical). The low-severity development/transitive findings remain recorded and should be reviewed.
