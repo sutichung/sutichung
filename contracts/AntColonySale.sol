@@ -42,7 +42,10 @@ contract AntColonySale is ReentrancyGuard {
 
     constructor(address usdt_, address ant_, address oracle_, address feeRecipient_, address proceedsRecipient_, uint256 maxOracleAge_) {
         if (usdt_ == address(0) || ant_ == address(0) || oracle_ == address(0) || feeRecipient_ == address(0) || proceedsRecipient_ == address(0) || usdt_ == ant_) revert InvalidAddress();
-        if (feeRecipient_ == proceedsRecipient_) revert RecipientCollision();
+        // ERC-20 and oracle dependencies must be deployed contracts, not EOAs.
+        // This catches common address/configuration mistakes at deployment time.
+        if (usdt_.code.length == 0 || ant_.code.length == 0 || oracle_.code.length == 0) revert InvalidAddress();
+        if (feeRecipient_ == proceedsRecipient_ || feeRecipient_ == usdt_ || feeRecipient_ == ant_ || feeRecipient_ == oracle_ || proceedsRecipient_ == usdt_ || proceedsRecipient_ == ant_ || proceedsRecipient_ == oracle_) revert RecipientCollision();
         if (maxOracleAge_ == 0) revert InvalidOracleAge();
         uint8 d = IERC20Metadata(usdt_).decimals();
         if (d > 18) revert InvalidUsdtDecimals();
