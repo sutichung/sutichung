@@ -132,10 +132,10 @@ export default function AntPayments() {
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:8,fontSize:12}}>
         <div>付款總額：{display(quote.grossUsdtRaw,decimals)} USDT</div>
         <div>平台佣金 5%：{display(quote.feeUsdtRaw,decimals)} USDT</div>
-        <div>創作者／金庫淨額：{display(quote.netUsdtRaw,decimals)} USDT</div>
+        <div>金庫淨額（95%）：{display(quote.netUsdtRaw,decimals)} USDT</div>
         <div>預估 ANT：{display(quote.quotedAntRaw,18)} ANT</div>
       </div>
-      <div style={{...muted,marginTop:8}}>實際 ANT 數量依交易執行時的鏈上預言機價格計算，並受最低交付量保護。</div>
+      <div style={{...muted,marginTop:8}}>95% 淨額匯入金庫；創作者分配另依 5% 平台費的分配政策核算，不是直接從此淨額支付。創作者款項目前僅有測試／帳務草稿流程，尚未執行實際付款。實際 ANT 數量依交易執行時的鏈上預言機價格計算，並受最低交付量與鏈上報價期限保護。</div>
       <button style={{...button,width:'100%',marginTop:12}} disabled={busy} onClick={buy}>授權 USDT 並購買 ANT</button>
     </div>}
     {order&&<div style={{marginTop:12,padding:12,background:'#101a15',border:'1px solid #28543d',borderRadius:10,fontSize:12}}>
