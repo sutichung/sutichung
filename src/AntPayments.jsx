@@ -127,7 +127,7 @@ export default function AntPayments() {
       </label>
       <button style={button} disabled={busy||!verified||!status?.saleConfigured||!status?.saleActive} onClick={makeQuote}>取得鏈上報價</button>
     </div>
-    {status?.saleConfigured&&<div style={{...muted,marginTop:8}}>銷售狀態：{status.saleActive?'開放期間':'非開放期間'}｜已售 {display(status.totalGrossSoldRaw,decimals)} / {display(status.maxGrossUsdtRaw,decimals)} USDT｜單錢包上限 {display(status.maxWalletGrossUsdtRaw,decimals)} USDT｜總額上限 {display(status.maxGrossUsdtRaw,decimals)} USDT</div>}
+    {status?.saleConfigured&&<div style={{...muted,marginTop:8}}>銷售狀態：{status.saleActive?'可認購':'暫停認購'}｜已售 {display(status.totalGrossSoldRaw,decimals)} / {display(status.maxGrossUsdtRaw,decimals)} USDT｜單錢包上限 {display(status.maxWalletGrossUsdtRaw,decimals)} USDT<div style={{marginTop:5}}>銷售庫存：{display(status.saleInventoryAntRaw,18)} ANT｜目前價格估算完整售罄所需：{display(status.estimatedInventoryRequiredAntRaw,18)} ANT</div>{!status.inventorySufficientForRemainingCap&&<div style={{color:'#fbbf24',marginTop:4}}>庫存不足以支援剩餘認購上限，短缺 {display(status.inventoryShortfallAntRaw,18)} ANT</div>}{status.inventoryEstimateNote&&<div style={{fontSize:10,marginTop:3}}>庫存需求依目前預言機價格估算，價格變動會改變需求。</div>}</div>}{status?.readinessError&&<div style={{...muted,color:'#fbbf24',marginTop:6}}>系統檢查：{status.readinessError}</div>}
     {quote&&<div style={{marginTop:12,padding:12,background:'#1b1710',border:'1px solid #594728',borderRadius:10}}>
       <b style={{color:'#D6B56D'}}>報價明細（有效 5 分鐘）</b>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:8,fontSize:12}}>
