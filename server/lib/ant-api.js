@@ -24,7 +24,11 @@ function buildOrderHistoryQuery(userId) {
 function resolveMinimumAntOut(quotedAntRaw, requestedMinRaw) {
   const quoted = BigInt(quotedAntRaw);
   const floor = quoted * 9900n / 10000n;
-  const minimum = requestedMinRaw === undefined ? floor : BigInt(parseRaw(requestedMinRaw, 'min_ant'));
+  let minimum = floor;
+  if (requestedMinRaw !== undefined) {
+    try { minimum = BigInt(parseRaw(requestedMinRaw, 'min_ant')); }
+    catch (_) { throw new Error('invalid_min_ant_out'); }
+  }
   if (minimum <= 0n || minimum < floor || minimum > quoted) throw new Error('invalid_min_ant_out');
   return minimum;
 }
