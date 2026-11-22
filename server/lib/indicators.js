@@ -21,7 +21,10 @@ function rsi(values, period=14) {
   return 100-100/(1+gain/loss);
 }
 function indicators(candles) {
-  if(!Array.isArray(candles)||candles.length<60)return null;
+  if(!Array.isArray(candles)||candles.some(candle=>!candle||typeof candle!=='object'))return null;
+  // Keep forming candles on charts, but exclude them from confirmed technical signals.
+  candles=candles.filter(candle=>candle.closed!==false);
+  if(candles.length<60)return null;
   const close=candles.map(x=>Number(x.close)),high=candles.map(x=>Number(x.high)),low=candles.map(x=>Number(x.low)),volume=candles.map(x=>Number(x.volume));
   if([...close,...high,...low,...volume].some(x=>!Number.isFinite(x))||close.some(x=>x<=0)||high.some((x,i)=>x<Math.max(low[i],close[i]))||low.some((x,i)=>x>Math.min(high[i],close[i]))||volume.some(x=>x<0))return null;
   const e5=ema(close,5),e10=ema(close,10),e20=ema(close,20),e60=ema(close,60),sma5=sma(close,5),sma20=sma(close,20),sma60=sma(close,60);
