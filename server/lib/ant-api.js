@@ -35,6 +35,11 @@ function resolveMinimumAntOut(quotedAntRaw, requestedMinRaw) {
   if (minimum <= 0n || minimum < floor || minimum > quoted) throw new Error('invalid_min_ant_out');
   return minimum;
 }
+function calculateInventoryReadiness(inventoryRaw, requiredRaw) {
+  const inventory = BigInt(inventoryRaw);
+  const required = BigInt(requiredRaw);
+  return { sufficient: inventory >= required, shortfallRaw: inventory >= required ? '0' : (required - inventory).toString() };
+}
 function resolveQuoteExpiry(nowMs, saleEndAtSeconds) {
   const endMs = Number(saleEndAtSeconds) * 1000;
   if (!Number.isFinite(nowMs) || !Number.isFinite(endMs) || endMs <= nowMs) throw new Error('sale_ended');
@@ -195,21 +200,34 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
     const pathname = url.pathname;
     if (pathname === '/api/ant/status' && req.method === 'GET') {
       let saleConfigured = false;
+      let readinessError = null;
       try {
         const contracts = saleConfig();
         const provider = await providerForTestnet();
         try {
           const sale = await verifySaleConfiguration(provider, contracts);
           const [saleStartAt, saleEndAt, maxGrossUsdt, maxWalletGrossUsdt, totalGrossSold] = await Promise.all([sale.saleStartAt(), sale.saleEndAt(), sale.maxGrossUsdt(), sale.maxWalletGrossUsdt(), sale.totalGrossSold()]);
+          const antToken = new ethers.Contract(contracts.ant, ['function balanceOf(address) view returns(uint256)'], provider);
+          const inventory = await antToken.balanceOf(contracts.sale);
+          const remainingGross = totalGrossSold < maxGrossUsdt ? maxGrossUsdt - totalGrossSold : 0n;
+          let requiredInventory = 0n;
+          if (remainingGross > 0n) {
+            try { const remainingQuote = await sale.quote(remainingGross); requiredInventory = remainingQuote.antOut; }
+            catch (_) { readinessError = 'remaining_cap_quote_unavailable'; }
+          }
+          const inventoryCheck = calculateInventoryReadiness(inventory, requiredInventory);
           saleConfigured = true;
-          json(res, 200, { enabled:true, network:'BSC Testnet', chainId:CHAIN_ID, feeBps:500, walletLinkConfigured:!!(base && anonKey && serviceKey && process.env.ANT_WALLET_DOMAIN), saleConfigured, usdtDecimals:contracts.usdtDecimals, mainnetEnabled:false, saleStartAt:Number(saleStartAt), saleEndAt:Number(saleEndAt), maxGrossUsdtRaw:maxGrossUsdt.toString(), maxWalletGrossUsdtRaw:maxWalletGrossUsdt.toString(), totalGrossSoldRaw:totalGrossSold.toString(), saleActive:Math.floor(Date.now()/1000)>=Number(saleStartAt)&&Math.floor(Date.now()/1000)<=Number(saleEndAt)&&totalGrossSold<maxGrossUsdt });
+          const withinWindow = Math.floor(Date.now()/1000)>=Number(saleStartAt)&&Math.floor(Date.now()/1000)<=Number(saleEndAt);
+          const capRemaining = totalGrossSold < maxGrossUsdt;
+          const saleActive = withinWindow && capRemaining && !readinessError && inventoryCheck.sufficient;
+          json(res, 200, { enabled:true, network:'BSC Testnet', chainId:CHAIN_ID, feeBps:500, walletLinkConfigured:!!(base && anonKey && serviceKey && process.env.ANT_WALLET_DOMAIN), saleConfigured, usdtDecimals:contracts.usdtDecimals, mainnetEnabled:false, saleStartAt:Number(saleStartAt), saleEndAt:Number(saleEndAt), maxGrossUsdtRaw:maxGrossUsdt.toString(), maxWalletGrossUsdtRaw:maxWalletGrossUsdt.toString(), totalGrossSoldRaw:totalGrossSold.toString(), remainingGrossUsdtRaw:remainingGross.toString(), saleInventoryAntRaw:inventory.toString(), estimatedInventoryRequiredAntRaw:requiredInventory.toString(), inventorySufficientForRemainingCap:inventoryCheck.sufficient, inventoryShortfallAntRaw:inventoryCheck.shortfallRaw, inventoryEstimateNote:'Required inventory is estimated using the current oracle price and can change with the oracle.', readinessError, saleActive });
           return true;
         } finally { await provider.destroy(); }
-      } catch (_) { saleConfigured = false; }
+      } catch (error) { saleConfigured = false; readinessError = String(error && error.message || 'sale_readiness_check_failed').slice(0,120); }
       return json(res, 200, {
         enabled: true, network: 'BSC Testnet', chainId: CHAIN_ID, feeBps: 500,
         walletLinkConfigured: !!(base && anonKey && serviceKey && process.env.ANT_WALLET_DOMAIN),
-        saleConfigured, usdtDecimals: Number(process.env.ANT_USDT_DECIMALS || 18), mainnetEnabled: false
+        saleConfigured, readinessError, usdtDecimals: Number(process.env.ANT_USDT_DECIMALS || 18), mainnetEnabled: false
       }), true;
     }
     if (!pathname.startsWith('/api/ant/')) return false;
@@ -468,4 +486,4 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
   }
   return handle;
 }
-module.exports = { createAntApi, buildWalletMessage, parseRaw, assuranceLevel, requireConditionalUpdate, hasFinanceAccess, buildOrderHistoryQuery, resolveMinimumAntOut, resolveQuoteExpiry };
+module.exports = { createAntApi, buildWalletMessage, parseRaw, assuranceLevel, requireConditionalUpdate, hasFinanceAccess, buildOrderHistoryQuery, resolveMinimumAntOut, resolveQuoteExpiry, calculateInventoryReadiness };
