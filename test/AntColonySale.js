@@ -91,6 +91,13 @@ async function saleConfig(usdt, overrides = {}) {
     expect(await ant.balanceOf(buyer.address)).to.equal(ethers.parseUnits("95", 18));
   });
 
+  it("rejects oracle prices that would overflow USDT decimal scaling", async function () {
+    const { sale, oracle } = await setup(6);
+    await oracle.setPrice(ethers.MaxUint256 / (10n ** 6n) + 1n);
+    await expect(sale.quote(ethers.parseUnits("20", 6)))
+      .to.be.revertedWithCustomError(sale, "InvalidPrice");
+  });
+
   it("rejects a payment whose calculated ANT output rounds to zero", async function () {
     const { sale, oracle } = await setup(6);
     await oracle.setPrice(10n ** 30n); // extreme price forces the ANT wei result to round down to zero
