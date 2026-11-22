@@ -136,7 +136,7 @@ export default function AntPayments() {
         <div>金庫淨額（95%）：{display(quote.netUsdtRaw,decimals)} USDT</div>
         <div>預估 ANT：{display(quote.quotedAntRaw,18)} ANT</div>
       </div>
-      <div style={{...muted,marginTop:8}}>95% 淨額匯入金庫；創作者分配另依 5% 平台費的分配政策核算，不是直接從此淨額支付。創作者款項目前僅有測試／帳務草稿流程，尚未執行實際付款。實際 ANT 數量依交易執行時的鏈上預言機價格計算，並受最低交付量與鏈上報價期限保護。</div>
+      <div style={{...muted,marginTop:8}}>成功購買目前沒有合約內退款或取消功能；正式銷售前必須先完成退款政策及獨立審查。此頁目前僅供測試網驗證，tUSDT 不具真實價值。95% 淨額匯入金庫；創作者分配另依 5% 平台費的分配政策核算，不是直接從此淨額支付。創作者款項目前僅有測試／帳務草稿流程，尚未執行實際付款。實際 ANT 數量依交易執行時的鏈上預言機價格計算，並受最低交付量與鏈上報價期限保護。</div>
       <button style={{...button,width:'100%',marginTop:12}} disabled={busy} onClick={buy}>授權 USDT 並購買 ANT</button>
     </div>}
     {order&&<div style={{marginTop:12,padding:12,background:'#101a15',border:'1px solid #28543d',borderRadius:10,fontSize:12}}>
