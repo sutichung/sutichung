@@ -89,3 +89,11 @@ test('ANT quote minimum output cannot be weakened below the 1% slippage floor', 
   assert.throws(() => resolveMinimumAntOut(quoted, '1000001'), /invalid_min_ant_out/);
   assert.throws(() => resolveMinimumAntOut(quoted, '0'), /invalid_min_ant_out/);
 });
+
+test('ANT quote expiry never extends beyond the immutable sale end', () => {
+  const { resolveQuoteExpiry } = require('../lib/ant-api');
+  const now = Date.parse('2026-11-22T10:00:00.000Z');
+  assert.equal(resolveQuoteExpiry(now, Math.floor(now / 1000) + 600), new Date(now + 300000).toISOString());
+  assert.equal(resolveQuoteExpiry(now, Math.floor(now / 1000) + 120), new Date(now + 120000).toISOString());
+  assert.throws(() => resolveQuoteExpiry(now, Math.floor(now / 1000)), /sale_ended/);
+});
