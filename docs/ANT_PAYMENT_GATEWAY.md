@@ -25,7 +25,8 @@ The React gateway is `src/AntPayments.jsx`, mounted from the main app navigation
 The current testnet sale contract constructor fixes four additional sale terms for the lifetime of that deployment:
 
 - `saleStartAt` and `saleEndAt` (Unix timestamps). Purchases revert before the start or after the end.
-- `maxGrossUsdt` (global gross-USDT hard cap) and `maxWalletGrossUsdt` (per-wallet gross-USDT cap). The contract counts gross USDT, including the 5% fee, and enforces both limits on-chain. The API checks the wallet's remaining allowance before creating an order; the contract remains authoritative.
+- `maxGrossUsdt` (global gross-USDT hard cap) and `maxWalletGrossUsdt` (per-wallet gross-USDT cap). The contract counts gross USDT, including the 5% fee, and enforces both limits on-chain. The API checks the wallet's remaining allowance, current sale window, fresh oracle observation and exact ANT inventory before creating an order; the contract remains authoritative.
+- The fee and proceeds recipient wallets are prohibited from buying through their own sale contract, preventing self-transfer paths from bypassing the effective fee.
 - `totalGrossSold` and `walletGrossPurchased(address)` are public on-chain counters. The UI displays the active window, sold amount and caps; quote creation is disabled outside the active window or after the hard cap is reached.
 
 The cap values are deployment inputs, not business recommendations. Do not select production values until the offering terms, inventory, jurisdictional review and consumer disclosures are approved. A new sale configuration requires a new contract deployment; these values cannot be edited after deployment.
