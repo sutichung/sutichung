@@ -60,7 +60,7 @@ contract AntColonySale is ReentrancyGuard {
         if (usdt_.code.length == 0 || ant_.code.length == 0 || oracle_.code.length == 0) revert InvalidAddress();
         if (feeRecipient_ == proceedsRecipient_ || feeRecipient_ == usdt_ || feeRecipient_ == ant_ || feeRecipient_ == oracle_ || proceedsRecipient_ == usdt_ || proceedsRecipient_ == ant_ || proceedsRecipient_ == oracle_) revert RecipientCollision();
         if (maxOracleAge_ == 0) revert InvalidOracleAge();
-        if (saleStartAt_ == 0 || saleEndAt_ <= saleStartAt_) revert InvalidSaleWindow();
+        if (saleStartAt_ == 0 || saleEndAt_ <= saleStartAt_ || saleEndAt_ <= block.timestamp) revert InvalidSaleWindow();
         if (maxGrossUsdt_ == 0 || maxWalletGrossUsdt_ == 0 || maxWalletGrossUsdt_ > maxGrossUsdt_) revert InvalidSaleCap();
         uint8 d = IERC20Metadata(usdt_).decimals();
         if (d > 18) revert InvalidUsdtDecimals();
