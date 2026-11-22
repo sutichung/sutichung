@@ -177,10 +177,9 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
       const [threshold, owners] = await Promise.all([safe.getThreshold(), safe.getOwners()]);
       if (threshold < 2n || owners.length < 3) throw new Error('sale_recipient_safe_threshold_invalid');
     }
-    const sampleQuote = await sale.quote(10n ** BigInt(contracts.usdtDecimals));
     const antToken = new ethers.Contract(contracts.ant, ['function balanceOf(address) view returns(uint256)'], provider);
     const inventory = await antToken.balanceOf(contracts.sale);
-    if (inventory < sampleQuote.antOut || inventory === 0n) throw new Error('sale_inventory_not_funded');
+    if (inventory === 0n) throw new Error('sale_inventory_not_funded');
     return sale;
   }
   async function handle(req, res, url) {
@@ -194,7 +193,8 @@ function createAntApi({ supabaseUrl, anonKey, serviceKey, json, readJson }) {
           const sale = await verifySaleConfiguration(provider, contracts);
           const [saleStartAt, saleEndAt, maxGrossUsdt, maxWalletGrossUsdt, totalGrossSold] = await Promise.all([sale.saleStartAt(), sale.saleEndAt(), sale.maxGrossUsdt(), sale.maxWalletGrossUsdt(), sale.totalGrossSold()]);
           saleConfigured = true;
-          return json(res, 200, { enabled:true, network:'BSC Testnet', chainId:CHAIN_ID, feeBps:500, walletLinkConfigured:!!(base && anonKey && serviceKey && process.env.ANT_WALLET_DOMAIN), saleConfigured, usdtDecimals:contracts.usdtDecimals, mainnetEnabled:false, saleStartAt:Number(saleStartAt), saleEndAt:Number(saleEndAt), maxGrossUsdtRaw:maxGrossUsdt.toString(), maxWalletGrossUsdtRaw:maxWalletGrossUsdt.toString(), totalGrossSoldRaw:totalGrossSold.toString(), saleActive:Math.floor(Date.now()/1000)>=Number(saleStartAt)&&Math.floor(Date.now()/1000)<=Number(saleEndAt) });
+          json(res, 200, { enabled:true, network:'BSC Testnet', chainId:CHAIN_ID, feeBps:500, walletLinkConfigured:!!(base && anonKey && serviceKey && process.env.ANT_WALLET_DOMAIN), saleConfigured, usdtDecimals:contracts.usdtDecimals, mainnetEnabled:false, saleStartAt:Number(saleStartAt), saleEndAt:Number(saleEndAt), maxGrossUsdtRaw:maxGrossUsdt.toString(), maxWalletGrossUsdtRaw:maxWalletGrossUsdt.toString(), totalGrossSoldRaw:totalGrossSold.toString(), saleActive:Math.floor(Date.now()/1000)>=Number(saleStartAt)&&Math.floor(Date.now()/1000)<=Number(saleEndAt)&&totalGrossSold<maxGrossUsdt });
+          return true;
         } finally { await provider.destroy(); }
       } catch (_) { saleConfigured = false; }
       return json(res, 200, {
