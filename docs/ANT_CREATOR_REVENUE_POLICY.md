@@ -14,7 +14,9 @@ The repository currently contains contracts/AntColonySale.sol with a fixed FEE_B
 - 95% is transferred to the immutable proceedsRecipient (treasury / sale proceeds wallet).
 - ANT is delivered from the sale contract's pre-funded inventory.
 - The oracle returns USDT per ANT with 8 decimals; quote rejects zero, future-dated, or stale prices.
-- Buyer supplies minAntOut to enforce a slippage floor.
+- Buyer supplies minAntOut and a five-minute-or-sale-close deadline to enforce slippage and quote expiry.
+- Sale start/end timestamps, global gross-USDT hard cap and per-wallet gross-USDT cap are immutable and enforced on-chain.
+- Fee and proceeds recipient wallets cannot buy through the same sale contract.
 
 Example: for a 100 USDT purchase, 5 USDT goes to creator/platform fees and 95 USDT goes to net proceeds. ANT output is calculated from the 95 USDT net amount and valid oracle price. The 5% is a purchase fee, not an ANT transfer tax.
 The fee is gross-based. Actual creator revenue is only the fee successfully received; it is not guaranteed income and depends on real completed purchases, fees, applicable costs, and legal availability.
@@ -49,9 +51,10 @@ The existing ANT token contract deliberately has no blacklist, pause, or transfe
 
 ## 6. Sale-contract review blockers
 Before any public sale or real-money use, resolve and independently test:
-- Oracle authenticity, manipulation resistance, decimals, heartbeat, and stale-price behavior. The current interface only checks timestamp and nonzero price; it does not itself prove oracle quality.
+- The primary-sale pricing model is not yet approved. Before DEX liquidity exists, do not assume an ANT/USDT TWAP is available; decide between an immutable fixed sale price, published price tiers, or a genuinely independent reference source.
+- Oracle authenticity, manipulation resistance, decimals, heartbeat, and stale-price behavior if an oracle model is retained. The current interface only checks timestamp and nonzero price; it does not itself prove oracle quality.
 - USDT token address and decimals for the exact target chain.
-- Sale inventory funding and recovery procedure. The current sale has no owner withdrawal, pause, or refund function; accidental funding and operational failures need a reviewed plan.
+- Sale inventory funding and recovery procedure. The current sale immediately delivers ANT and transfers USDT; it has no escrow, cancellation, refund, owner pause, or owner withdrawal function. A successful purchase cannot be refunded through this contract. Accidental funding and operational failures need a reviewed plan.
 - Fee/proceeds recipient multisig addresses and control policy.
 - Fee-on-transfer / non-standard token behavior assumptions.
 - Slippage, minimum output, rounding, insufficient inventory, failed USDT transfer, and reentrancy tests.
