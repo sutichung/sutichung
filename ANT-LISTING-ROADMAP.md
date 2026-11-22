@@ -8,7 +8,8 @@
 - Token contract: burnable, no mint, owner, pause, blacklist, tax, or privileged transfer controls.
 - Distribution: initial supply to a separately verified Safe multisig.
 - Sale economics: 5% of gross BSC USDT payment to fee Safe; 95% net payment determines ANT output; ANT delivery and both USDT transfers must settle atomically.
-- Sale contract configuration (USDT, ANT, oracle, fee Safe, proceeds Safe, max oracle age) is immutable. Changing configuration requires a new reviewed deployment and public migration notice.
+- Sale contract configuration (USDT, ANT, oracle, fee Safe, proceeds Safe, max oracle age, sale start/end, global hard cap and per-wallet cap) is immutable. Changing configuration requires a new reviewed deployment and public migration notice.
+- The current contract prohibits fee/proceeds recipients from buying through their own sale contract and enforces the sale window and gross-USDT caps on-chain.
 - No market price is promised. If an independently verifiable, sufficiently liquid ANT/USDT price source is unavailable or stale, the sale must fail closed.
 
 ## Delivery gates
@@ -39,13 +40,14 @@
 - Exercise purchase end-to-end with test tokens: approve, quote, buy, verify buyer ANT balance, verify 5% and 95% USDT recipients, and reconcile emitted logs.
 - Test RPC failover, transaction replacement, duplicate event ingestion, confirmation depth, chain reorg handling, and recovery after worker restart.
 
-### Gate 3 — production oracle and liquidity
+### Gate 3 — primary-sale price model and oracle
 
-- A production oracle must be manipulation-resistant and independently reviewed. Preferred design is a sufficiently liquid AMM TWAP with a defined observation window, minimum liquidity/observation coverage, bounded update age, and circuit breakers.
-- Do not use a single spot swap, thin-pool last trade, arbitrary admin-entered price, or mock oracle as the production sale price.
-- Validate price units (USDT per ANT, 8-decimal oracle answer), USDT decimals, token decimals, and rounding with independent test vectors.
-- If liquidity, TWAP observations, or oracle health are inadequate, disable sales. No manual price override.
-- Publish the price source, methodology, observation window, freshness and failure policy.
+- The primary sale is intended to precede broad DEX/CEX listing. Therefore, do not assume a reliable ANT/USDT AMM TWAP exists before the first sale; a TWAP requires real liquidity and observation history.
+- Before implementation, approve and disclose one pricing model: (a) a fixed USDT-per-ANT primary-sale price encoded immutably at deployment, (b) published time/volume price tiers, or (c) an independently reviewed external reference source. The issuer must choose the actual price and sale terms; engineering must not invent them.
+- If an AMM TWAP is used after liquidity exists, require sufficient liquidity and observation coverage, a defined window, bounded update age, deviation circuit breakers and independent review.
+- Do not use a single spot swap, thin-pool last trade, freely editable admin price, or mock oracle as the production sale price.
+- Validate price units (USDT per ANT, 8-decimal oracle answer where applicable), USDT decimals, token decimals, and rounding with independent test vectors.
+- If the approved price source is unavailable, stale or manipulable, disable sales. Publish the price source, methodology, freshness and failure policy.
 
 ### Gate 4 — member and finance operations
 
@@ -93,8 +95,9 @@ Never fabricate volume, holders, users, partnerships, audits, exchange interest,
 | Workstream | Current verified state |
 |---|---|
 | Fixed-supply ANT contract | Implemented in repository; CI previously passed token compile/tests |
-| 5% USDT sale contract | Implemented; 6/18-decimal, zero-output and atomic rollback tests added; token CI passed on commit 9aae7ff; latest backend CI pending |
-| Production oracle | Not implemented/approved |
+| 5% USDT sale contract | Implemented with immutable sale window, global hard cap, per-wallet cap and recipient self-buy protection; 26 contract tests passed on current test branch |
+| Primary-sale price model | Not yet approved; current contract uses a test oracle. Decide fixed price/tiered price/external reference before production |
+| Production oracle | Not implemented/approved; do not assume ANT TWAP exists before liquidity |
 | Testnet deployment | Not yet performed |
 | Safe addresses | Not yet supplied/verified |
 | Member auth | Existing Supabase Auth plus ANT wallet nonce/signature API committed; runtime configuration and end-to-end tests pending |
