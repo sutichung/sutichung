@@ -39,7 +39,8 @@ async function main() {
 
   const gross = ethers.parseUnits("100", 18);
   const minAnt = ethers.parseUnits("95", 18);
-  const tx = await sale.connect(deployer).buy(gross, minAnt);
+  const deadline = BigInt(Math.floor(Date.now() / 1000) + 300);
+  const tx = await sale.connect(deployer).buy(gross, minAnt, deadline);
   const receipt = await tx.wait();
 
   const [feeBalance, treasuryBalance, buyerAnt, saleInventory] = await Promise.all([
