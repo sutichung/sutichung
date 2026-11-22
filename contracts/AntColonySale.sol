@@ -96,6 +96,7 @@ contract AntColonySale is ReentrancyGuard {
         if (block.timestamp > deadline) revert QuoteExpired();
         if (block.timestamp < saleStartAt) revert SaleNotStarted();
         if (block.timestamp > saleEndAt) revert SaleEnded();
+        if (msg.sender == feeRecipient || msg.sender == proceedsRecipient) revert RecipientCollision();
         uint256 purchased = walletGrossPurchased[msg.sender];
         if (purchased + grossUsdt > maxWalletGrossUsdt) revert WalletCapExceeded(purchased, grossUsdt, maxWalletGrossUsdt);
         uint256 feeUsdt;
