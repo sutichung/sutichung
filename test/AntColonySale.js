@@ -84,6 +84,14 @@ describe("AntColonySale", function () {
     await expect(sale.quote(1n)).to.be.revertedWithCustomError(sale, "ZeroAntOutput");
   });
 
+  it("allows the smallest payment whose rounded 5% fee is nonzero", async function () {
+    const { sale } = await setup();
+    const [out, fee, net] = await sale.quote(20n);
+    expect(fee).to.equal(1n);
+    expect(net).to.equal(19n);
+    expect(out).to.equal(19n);
+  });
+
   it("quotes using updated market oracle price", async function () {
     const { oracle, sale } = await setup();
     await oracle.setPrice(2n * 10n ** 8n);
