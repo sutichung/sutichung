@@ -127,6 +127,7 @@ export default function AntPayments() {
       </label>
       <button style={button} disabled={busy||!verified||!status?.saleConfigured} onClick={makeQuote}>取得鏈上報價</button>
     </div>
+    {status?.saleConfigured&&<div style={{...muted,marginTop:8}}>銷售狀態：{status.saleActive?'開放期間':'非開放期間'}｜單錢包上限 {display(status.maxWalletGrossUsdtRaw,decimals)} USDT｜總額上限 {display(status.maxGrossUsdtRaw,decimals)} USDT</div>}
     {quote&&<div style={{marginTop:12,padding:12,background:'#1b1710',border:'1px solid #594728',borderRadius:10}}>
       <b style={{color:'#D6B56D'}}>報價明細（有效 5 分鐘）</b>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:8,fontSize:12}}>
