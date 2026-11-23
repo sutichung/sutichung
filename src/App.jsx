@@ -8,7 +8,6 @@ const LiveMarketTV = lazy(() => import('./LiveMarketTV'));
 const SignalRadar = lazy(() => import('./SignalRadar'));
 const QuantResearch = lazy(() => import('./QuantResearch'));
 const USMarket = lazy(() => import('./USMarket'));
-const CryptoMarket = lazy(() => import('./CryptoMarket'));
 const AntColony = lazy(() => import('./AntColony'));
 const GlobalFinance = lazy(() => import('./GlobalFinance'));
 const GlobalIntelligence = lazy(() => import('./GlobalIntelligence'));
@@ -118,7 +117,6 @@ export default function App(){
  <nav aria-label="市場專區導覽" className="market-zone-nav" style={{position:'sticky',top:0,zIndex:50,display:'flex',gap:8,overflowX:'auto',padding:'9px 0',marginBottom:10,background:'rgba(8,13,24,.96)',backdropFilter:'blur(16px)',borderBottom:'1px solid '+C.border,scrollbarWidth:'thin'}}>
   <a href="#tw-market" style={{flex:'1 0 110px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#18304b',border:'1px solid #315579',color:'#bfdbfe',fontWeight:800,fontSize:13}}>🇹🇼 台股專區</a>
   <a href="#us-market" style={{flex:'1 0 110px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#18372f',border:'1px solid #28634f',color:'#a7f3d0',fontWeight:800,fontSize:13}}>🇺🇸 美股專區</a>
-  <a href="#crypto-market" style={{flex:'1 0 130px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#382b19',border:'1px solid #745323',color:'#fde68a',fontWeight:800,fontSize:13}}>₿ 加密貨幣專區</a>
   <a href="#global-finance" style={{flex:'1 0 140px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#252342',border:'1px solid #514b82',color:'#ddd6fe',fontWeight:800,fontSize:13}}>🌐 全球金融中心</a>
   <a href="#global-intelligence" style={{flex:'1 0 160px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#332334',border:'1px solid #75465c',color:'#fecdd3',fontWeight:800,fontSize:13}}>🛡️ 全球情報攻防中心</a>
   <a href="#strategy-lab" style={{flex:'1 0 130px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#1e3440',border:'1px solid #356274',color:'#bae6fd',fontWeight:800,fontSize:13}}>🧪 策略實驗室</a>
@@ -127,7 +125,6 @@ export default function App(){
  <DeferredSection minHeight={320}><GlobalFinance/></DeferredSection>
  <DeferredSection minHeight={320}><GlobalIntelligence/></DeferredSection>
  <DeferredSection minHeight={360}><USMarket/></DeferredSection>
- <DeferredSection minHeight={360}><CryptoMarket/></DeferredSection>
  <div id="tw-market" style={{scrollMarginTop:78,margin:'12px 0 8px',padding:'13px 14px',borderRadius:12,background:'linear-gradient(100deg,#12263c,#0d1727)',border:'1px solid #315579'}}>
   <div style={{fontSize:20,fontWeight:900,color:'#bfdbfe'}}>🇹🇼 台股交易監控中心</div>
   <div style={{fontSize:11,color:C.muted,marginTop:4}}>上市櫃全市場掃描・法人籌碼・台指期日夜盤・市場心理・AI 多空・風險劇本</div>
