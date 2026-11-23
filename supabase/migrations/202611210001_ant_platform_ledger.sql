@@ -1,3 +1,7 @@
+-- ANT platform identity, wallet proof, admin audit and listing evidence.
+-- Sale orders/events/ledger and the BSC indexer cursor are defined in the dedicated
+-- ant_payment_gateway and ant_indexer_state migrations.
+-- Apply only after review. Trusted writes use service_role; browser writes are denied.
 
 create extension if not exists pgcrypto;
 
