@@ -21,6 +21,7 @@ const globalIntelligence = require('./lib/intelligence');
 const marketIntelligence = require('./lib/market-intelligence');
 const { diagnoseProviders } = require('./lib/provider-diagnostics');
 const { loadOfficialDailyQuotes, diagnoseOfficialDailyQuotes } = require('./lib/official-tw-market');
+const { monthStartKeys, normalizeStockDayRows, mergeStockDayPages } = require('./lib/official-twse-history');
 const { getOfficialFundamentals } = require('./lib/official-tw-fundamentals');
 const { epochMilliseconds, isStaleTimestamp } = require('./lib/market-timestamps');
 const { getTwseTradingRules, validDate: validTradingDate } = require('./lib/tw-market-rules');
@@ -237,25 +238,20 @@ async function loadStockHistory(symbol){
     if(!quote)throw new Error('TPEx 官方 OpenAPI 僅提供最新交易日快照；尚無可用的官方歷史日K介面或已授權歷史資料，拒絕使用第三方歷史資料補值');
     return {data:[{time:quote.asOf,open:quote.open,high:quote.high,low:quote.low,close:quote.close,volume:quote.volume}],source:'TPEx 官方 OpenAPI 最新日行情（單日快照；不足以計算技術指標）',timestamp:now(),asOf:quote.asOf,indicators:null,dataMode:'END_OF_DAY',historicalCoverage:1,historyLimitation:'官方公開 OpenAPI 未提供可查詢日期的歷史個股日K；需使用 TPEx 官方歷史資料商品或累積每日官方快照。',historyStoreWarning:typeof historyStoreWarning==='string'?historyStoreWarning:null};
   }
-  const months=[];
-  for(let i=0;i<12;i++){const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-i);months.push(d.toISOString().slice(0,7)+'-01');}
-  const pages=await mapLimit(months,3,async month=>{
-    const date=month.replace(/-/g,'').slice(0,6)+'01';
+  const months=monthStartKeys(36);
+  const pages=await mapLimit(months,3,async date=>{
     const url='https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date='+date+'&stockNo='+encodeURIComponent(symbol)+'&response=json';
-    let payload;
-    try{payload=await fetchJson(url,15000,{'User-Agent':'TaiwanStockHunter/1.0','Referer':'https://www.twse.com.tw/','Accept':'application/json'});}
-    catch(_){return [];}
-    if(payload.stat&&payload.stat!=='OK')return [];
-    return (payload.data||[]).map(r=>{
-      const parts=String(r[0]||'').trim().split('/');
-      const day=parts.length===3?String(Number(parts[0])+1911)+'-'+String(parts[1]).padStart(2,'0')+'-'+String(parts[2]).padStart(2,'0'):'';
-      const n=parseMarketNumber;
-      return {time:day,volume:n(r[1]),turnover:n(r[2]),open:n(r[3]),high:n(r[4]),low:n(r[5]),close:n(r[6])};
-    }).filter(x=>x.time&&[x.open,x.high,x.low,x.close,x.volume].every(Number.isFinite)&&x.close>0&&x.high>=Math.max(x.low,x.close,x.open)&&x.low<=Math.min(x.high,x.close,x.open)&&x.volume>=0);
+    try{
+      const payload=await fetchJson(url,15000,{'User-Agent':'TaiwanStockHunter/1.0','Referer':'https://www.twse.com.tw/','Accept':'application/json'});
+      if(payload.stat&&payload.stat!=='OK')return {month:date.slice(0,6),rows:[],error:String(payload.stat).slice(0,120)};
+      return {month:date.slice(0,6),rows:normalizeStockDayRows(payload.data||[]),error:null};
+    }catch(error){return {month:date.slice(0,6),rows:[],error:String(error.message||error).slice(0,160)};}
   });
-  const data=[...new Map(pages.flat().map(row=>[row.time,row])).values()].sort((a,b)=>a.time.localeCompare(b.time)).slice(-240);
-  if(data.length<60)throw new Error('TWSE 官方 STOCK_DAY 有效歷史日K不足 60 根；不使用 FinMind 或第三方行情庫補值');
-  return {data,source:'TWSE 官方 STOCK_DAY（日資料；非盤中即時；官方公開歷史查詢起始範圍受交易所限制）',timestamp:now(),asOf:data.at(-1).time,indicators:indicators(data),dataMode:'END_OF_DAY',historicalCoverage:data.length,historyStart:data[0].time};
+  const data=mergeStockDayPages(pages.map(page=>page.rows)).slice(-756);
+  const failedMonths=pages.filter(page=>page.error).map(page=>({month:page.month,error:page.error}));
+  if(data.length<60)throw new Error('TWSE 官方 STOCK_DAY 有效歷史日K不足 60 根；不使用 FinMind 或第三方行情庫補值；失敗月份 '+failedMonths.length+'/36');
+  const historyPersistence=await persistOfficialHistoryBars(symbol,'TWSE',data);
+  return {data,source:'TWSE 官方 STOCK_DAY（日資料；非盤中即時；最多回補近 36 個月，未還原權值）',timestamp:now(),asOf:data.at(-1).time,indicators:indicators(data),dataMode:'END_OF_DAY',historicalCoverage:data.length,historyStart:data[0].time,requestedMonths:36,failedMonths,partialHistory:failedMonths.length>0,historyPersistence};
 }
 
 
@@ -279,6 +275,20 @@ async function supabaseRequest(path,{method='GET',body,token,admin=false,extraHe
   const text=await response.text();let data={};try{data=text?JSON.parse(text):{};}catch(_){data={message:text};}
   if(!response.ok){const error=new Error(data.msg||data.message||data.error_description||data.error||'Supabase request failed');error.status=response.status;throw error;}
   return data;
+}
+async function persistOfficialHistoryBars(symbol,exchange,bars){
+  if(!SUPABASE_CONFIGURED)return {persisted:false,reason:'supabase_not_configured',rows:bars.length};
+  if(!SUPABASE_SERVICE_ROLE_KEY)return {persisted:false,reason:'SUPABASE_SERVICE_ROLE_KEY_not_configured',rows:bars.length};
+  const rows=(bars||[]).map(bar=>({symbol:String(symbol),exchange,trade_date:String(bar.time).slice(0,10),open:bar.open,high:bar.high,low:bar.low,close:bar.close,volume:bar.volume,turnover:Number.isFinite(bar.turnover)?bar.turnover:null,trades:null,source:'TWSE 官方 STOCK_DAY',source_url:'https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date='+String(bar.time).slice(0,7).replace('-','')+'01&stockNo='+encodeURIComponent(symbol)+'&response=json',received_at:now()}));
+  try{
+    let upserted=0;
+    for(let offset=0;offset<rows.length;offset+=500){
+      const batch=rows.slice(offset,offset+500);
+      await supabaseRequest('/rest/v1/tw_market_daily_bars?on_conflict=symbol,exchange,trade_date',{method:'POST',body:batch,admin:true,extraHeaders:{'Prefer':'resolution=merge-duplicates,return=minimal'}});
+      upserted+=batch.length;
+    }
+    return {persisted:true,upserted,source:'TWSE official STOCK_DAY -> Supabase tw_market_daily_bars'};
+  }catch(error){return {persisted:false,upserted:0,rows:rows.length,reason:String(error.message||error).slice(0,220),migrationRequired:/tw_market_daily_bars|relation .* does not exist|404/i.test(String(error.message||error))};}
 }
 async function persistOfficialDailyBars(snapshot){
   if(!SUPABASE_CONFIGURED)return {persisted:false,reason:'supabase_not_configured'};
