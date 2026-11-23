@@ -96,7 +96,16 @@ export default function App(){
   else setStatus(s?.stale?'行情來源中斷・顯示舊快取':s?.error?'行情來源未設定／未連線':s?.source||'行情服務已連線');
   setError(failures.join('；'));
 }catch(e){if(e.name!=='AbortError'){setStatus('資料服務未連線');setError(e.message);}}finally{refreshBusy.current=false;}},[]);
- const fastRefresh=useCallback(async signal=>{if(fastBusy.current)return;fastBusy.current=true;try{const [s,fu]=await Promise.all([getJSON('/snapshot',signal),getJSON('/futures',signal)]);if(!s.error&&!s.stale){setSnapshot(s.data||{});setStatus(s.source||'行情服務已連線');setQuoteSource(s.source||'未取得行情來源');setUpdatedAt(s.timestamp||new Date().toISOString());}if(!fu.error&&!fu.stale)setFutures(fu.data?{...fu.data,source:fu.source||'',timestamp:fu.timestamp||null}:null);}catch(e){if(e.name!=='AbortError')setStatus('行情更新失敗');}finally{fastBusy.current=false;}},[]);
+ const fastRefresh=useCallback(async signal=>{if(fastBusy.current)return;fastBusy.current=true;try{
+  const [snapshotResult,futuresResult]=await Promise.allSettled([getJSON('/snapshot',signal),getJSON('/futures',signal)]);
+  if(signal?.aborted)return;
+  const s=snapshotResult.status==='fulfilled'?snapshotResult.value:null;
+  const fu=futuresResult.status==='fulfilled'?futuresResult.value:null;
+  if(s&&!s.error&&!s.stale){setSnapshot(s.data||{});setStatus(s.source||'行情服務已連線');setQuoteSource(s.source||'未取得行情來源');setUpdatedAt(s.timestamp||new Date().toISOString());}
+  if(fu&&!fu.error&&!fu.stale)setFutures(fu.data?{...fu.data,source:fu.source||'',timestamp:fu.timestamp||null}:null);
+  if(snapshotResult.status==='rejected'&&futuresResult.status==='rejected')setStatus('行情更新失敗（快照與期貨來源均無回應）');
+  else if(snapshotResult.status==='rejected'||futuresResult.status==='rejected')setStatus('部分行情更新失敗（其他資料仍保留）');
+}catch(e){if(e.name!=='AbortError')setStatus('行情更新失敗');}finally{fastBusy.current=false;}},[]);
  useEffect(()=>{const c=new AbortController();refresh(c.signal);const t=setInterval(()=>refresh(c.signal),120000);return()=>{c.abort();clearInterval(t);};},[refresh]);
  useEffect(()=>{const c=new AbortController();const t=setInterval(()=>fastRefresh(c.signal),15000);return()=>{c.abort();clearInterval(t);};},[fastRefresh]);
  const runAgents=useCallback(async(signal,force=false)=>{setAgentsLoading(true);try{const result=await getJSON('/agents/'+encodeURIComponent(selected)+(force?'?refresh=1':''),signal);setAgents(result.agents||[]);setAgentConsensus(result.consensus||null);setAgentsUpdatedAt(result.analysisTime||new Date().toISOString());}catch(e){if(e.name!=='AbortError')setAgents([{provider:'gemini',status:'error',message:e.message},{provider:'groq',status:'error',message:e.message},{provider:'cloudflare',status:'error',message:e.message}]);setAgentConsensus(null);}finally{setAgentsLoading(false);}},[selected]);
