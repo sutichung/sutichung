@@ -1,0 +1,120 @@
+
+create extension if not exists pgcrypto;
+
+create table if not exists public.ant_admin_roles (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  role text not null check (role in ('SUPER_ADMIN','FINANCE_VIEWER','SUPPORT')),
+  granted_by uuid references auth.users(id) on delete set null,
+  granted_at timestamptz not null default now(),
+  primary key (user_id, role)
+);
+
+create table if not exists public.ant_wallets (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  chain_id bigint not null check (chain_id = 97),
+  wallet_address text not null check (char_length(wallet_address) = 42 and wallet_address ~ '^0x[0-9a-fA-F]+$'),
+  verified_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  unique (chain_id, wallet_address)
+);
+create index if not exists ant_wallets_user_idx on public.ant_wallets(user_id, chain_id);
+
+create table if not exists public.ant_wallet_nonces (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  chain_id bigint not null check (chain_id = 97),
+  wallet_address text not null check (char_length(wallet_address) = 42 and wallet_address ~ '^0x[0-9a-fA-F]+$'),
+  nonce text not null unique,
+  domain text not null,
+  issued_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  consumed_at timestamptz,
+  check (expires_at > issued_at)
+);
+create index if not exists ant_wallet_nonces_expiry_idx
+  on public.ant_wallet_nonces(expires_at) where consumed_at is null;
+
+create table if not exists public.ant_admin_audit_log (
+  id uuid primary key default gen_random_uuid(),
+  actor_user_id uuid references auth.users(id) on delete set null,
+  action text not null,
+  target_type text,
+  target_id text,
+  request_id text,
+  ip_hash text,
+  details jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists ant_admin_audit_log_time_idx
+  on public.ant_admin_audit_log(created_at desc);
+
+create table if not exists public.ant_listing_metric_snapshots (
+  id uuid primary key default gen_random_uuid(),
+  metric_date date not null,
+  category text not null check (category in ('onchain','market','community','product','security','compliance')),
+  metric_key text not null,
+  metric_value numeric,
+  unit text,
+  source_name text not null,
+  source_url text,
+  methodology text not null,
+  evidence_hash text,
+  observed_at timestamptz not null,
+  freshness_seconds integer check (freshness_seconds is null or freshness_seconds >= 0),
+  quality_status text not null check (quality_status in ('verified','delayed','unavailable','disputed')),
+  limitations text,
+  created_at timestamptz not null default now(),
+  unique (metric_date, category, metric_key, source_name)
+);
+create index if not exists ant_listing_metric_date_idx
+  on public.ant_listing_metric_snapshots(metric_date desc, category);
+
+alter table public.ant_admin_roles enable row level security;
+alter table public.ant_wallets enable row level security;
+alter table public.ant_wallet_nonces enable row level security;
+alter table public.ant_admin_audit_log enable row level security;
+alter table public.ant_listing_metric_snapshots enable row level security;
+
+drop policy if exists ant_admin_roles_read_self on public.ant_admin_roles;
+create policy ant_admin_roles_read_self on public.ant_admin_roles
+  for select to authenticated using (user_id = auth.uid());
+
+drop policy if exists ant_wallets_read_owner_or_finance on public.ant_wallets;
+create policy ant_wallets_read_owner_or_finance on public.ant_wallets
+  for select to authenticated using (
+    user_id = auth.uid()
+    or exists (
+      select 1 from public.ant_admin_roles r
+      where r.user_id = auth.uid() and r.role in ('SUPER_ADMIN','FINANCE_VIEWER')
+    )
+  );
+
+drop policy if exists ant_admin_audit_read_super_admin on public.ant_admin_audit_log;
+create policy ant_admin_audit_read_super_admin on public.ant_admin_audit_log
+  for select to authenticated using (
+    exists (
+      select 1 from public.ant_admin_roles r
+      where r.user_id = auth.uid() and r.role = 'SUPER_ADMIN'
+    )
+  );
+
+drop policy if exists ant_listing_metrics_read_authenticated on public.ant_listing_metric_snapshots;
+create policy ant_listing_metrics_read_authenticated on public.ant_listing_metric_snapshots
+  for select to authenticated using (true);
+
+revoke all on public.ant_admin_roles, public.ant_wallets, public.ant_wallet_nonces,
+  public.ant_admin_audit_log, public.ant_listing_metric_snapshots from anon;
+revoke insert, update, delete on public.ant_admin_roles, public.ant_wallets, public.ant_wallet_nonces,
+  public.ant_admin_audit_log, public.ant_listing_metric_snapshots from authenticated;
+grant select on public.ant_admin_roles, public.ant_wallets, public.ant_listing_metric_snapshots to authenticated;
+grant select on public.ant_admin_audit_log to authenticated;
+grant select, insert, update, delete on public.ant_admin_roles to service_role;
+grant select, insert, update, delete on public.ant_wallets, public.ant_wallet_nonces to service_role;
+grant select, insert on public.ant_admin_audit_log to service_role;
+grant select, insert on public.ant_listing_metric_snapshots to service_role;
+
+comment on table public.ant_wallet_nonces is
+  'Server-managed one-time wallet challenge nonces. Service role only.';
+comment on table public.ant_listing_metric_snapshots is
+  'Evidence-backed listing metrics with source, timestamp, methodology and quality status.';
