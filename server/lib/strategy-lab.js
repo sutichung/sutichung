@@ -209,7 +209,8 @@ function runStrategyLab(input, options={}) {
     {id:'in_sample',label:'訓練區間',start:trainStart,end:trainEnd},
     {id:'out_of_sample',label:'樣本外區間',start:testStart,end:testEnd}
   ];
-  const benchmark=runBuyAndHold(candles,testStart,testEnd,costs);\n  const baseStrategies=STRATEGIES.map(strategy=>{
+  const benchmark=runBuyAndHold(candles,testStart,testEnd,costs);
+  const baseStrategies=STRATEGIES.map(strategy=>{
     const results=periods.map(period=>({...period,metrics:runStrategy(strategy.id,candles,period.start,period.end,costs),marketRegime:classifyRegime(candles.slice(period.start,period.end))}));
     const oos=results[1].metrics;
     const wf=walkForward(strategy.id,candles,testStart,testEnd,costs,3);
