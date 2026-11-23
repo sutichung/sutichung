@@ -221,27 +221,28 @@ function validateSymbol(s){return /^[0-9A-Z]{2,10}$/.test(s||'');}
 function rateLimit(req){const ip=req.socket.remoteAddress||'unknown';const t=Date.now();let a=RATE.get(ip)||[];a=a.filter(x=>t-x<60000);if(a.length>=480)return false;a.push(t);RATE.set(ip,a);return true;}
 
 async function loadTPExStockHistory(symbol){
-  const months=monthStartKeys(36);
+  const historyMonths=18;
+  const months=monthStartKeys(historyMonths);
   const pages=await mapLimit(months,3,async month=>{
     const date=formatTPExQueryMonth(month);
     const url='https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock?code='+encodeURIComponent(symbol)+'&date='+date+'&response=json';
     try{
-      const payload=await fetchJson(url,15000,{'User-Agent':'TaiwanStockHunter/1.0','Referer':'https://www.tpex.org.tw/','Accept':'application/json, text/plain, */*'});
+      const payload=await fetchJson(url,10000,{'User-Agent':'TaiwanStockHunter/1.0','Referer':'https://www.tpex.org.tw/','Accept':'application/json, text/plain, */*'});
       if(payload.stat&&String(payload.stat).toLowerCase()!=='ok')return {month:month.slice(0,6),rows:[],error:String(payload.stat).slice(0,140)};
       return {month:month.slice(0,6),rows:normalizeTPExTradingStock(payload),error:null};
     }catch(error){
       return {month:month.slice(0,6),rows:[],error:String(error.message||error).slice(0,160)};
     }
   });
-  const data=mergeTPExHistoryPages(pages.map(page=>page.rows)).slice(-756);
+  const data=mergeTPExHistoryPages(pages.map(page=>page.rows)).slice(-500);
   const failedMonths=pages.filter(page=>page.error).map(page=>({month:page.month,error:page.error}));
-  if(!data.length)throw new Error('TPEx 官方 tradingStock 歷史日K沒有回傳有效資料；失敗月份 '+failedMonths.length+'/36');
+  if(!data.length)throw new Error('TPEx 官方 tradingStock 歷史日K沒有回傳有效資料；失敗月份 '+failedMonths.length+'/'+historyMonths);
   const historyPersistence=await persistOfficialHistoryBars(symbol,'TPEx',data);
   return {
     data,source:'TPEx 官方網站 afterTrading/tradingStock（月查詢；日收盤 OHLCV；未還原權值）',
     timestamp:now(),asOf:data.at(-1).time,indicators:data.length>=60?indicators(data):null,
     dataMode:'END_OF_DAY',historicalCoverage:data.length,historyStart:data[0].time,
-    requestedMonths:36,failedMonths,monthCoverage:pages.map(page=>({month:page.month,rows:page.rows.length,error:page.error})),partialHistory:failedMonths.length>0,historyPersistence,
+    requestedMonths:historyMonths,failedMonths,monthCoverage:pages.map(page=>({month:page.month,rows:page.rows.length,error:page.error})),partialHistory:failedMonths.length>0,historyPersistence,
     historyLimitation:data.length<130?'目前取得 '+data.length+' 根有效官方日K；策略實驗室至少需要 130 根才可回測。':''
   };
 }
