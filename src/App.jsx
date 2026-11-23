@@ -59,8 +59,53 @@ function AgentCard({provider,agent}){
 export default function App(){
  const refreshBusy=useRef(false),fastBusy=useRef(false);
  const [universe,setUniverse]=useState([]),[selected,setSelected]=useState('2330'),[snapshot,setSnapshot]=useState({}),[history,setHistory]=useState([]),[historyMeta,setHistoryMeta]=useState({}),[quoteSource,setQuoteSource]=useState('尚未取得行情來源'),[agents,setAgents]=useState([]),[agentConsensus,setAgentConsensus]=useState(null),[agentsLoading,setAgentsLoading]=useState(false),[agentsUpdatedAt,setAgentsUpdatedAt]=useState(null),[autoAiEnabled,setAutoAiEnabled]=useState(true),[flows,setFlows]=useState({}),[futures,setFutures]=useState(null),[sentiment,setSentiment]=useState(null),[status,setStatus]=useState('等待資料服務連線'),[updatedAt,setUpdatedAt]=useState(null),[query,setQuery]=useState(''),[sort,setSort]=useState('score'),[scanFilter,setScanFilter]=useState('all'),[error,setError]=useState(''),[news,setNews]=useState([]),[scanCount,setScanCount]=useState(0),[scanUpdatedAt,setScanUpdatedAt]=useState(null),[fundamentals,setFundamentals]=useState(null),[fundamentalsLoading,setFundamentalsLoading]=useState(false);
- const refresh=useCallback(async signal=>{if(refreshBusy.current)return;refreshBusy.current=true;try{const [u,s,f,fu,se,sc,n]=await Promise.all([getJSON('/universe',signal),getJSON('/snapshot',signal),getJSON('/institutional-flows',signal),getJSON('/futures',signal),getJSON('/sentiment',signal),getJSON('/scan',signal),getJSON('/news',signal)]);const scanData=sc.data||{};setUniverse((u.data||[]).map(item=>({...item,...(scanData[item.symbol]||{}),indicators:scanData[item.symbol]||item.indicators,scorecard:scanData[item.symbol]?.scorecard})));setScanCount(Number(sc.scannedCount??Object.keys(scanData).length));setScanUpdatedAt(sc.timestamp||null);setSnapshot(s.data||{});setFlows(f.data||{});setFutures(fu.data?{...fu.data,source:fu.source||'',timestamp:fu.timestamp||null}:null);setSentiment({...((se.data)||{}),advanceDecline:sc.advanceDecline??se.data?.advanceDecline});setNews(n.data||[]);setStatus(s.stale?'行情來源中斷・顯示舊快取':s.error?'行情來源未設定／未連線':s.source||'行情服務已連線');setQuoteSource(s.source||'未取得行情來源');setUpdatedAt(s.timestamp||new Date().toISOString());setError([s.error,sc.error,f.error,fu.error,se.error,n.error].filter(Boolean).join('；'));}catch(e){if(e.name!=='AbortError'){setStatus('資料服務未連線');setError(e.message);}}finally{refreshBusy.current=false;}},[]);
- const fastRefresh=useCallback(async signal=>{if(fastBusy.current)return;fastBusy.current=true;try{const [s,fu]=await Promise.all([getJSON('/snapshot',signal),getJSON('/futures',signal)]);if(!s.error&&!s.stale){setSnapshot(s.data||{});setStatus(s.source||'行情服務已連線');setQuoteSource(s.source||'未取得行情來源');setUpdatedAt(s.timestamp||new Date().toISOString());}if(!fu.error&&!fu.stale)setFutures(fu.data?{...fu.data,source:fu.source||'',timestamp:fu.timestamp||null}:null);}catch(e){if(e.name!=='AbortError')setStatus('行情更新失敗');}finally{fastBusy.current=false;}},[]);
+ const refresh=useCallback(async signal=>{if(refreshBusy.current)return;refreshBusy.current=true;try{
+  const names=['公司清單','行情快照','法人籌碼','台指期','市場情緒','全市場掃描','市場新聞'];
+  const results=await Promise.allSettled([
+    getJSON('/universe',signal),getJSON('/snapshot',signal),getJSON('/institutional-flows',signal),
+    getJSON('/futures',signal),getJSON('/sentiment',signal),getJSON('/scan',signal),getJSON('/news',signal)
+  ]);
+  if(signal?.aborted)return;
+  const values=results.map(x=>x.status==='fulfilled'?x.value:null);
+  const [u,s,f,fu,se,sc,n]=values;
+  const scanData=sc?.data||{};
+  if(u){
+    setUniverse((u.data||[]).map(item=>({...item,...(scanData[item.symbol]||{}),indicators:scanData[item.symbol]||item.indicators,scorecard:scanData[item.symbol]?.scorecard})));
+  }
+  if(sc){
+    setScanCount(Number(sc.scannedCount??Object.keys(scanData).length));
+    setScanUpdatedAt(sc.timestamp||null);
+  }
+  if(s){
+    setSnapshot(s.data||{});
+    setQuoteSource(s.source||'未取得行情來源');
+    setUpdatedAt(s.timestamp||new Date().toISOString());
+  }
+  if(f)setFlows(f.data||{});
+  if(fu)setFutures(fu.data?{...fu.data,source:fu.source||'',timestamp:fu.timestamp||null}:null);
+  if(se||sc)setSentiment(prev=>({...((se?.data)||prev||{}),advanceDecline:sc?.advanceDecline??se?.data?.advanceDecline??prev?.advanceDecline}));
+  if(n)setNews(n.data||[]);
+  const failures=results.map((item,index)=>{
+    if(item.status==='rejected')return names[index]+'：'+(item.reason?.message||'請求失敗');
+    if(item.value?.error)return names[index]+'：'+item.value.error;
+    return null;
+  }).filter(Boolean);
+  const coreAvailable=!!((u&&!u.error)||(s&&!s.error));
+  if(!coreAvailable)setStatus('資料服務未連線');
+  else if(failures.length)setStatus('部分資料服務異常（核心行情仍可用）');
+  else setStatus(s?.stale?'行情來源中斷・顯示舊快取':s?.error?'行情來源未設定／未連線':s?.source||'行情服務已連線');
+  setError(failures.join('；'));
+}catch(e){if(e.name!=='AbortError'){setStatus('資料服務未連線');setError(e.message);}}finally{refreshBusy.current=false;}},[]);
+ const fastRefresh=useCallback(async signal=>{if(fastBusy.current)return;fastBusy.current=true;try{
+  const [snapshotResult,futuresResult]=await Promise.allSettled([getJSON('/snapshot',signal),getJSON('/futures',signal)]);
+  if(signal?.aborted)return;
+  const s=snapshotResult.status==='fulfilled'?snapshotResult.value:null;
+  const fu=futuresResult.status==='fulfilled'?futuresResult.value:null;
+  if(s&&!s.error&&!s.stale){setSnapshot(s.data||{});setStatus(s.source||'行情服務已連線');setQuoteSource(s.source||'未取得行情來源');setUpdatedAt(s.timestamp||new Date().toISOString());}
+  if(fu&&!fu.error&&!fu.stale)setFutures(fu.data?{...fu.data,source:fu.source||'',timestamp:fu.timestamp||null}:null);
+  if(snapshotResult.status==='rejected'&&futuresResult.status==='rejected')setStatus('行情更新失敗（快照與期貨來源均無回應）');
+  else if(snapshotResult.status==='rejected'||futuresResult.status==='rejected')setStatus('部分行情更新失敗（其他資料仍保留）');
+}catch(e){if(e.name!=='AbortError')setStatus('行情更新失敗');}finally{fastBusy.current=false;}},[]);
  useEffect(()=>{const c=new AbortController();refresh(c.signal);const t=setInterval(()=>refresh(c.signal),120000);return()=>{c.abort();clearInterval(t);};},[refresh]);
  useEffect(()=>{const c=new AbortController();const t=setInterval(()=>fastRefresh(c.signal),15000);return()=>{c.abort();clearInterval(t);};},[fastRefresh]);
  const runAgents=useCallback(async(signal,force=false)=>{setAgentsLoading(true);try{const result=await getJSON('/agents/'+encodeURIComponent(selected)+(force?'?refresh=1':''),signal);setAgents(result.agents||[]);setAgentConsensus(result.consensus||null);setAgentsUpdatedAt(result.analysisTime||new Date().toISOString());}catch(e){if(e.name!=='AbortError')setAgents([{provider:'gemini',status:'error',message:e.message},{provider:'groq',status:'error',message:e.message},{provider:'cloudflare',status:'error',message:e.message}]);setAgentConsensus(null);}finally{setAgentsLoading(false);}},[selected]);
