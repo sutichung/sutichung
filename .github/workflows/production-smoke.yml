@@ -167,7 +167,8 @@ jobs:
               barCount: Number(tpexStrategy.barCount || 0),
               asOf: tpexStrategy.asOf || null,
               strategyCount: Number(tpexStrategy.strategyCount || 0),
-              error: tpexStrategy.error || null
+              error: tpexStrategy.error || null,
+              historyDiagnostics: tpexStrategy.historyDiagnostics || null
             },
             providerFailures,
             optionalProviderRestrictions,
