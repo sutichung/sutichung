@@ -1,3 +1,5 @@
+-- Allow order submission to store tx_hash before the event log index is known.
+-- This also safely upgrades databases where the earlier unnamed equality check was applied.
 do $$
 declare c record;
 begin
@@ -17,10 +19,12 @@ alter table public.ant_payment_orders
   add constraint ant_payment_orders_tx_log_requires_hash
   check (tx_log_index is null or tx_hash is not null);
 
+-- One submitted purchase per transaction is supported by this API.
 create unique index if not exists ant_payment_orders_chain_tx_hash_uidx
   on public.ant_payment_orders(chain_id, tx_hash)
   where tx_hash is not null;
 
+-- Lifetime totals are aggregated in PostgreSQL, not from the API's 500-row display page.
 create or replace view public.ant_financial_ledger_totals as
 select entry_type, sum(amount_raw)::numeric(78,0) as amount_raw, count(*)::bigint as entry_count
 from public.ant_financial_ledger
