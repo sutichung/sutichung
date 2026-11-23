@@ -2,7 +2,13 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseRocDate, normalizeTPExTradingStock, mergeTPExHistoryPages } = require('../lib/official-tpex-history');
+const { parseRocDate, formatTPExQueryMonth, normalizeTPExTradingStock, mergeTPExHistoryPages } = require('../lib/official-tpex-history');
+
+test('formats TPEx query months in ROC calendar years', () => {
+  assert.equal(formatTPExQueryMonth('20261101'), '115/11/01');
+  assert.equal(formatTPExQueryMonth('202312'), '112/12/01');
+  assert.throws(() => formatTPExQueryMonth('bad-date'), /YYYYMM/);
+});
 
 test('converts ROC trading dates to Gregorian dates', () => {
   assert.equal(parseRocDate('108/03/04'), '2019-03-04');
