@@ -346,6 +346,10 @@ function isAdminUser(user){return !!(user&&user.email&&SUPABASE_ADMIN_EMAIL&&Str
 
 async function route(req,res){
   const u=new URL(req.url,'http://localhost');
+  // Crypto market is sealed until data licensing, reliability and product readiness are approved.
+  if(u.pathname==='/api/crypto'||u.pathname.startsWith('/api/crypto/'))return json(res,503,{status:'feature_disabled',feature:'crypto_market',message:'加密貨幣功能尚未開放；待資料授權、可靠性與產品驗收完成後再啟用。'});
+  if(u.pathname.startsWith('/api/research/strategies/')&&u.searchParams.get('market')==='crypto')return json(res,503,{status:'feature_disabled',feature:'crypto_research',message:'加密貨幣研究功能暫時封存。'});
+  if(u.pathname==='/api/intelligence/market-signals')return json(res,503,{status:'feature_disabled',feature:'crypto_market_intelligence',message:'加密貨幣市場情報暫時封存。'});
   // Keep liveness probes independent of auth and optional provider handlers.
   if(req.method==='GET'&&['/api/health/live','/api/health'].includes(u.pathname))return json(res,200,buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}));
   if(req.method==='POST'&&u.pathname==='/api/automation/research/outcomes'){
@@ -532,7 +536,7 @@ async function route(req,res){
     return json(res,result.status==='unavailable'?503:200,result);
   }
   if(u.pathname==='/api/health/ready'&&req.method==='GET'){const readiness=buildDependencyReadiness();return json(res,200,{...buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}),...readiness});}
-  if(u.pathname==='/api/health/details'){let cryptoStatus=cryptoRealtimeFeed.status();if(process.env.CRYPTO_STREAM_EMBEDDED==='false'){try{cryptoStatus=await cryptoEventStorage.readStatus();}catch(error){cryptoStatus={...cryptoStatus,workerStatusError:error.message};}}return json(res,200,{...buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}),auth:{configured:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY},provider:'TWSE + TPEx official OpenAPI',trading:getTradingReadiness(),cryptoStreaming:cryptoStatus,providers:{finmind:false,youtubeApiKeyConfigured:!!process.env.YOUTUBE_API_KEY,youtubeLiveResolver:!!process.env.YOUTUBE_API_KEY,youtubeChannelEmbedFallback:true,openrouter:!!process.env.OPENROUTER_API_KEY,gemini:!!process.env.GEMINI_API_KEY,groq:!!process.env.GROQ_API_KEY,xai:!!process.env.XAI_API_KEY,deepseek:!!process.env.DEEPSEEK_API_KEY,cloudflare:!!(process.env.CLOUDFLARE_API_TOKEN&&process.env.CLOUDFLARE_ACCOUNT_ID),realtime:cryptoStatus.connectedFeedCount>0,realtimeProviderConfigured:(cryptoStatus.exchanges||[]).length>0,officialDailyMarketData:true,twseOfficialOpenApi:true,tpexOfficialOpenApi:true,licensedRealtimeFeedConfigured:(cryptoStatus.exchanges||[]).length>0,cryptoEventStorageConfigured:cryptoStatus.storage?.configured===true,telegramAlertsConfigured:cryptoStatus.telegramConfigured===true,scan:stale('scan')?.status==='ready',flows:true,futures:true,sentiment:!!stale('sentiment')?.data,news:true,openDataArchive:false,officialFundamentals:true,twseHistoricalKline:true,tpexHistoricalKline:Number(stale('scan')?.markets?.TPEx||0)>0}});}
+  if(u.pathname==='/api/health/details'){const cryptoStatus={enabled:false,status:'disabled',reason:'feature_sealed_pending_readiness'};return json(res,200,{...buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}),auth:{configured:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY},provider:'TWSE + TPEx official OpenAPI',trading:getTradingReadiness(),cryptoStreaming:cryptoStatus,providers:{finmind:false,youtubeApiKeyConfigured:!!process.env.YOUTUBE_API_KEY,youtubeLiveResolver:!!process.env.YOUTUBE_API_KEY,youtubeChannelEmbedFallback:true,openrouter:!!process.env.OPENROUTER_API_KEY,gemini:!!process.env.GEMINI_API_KEY,groq:!!process.env.GROQ_API_KEY,xai:!!process.env.XAI_API_KEY,deepseek:!!process.env.DEEPSEEK_API_KEY,cloudflare:!!(process.env.CLOUDFLARE_API_TOKEN&&process.env.CLOUDFLARE_ACCOUNT_ID),realtime:false,realtimeProviderConfigured:false,officialDailyMarketData:true,twseOfficialOpenApi:true,tpexOfficialOpenApi:true,licensedRealtimeFeedConfigured:false,cryptoEventStorageConfigured:false,telegramAlertsConfigured:false,scan:stale('scan')?.status==='ready',flows:true,futures:true,sentiment:!!stale('sentiment')?.data,news:true,openDataArchive:false,officialFundamentals:true,twseHistoricalKline:true,tpexHistoricalKline:Number(stale('scan')?.markets?.TPEx||0)>0}});}
   if(SUPABASE_CONFIGURED&&u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/api/auth/')){
     const automationPaths=new Set(['/api/market/snapshot','/api/market/institutional-flows','/api/market/futures','/api/market/sentiment','/api/market/scan','/api/market/news','/api/market/calendar','/api/diagnostics/providers','/api/diagnostics/vulnerabilities','/api/diagnostics/market','/api/crypto/market','/api/crypto/realtime/status','/api/crypto/realtime/quotes','/api/crypto/risk/BTCUSDT','/api/us/market']);
     const smokeReadOnlyPaths=new Set(['/api/diagnostics/providers','/api/diagnostics/vulnerabilities','/api/diagnostics/market','/api/crypto/market','/api/crypto/realtime/status','/api/crypto/realtime/quotes','/api/crypto/risk/BTCUSDT']);
@@ -632,11 +636,11 @@ async function route(req,res){
         return {...item,technical:{status:'research-ready',direction,score,confidence:Math.round(available.length/checks.length*100),checks:checks.map(x=>({name:x[0],bullish:x[1],bearish:x[2]})),indicators:v,asOf:h.asOf}};
       }catch(e){return {...item,technical:{status:'error',direction:'資料暫缺',score:null,error:e.message}};}
     }));
-    antColony.enqueue('CRYPTO',results,String(market.timestamp||'market')+':'+offset);
+
     return json(res,200,{results,offset,nextOffset:offset+batch.length,total:(market.markets||[]).length,done:offset+batch.length>=(market.markets||[]).length,source:'多交易所逐市場日K技術掃描',timestamp:now()});
   }
   if(u.pathname==='/api/crypto/news'){
-    const result=await safeLoad('crypto-news',300000,cryptoMarket.loadNews,e=>({data:[],source:'unavailable',timestamp:now(),error:e.message}));
+      Promise.resolve({data:[],source:'disabled',status:'disabled'}),
     return json(res,200,result);
   }
   if(u.pathname.startsWith('/api/research/strategies/')||u.pathname.startsWith('/api/market/research/strategies/')){
@@ -1001,7 +1005,7 @@ async function route(req,res){
         const rows=await fetchJson('https://openapi.twse.com.tw/v1/news/newsList',12000);
         return {data:(rows||[]).map(r=>{const pick=re=>{const k=Object.keys(r).find(key=>re.test(key));return k?r[k]:'';};return {title:String(pick(/title|標題|主旨/i)||''),summary:String(pick(/content|摘要|內容/i)||''),url:String(pick(/url|link|網址|連結/i)||''),source:'臺灣證券交易所公告',publishedAt:String(pick(/date|時間|日期/i)||'')};}).filter(x=>x.title).slice(0,50),source:'TWSE OpenAPI',timestamp:now()};
       },e=>({data:[],source:'unavailable',error:e.message,timestamp:now()})),
-      safeLoad('crypto-news',300000,cryptoMarket.loadNews,e=>({data:[],source:'unavailable',error:e.message,timestamp:now()})),
+      Promise.resolve({data:[],source:'disabled',status:'disabled'}),
       safeLoad('global-finance-fx',60*60*1000,globalFinance.loadFx,e=>({rates:[],errors:[],base:'EUR',source:'unavailable',fetchedAt:now(),error:e.message}))
     ]);
     const market=results[0].status==='fulfilled'?results[0].value:{data:[]};
@@ -1036,8 +1040,8 @@ const server=http.createServer(async(req,res)=>{
   try{await route(req,res);}catch(e){json(res,500,{error:'internal_error',message:process.env.NODE_ENV==='production'?'服務暫時無法處理請求':e.message});}
 });
 server.listen(PORT,()=>{
-  if(process.env.CRYPTO_STREAM_EMBEDDED!=='false') cryptoRealtimeFeed.start();
+  // Crypto stream startup intentionally disabled until explicit readiness approval.
   process.stdout.write('Taiwan stock API listening on '+PORT+'\\n');
 });
-process.once('SIGTERM',()=>{cryptoRealtimeFeed.stop().finally(()=>server.close(()=>process.exit(0)));});
-process.once('SIGINT',()=>{cryptoRealtimeFeed.stop().finally(()=>server.close(()=>process.exit(0)));});
+process.once('SIGTERM',()=>server.close(()=>process.exit(0)));
+process.once('SIGINT',()=>server.close(()=>process.exit(0)));
