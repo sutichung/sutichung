@@ -4,9 +4,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { parseRocDate, formatTPExQueryMonth, normalizeTPExTradingStock, mergeTPExHistoryPages } = require('../lib/official-tpex-history');
 
-test('formats TPEx query months in ROC calendar years', () => {
-  assert.equal(formatTPExQueryMonth('20261101'), '115/11/01');
-  assert.equal(formatTPExQueryMonth('202312'), '112/12/01');
+test('formats TPEx query months in Gregorian calendar years', () => {
+  assert.equal(formatTPExQueryMonth('20261101'), '2026/11/01');
+  assert.equal(formatTPExQueryMonth('202312'), '2023/12/01');
   assert.throws(() => formatTPExQueryMonth('bad-date'), /YYYYMM/);
 });
 

@@ -10,10 +10,10 @@ function parseNumber(value) {
 function formatTPExQueryMonth(value) {
   const match = String(value || '').match(/^(\d{4})(\d{2})(?:01)?$/);
   if (!match) throw new Error('TPEx query month must be YYYYMM or YYYYMM01');
-  const rocYear = Number(match[1]) - 1911;
+  const year = Number(match[1]);
   const month = Number(match[2]);
-  if (rocYear < 1 || month < 1 || month > 12) throw new Error('TPEx query month is outside the supported ROC calendar');
-  return String(rocYear).padStart(3, '0') + '/' + String(month).padStart(2, '0') + '/01';
+  if (year < 1912 || month < 1 || month > 12) throw new Error('TPEx query month is outside the supported Gregorian calendar');
+  return String(year) + '/' + String(month).padStart(2, '0') + '/01';
 }
 
 function parseRocDate(value) {
