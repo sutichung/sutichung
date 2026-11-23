@@ -25,6 +25,7 @@ const { loadOfficialDailyQuotes, diagnoseOfficialDailyQuotes } = require('./lib/
 const { getOfficialFundamentals } = require('./lib/official-tw-fundamentals');
 const { epochMilliseconds, isStaleTimestamp } = require('./lib/market-timestamps');
 const { getTwseTradingRules, validDate: validTradingDate } = require('./lib/tw-market-rules');
+const { buildMarketDataQuality } = require('./lib/market-data-quality');
 const { createDependencyVulnerabilityScanner } = require('./lib/dependency-vulnerabilities');
 const { verifyGitHubActionsToken } = require('./lib/github-oidc');
 const { buildRuntimeHealth, buildDependencyReadiness } = require('./lib/health');
@@ -811,6 +812,16 @@ async function route(req,res){
     const result=await safeLoad('snapshot',TTL.snapshot,loadOfficialDailyQuotes,e=>({data:{},source:'unavailable',timestamp:now(),dataMode:'END_OF_DAY',delayed:true,error:e.message,quoteCount:0}));
     const historyPersistence=result.data&&Object.keys(result.data).length?await persistOfficialDailyBars(result):{persisted:false,reason:'no_official_snapshot'};
     return json(res,200,{...result,historyPersistence});
+  }
+  if(u.pathname==='/api/diagnostics/data-quality'){
+    const [quotes,history,flows,listed]=await Promise.all([
+      safeLoad('market-quality-quotes',60*1000,diagnoseOfficialDailyQuotes,e=>({ok:false,quoteCount:0,realtime:false,dataMode:'unknown',error:e.message})),
+      safeLoad('official-market-history-diagnostics',30*60*1000,()=>loadOfficialMarketHistory(120),e=>({data:{},error:e.message,historyDateCount:0,historyCount:0})),
+      safeLoad('flows',TTL.flows,twseInstitutionalFlows,e=>({data:{},error:e.message})),
+      safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],error:e.message}))
+    ]);
+    const report=buildMarketDataQuality({quotes,history,flows,listed,now:now()});
+    return json(res,report.status==='healthy'?200:503,report);
   }
   if(u.pathname==='/api/diagnostics/analysis'){
     const [history,flows,listed]=await Promise.all([
