@@ -241,7 +241,7 @@ async function loadTPExStockHistory(symbol){
     data,source:'TPEx 官方網站 afterTrading/tradingStock（月查詢；日收盤 OHLCV；未還原權值）',
     timestamp:now(),asOf:data.at(-1).time,indicators:data.length>=60?indicators(data):null,
     dataMode:'END_OF_DAY',historicalCoverage:data.length,historyStart:data[0].time,
-    requestedMonths:36,failedMonths,partialHistory:failedMonths.length>0,historyPersistence,
+    requestedMonths:36,failedMonths,monthCoverage:pages.map(page=>({month:page.month,rows:page.rows.length,error:page.error})),partialHistory:failedMonths.length>0,historyPersistence,
     historyLimitation:data.length<130?'目前取得 '+data.length+' 根有效官方日K；策略實驗室至少需要 130 根才可回測。':''
   };
 }
@@ -706,10 +706,10 @@ async function route(req,res){
       const historyCheck=validateResearchHistory(history,market,{interval:market==='crypto'&&u.searchParams.get('exchange')!=='Coinbase'?'4h':'1d'});
       if(!historyCheck.ok){
         const httpStatus=historyCheck.status==='insufficient_data'||historyCheck.status==='invalid_data'?422:503;
-        return json(res,httpStatus,{status:historyCheck.status,error:historyCheck.error,symbol,market,source:history&&history.source||null,asOf:historyCheck.asOf||history&&history.asOf||null,barCount:historyCheck.barCount||history&&history.data&&history.data.length||0,strategies:[],performance:null,simulatedPerformance:false});
+        return json(res,httpStatus,{status:historyCheck.status,error:historyCheck.error,symbol,market,source:history&&history.source||null,asOf:historyCheck.asOf||history&&history.asOf||null,barCount:historyCheck.barCount||history&&history.data&&history.data.length||0,historyDiagnostics:history?{requestedMonths:history.requestedMonths||0,failedMonths:history.failedMonths||[],monthCoverage:history.monthCoverage||[],historyStart:history.historyStart||null}:null,strategies:[],performance:null,simulatedPerformance:false});
       }
       const result=runStrategyLab(history.data,{market,symbol,source:history.source,asOf:historyCheck.asOf,htfCandles,feeBps:u.searchParams.has('feeBps')?Number(u.searchParams.get('feeBps')):undefined,slippageBps:u.searchParams.has('slippageBps')?Number(u.searchParams.get('slippageBps')):undefined,sellTaxBps:u.searchParams.has('sellTaxBps')?Number(u.searchParams.get('sellTaxBps')):undefined});
-      return json(res,result.status==='ok'?200:422,{...result,source:history.source||result.source,asOf:history.asOf||result.asOf});
+      return json(res,result.status==='ok'?200:422,{...result,source:history.source||result.source,asOf:history.asOf||result.asOf,historyDiagnostics:{requestedMonths:history.requestedMonths||0,failedMonths:history.failedMonths||[],monthCoverage:history.monthCoverage||[],historyStart:history.historyStart||null}});
     }catch(e){return json(res,502,{status:'upstream_unavailable',symbol,market,error:e.message,strategies:[],performance:null,simulatedPerformance:false});}
   }
   if(u.pathname.startsWith('/api/crypto/history/')){
