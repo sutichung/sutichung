@@ -883,6 +883,13 @@ async function route(req,res){
     if(result.stale)return json(res,503,{status:'official_history_required',data:{},source:'stale-official-history-scan',timestamp:now(),scannedCount:0,error:'全市場掃描快取已過期；暫停輸出舊分數，等待官方歷史資料重新驗證。'});
     return json(res,result.status==='ready'?200:503,result);
   }
+  if(u.pathname==='/api/market/financial-search'){
+    const query=String(u.searchParams.get('q')||'').trim().toLowerCase();
+    if(query.length<1)return json(res,400,{error:'請輸入股票代號或公司名稱'});
+    const listed=await safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],error:e.message}));
+    const companies=(listed.data||[]).filter(company=>String(company.symbol||'').toLowerCase().includes(query)||String(company.name||'').toLowerCase().includes(query)).slice(0,30).map(company=>({...company,fundamentalsUrl:'/api/market/fundamentals/'+encodeURIComponent(company.symbol),mopsUrl:'https://mops.twse.com.tw/mops/web/t05st03'}));
+    return json(res,200,{query,count:companies.length,limit:30,results:companies,source:'TWSE／TPEx 官方上市櫃公司清單',coverage:{TWSE:'上市公司',TPEx:'上櫃公司',emerging:'興櫃公司清單尚未整合'},note:'選取公司後載入該公司的官方最新財報摘要；歷史季度與完整財報 PDF 請由公開資訊觀測站依公司代號、年度查詢。'});
+  }
   if(u.pathname.startsWith('/api/market/fundamentals/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop()||'');
     if(!validateSymbol(symbol))return json(res,400,{error:'股票代號格式錯誤'});
