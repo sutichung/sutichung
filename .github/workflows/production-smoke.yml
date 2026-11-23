@@ -93,6 +93,8 @@ jobs:
           AUTH_HEADER="Authorization: Bearer $OIDC_TOKEN"
           echo "Checking official Taiwan market source"
           curl --fail --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 180 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/market" -o /tmp/market.json
+          echo "Backfilling and verifying official TWSE 36-month history persistence"
+          curl --fail --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 240 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/market/history/2330" -o /tmp/twse-history.json
           echo "Checking provider and firewall diagnostics"
           curl --fail --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 45 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/providers" -o /tmp/providers.json
           echo "Checking dependency vulnerability risk data"
@@ -105,6 +107,7 @@ jobs:
           const health = JSON.parse(fs.readFileSync('/tmp/health.json', 'utf8'));
           const healthAfter = JSON.parse(fs.readFileSync('/tmp/health-after.json', 'utf8'));
           const market = JSON.parse(fs.readFileSync('/tmp/market.json', 'utf8'));
+          const twseHistory = JSON.parse(fs.readFileSync('/tmp/twse-history.json', 'utf8'));
           const providers = JSON.parse(fs.readFileSync('/tmp/providers.json', 'utf8'));
           const vulnerabilities = JSON.parse(fs.readFileSync('/tmp/vulnerabilities.json', 'utf8'));
           const taiwanProviderIds = new Set(['twse','tpex','fugle']);
@@ -141,6 +144,17 @@ jobs:
               providerWarning: market.providerWarning || null,
               fallbackUsed: market.fallbackUsed === true
             },
+            officialHistory: {
+              symbol: '2330',
+              source: twseHistory.source || null,
+              barCount: Array.isArray(twseHistory.data) ? twseHistory.data.length : 0,
+              historyStart: twseHistory.historyStart || null,
+              asOf: twseHistory.asOf || null,
+              requestedMonths: Number(twseHistory.requestedMonths || 0),
+              failedMonthCount: Array.isArray(twseHistory.failedMonths) ? twseHistory.failedMonths.length : 0,
+              persistence: twseHistory.historyPersistence || null,
+              error: twseHistory.error || null
+            },
             providerFailures,
             optionalProviderRestrictions,
             criticalProviderFailures,
@@ -167,6 +181,8 @@ jobs:
           if (!report.application.ok) throw new Error('production_health_not_ok');
           if (healthAfter.commit !== process.env.EXPECTED_COMMIT) throw new Error('deployment_changed_during_production_smoke');
           if (!report.taiwan.ok || report.taiwan.quoteCount < 1) throw new Error('official_taiwan_market_source_unavailable');
+          if (report.officialHistory.barCount < 60) throw new Error('official_twse_history_has_fewer_than_60_valid_bars');
+          if (!report.officialHistory.persistence || report.officialHistory.persistence.persisted !== true) throw new Error('official_twse_history_not_persisted_to_supabase: ' + JSON.stringify(report.officialHistory.persistence || report.officialHistory.error || null));
           if (report.taiwan.dataMode !== 'END_OF_DAY' || report.taiwan.realtime !== false) throw new Error('official_taiwan_data_mode_not_explicitly_end_of_day');
           if (report.criticalProviderFailures.length) throw new Error('one_or_more_critical_providers_failed');
           if (vulnerabilities.status === 'vulnerable' && Number(vulnerabilities.productionVulnerabilityCount || 0) > 0) throw new Error('production_dependency_vulnerabilities_detected');

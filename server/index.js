@@ -236,11 +236,12 @@ async function loadTPExStockHistory(symbol){
   const data=mergeTPExHistoryPages(pages.map(page=>page.rows)).slice(-756);
   const failedMonths=pages.filter(page=>page.error).map(page=>({month:page.month,error:page.error}));
   if(!data.length)throw new Error('TPEx 官方 tradingStock 歷史日K沒有回傳有效資料；失敗月份 '+failedMonths.length+'/36');
+  const historyPersistence=await persistOfficialHistoryBars(symbol,'TPEx',data);
   return {
     data,source:'TPEx 官方網站 afterTrading/tradingStock（月查詢；日收盤 OHLCV；未還原權值）',
     timestamp:now(),asOf:data.at(-1).time,indicators:data.length>=60?indicators(data):null,
     dataMode:'END_OF_DAY',historicalCoverage:data.length,historyStart:data[0].time,
-    requestedMonths:36,failedMonths,partialHistory:failedMonths.length>0,
+    requestedMonths:36,failedMonths,partialHistory:failedMonths.length>0,historyPersistence,
     historyLimitation:data.length<130?'目前取得 '+data.length+' 根有效官方日K；策略實驗室至少需要 130 根才可回測。':''
   };
 }
