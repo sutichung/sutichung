@@ -1,5 +1,6 @@
 'use strict';
 const { isMarketDataLicensed, licenseEnvName } = require('./market-data-license');
+const { normalizeRow } = require('./official-tw-market');
 
 const CHECK_TIMEOUT_MS = 12000;
 
@@ -104,12 +105,32 @@ async function diagnoseProviders(env = process.env) {
     if (!Array.isArray(rows) || !rows.length) throw new Error('TWSE 回應格式錯誤或沒有資料');
     return { httpStatus: response.status, dataCount: rows.length, message: '官方資料端點有回應；此端點不是盤中逐筆報價' };
   }));
-  checks.push(probe('tpex', '櫃買中心官方日行情 OpenAPI', async () => {
-    const { response, body } = await request('https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes', { headers: { accept: 'application/json' } });
-    if (!response.ok) throw new Error('upstream_http_' + response.status);
-    const rows = JSON.parse(body);
-    if (!Array.isArray(rows) || !rows.length) throw new Error('TPEx 回應格式錯誤或沒有資料');
-    return { httpStatus: response.status, dataCount: rows.length, message: 'TPEx 官方日收盤資料端點有回應；不是盤中逐筆報價' };
+  checks.push(probe('tpex', '櫃買中心官方日行情 API（主端點＋官方備援）', async () => {
+    const candidates = [
+      { sourceId: 'tpex_openapi_daily_close', url: 'https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes', timeoutMs: CHECK_TIMEOUT_MS },
+      { sourceId: 'tpex_openapi_mainboard_quotes', url: 'https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes', timeoutMs: 7000 }
+    ];
+    const failures = [];
+    for (const candidate of candidates) {
+      try {
+        const { response, body } = await request(candidate.url, { headers: { accept: 'application/json' } }, candidate.timeoutMs);
+        if (!response.ok) throw new Error('upstream_http_' + response.status);
+        const payload = JSON.parse(body);
+        const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
+        const valid = rows.map(row => normalizeRow(row, 'TPEx', candidate.sourceId, candidate.url)).filter(Boolean);
+        if (!valid.length) throw new Error('TPEx 回應格式錯誤或沒有有效收盤價');
+        return {
+          httpStatus: response.status, dataCount: valid.length,
+          sourceTime: valid.find(row => row.asOf)?.asOf || null,
+          message: candidate.sourceId === 'tpex_openapi_daily_close'
+            ? 'TPEx 官方日收盤主端點正常；不是盤中逐筆報價'
+            : 'TPEx 官方替代日行情端點正常（主端點失敗後切換）；不是盤中逐筆報價'
+        };
+      } catch (error) {
+        failures.push(candidate.sourceId + ': ' + safeError(error));
+      }
+    }
+    throw new Error(failures.join('; ') || 'TPEx 官方日行情主端點與備援均不可用');
   }));
   checks.push(probe('ecb', '歐洲央行每日外匯參考 API', async () => {
     let primaryError = null;
