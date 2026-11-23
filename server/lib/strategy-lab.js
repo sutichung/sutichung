@@ -233,7 +233,18 @@ function runStrategyLab(input, options={}) {
   const consensus=runConsensusResearch(candles,{market,feeBps:costs.feeBps,slippageBps:costs.slippageBps,sellTaxBps:costs.sellTaxBps,annualization:costs.annualization});
   const advancedStrategies=runAdvancedStrategies(candles,split,costs);
   const mtf=options.htfCandles?runMtfStrategy(candles,options.htfCandles,costs):null;
-  const strategies=[...baseStrategies,...advancedStrategies,...(consensus.status==='ok'?[consensus]:[]),...(mtf&&mtf.status==='ok'?[mtf]:[])];
+  const strategies=[...baseStrategies,...advancedStrategies,...(consensus.status==='ok'?[consensus]:[]),...(mtf&&mtf.status==='ok'?[mtf]:[])].map(strategy=>{
+    if(strategy.benchmarkComparison)return strategy;
+    const oos=strategy.periods?.find(period=>period.id==='out_of_sample')?.metrics||{};
+    const strategyReturn=oos.netReturnPct===null||oos.netReturnPct===undefined?null:Number(oos.netReturnPct);
+    const strategySharpe=oos.sharpe===null||oos.sharpe===undefined?null:Number(oos.sharpe);
+    return {...strategy,benchmarkComparison:{
+      excessReturnPct:Number.isFinite(strategyReturn)&&Number.isFinite(benchmark.netReturnPct)?round(strategyReturn-benchmark.netReturnPct):null,
+      sharpeDelta:Number.isFinite(strategySharpe)&&Number.isFinite(benchmark.sharpe)?round(strategySharpe-benchmark.sharpe,3):null,
+      outperformedBuyAndHold:Number.isFinite(strategyReturn)&&Number.isFinite(benchmark.netReturnPct)?strategyReturn>benchmark.netReturnPct:null,
+      benchmark:'buy_and_hold_same_out_of_sample_window_and_cost_assumptions'
+    }};
+  });
   return {status:'ok',symbol:options.symbol||null,market,source:options.source||'provided OHLCV',asOf:candles.at(-1).time,barCount:candles.length,strategyCount:strategies.length,benchmarks:{buyAndHoldOutOfSample:benchmark,comparisonNote:'策略與買入持有基準使用相同樣本外區間及成本假設；超額報酬是簡單差值，不代表經風險因子調整的 Alpha。'},split:{trainBars:trainEnd-trainStart,outOfSampleBars:testEnd-testStart,ratio:'60/40',walkForwardFolds:3,method:'single_holdout_plus_three_walk_forward_folds'},costs:{feeBps:costs.feeBps,slippageBps:costs.slippageBps,sellTaxBps:costs.sellTaxBps,annualization:costs.annualization,barIntervalMs:costs.barIntervalMs,unit:'bps per side; sell tax charged on exit'},strategies,disclaimer:'研究與回測結果不是未來報酬保證。使用下一根 K 線開盤成交以避免同根收盤訊號前視偏誤，區間結束時將未平倉部位按最後收盤價估值並計入退出成本；仍未完整模擬限價排隊、停牌、漲跌停、融券限制及實際市場微結構。單一 60/40 樣本外與三段 Walk-forward 通過僅代表初步候選；另附半成本及雙倍成本敏感度，仍須多市場、多週期、不同景氣環境與交易樣本驗證；未校正多重策略比較偏誤，也未使用歷史時點成分股名單，存在多重測試與存活者偏誤；價格報酬未計股利及公司行動，空方未計融券借券費；未通過者不得當作推薦訊號。'};
 }
 
