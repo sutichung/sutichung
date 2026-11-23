@@ -98,7 +98,7 @@ jobs:
           echo "Checking provider and firewall diagnostics"
           curl --fail --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 45 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/providers" -o /tmp/providers.json
           echo "Checking TPEx official-history strategy lab with real OHLCV bars"
-          curl --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 180 "$MARKET_APP_URL/api/market/research/strategies/3105?market=tw-stock" -o /tmp/tpex-strategy.json
+          curl --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 180 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/market/research/strategies/3105?market=tw-stock" -o /tmp/tpex-strategy.json
           echo "Checking dependency vulnerability risk data"
           curl --fail --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 90 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/vulnerabilities" -o /tmp/vulnerabilities.json
           echo "Checking that Render did not switch to a different commit during the smoke run"
