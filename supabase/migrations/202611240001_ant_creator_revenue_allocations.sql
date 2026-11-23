@@ -1,3 +1,5 @@
+-- ZENTRAX creator revenue allocation ledger.
+-- Draft-only accounting records. No wallet transfer or automatic payout is performed.
 create table if not exists public.ant_creator_revenue_allocations (
   id uuid primary key default gen_random_uuid(),
   source_event_id uuid not null references public.ant_payment_chain_events(id) on delete restrict,
@@ -36,6 +38,8 @@ alter table public.ant_creator_revenue_allocations enable row level security;
 revoke all on public.ant_creator_revenue_allocations from anon, authenticated;
 grant select, insert, update on public.ant_creator_revenue_allocations to service_role;
 
+-- Only finalized canonical fee ledger rows are eligible. A tax reserve is entered
+-- explicitly by finance; it is never guessed by the system.
 create or replace view public.ant_creator_revenue_eligible_events
 with (security_invoker = true) as
 select e.id as source_event_id, e.chain_id, e.tx_hash, e.log_index,
