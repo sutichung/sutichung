@@ -39,7 +39,7 @@ function normalizeTPExTradingStock(payload) {
   const find = pattern => fields.findIndex(value => pattern.test(value));
   const indexes = {
     date: find(/日期/),
-    volume: find(/成交仟股/),
+    volume: find(/成交(?:仟股|張數)/),
     turnover: find(/成交仟元/),
     open: find(/開盤/),
     high: find(/最高/),
