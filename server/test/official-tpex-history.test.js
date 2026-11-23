@@ -38,3 +38,17 @@ test('rejects unknown schemas and merges duplicate dates deterministically', () 
   ]);
   assert.deepEqual(rows.map(row => row.close), [10, 12]);
 });
+
+test('normalizes the post-2025 TPEx 成交張數 schema as shares', () => {
+  const payload = {
+    stat: 'ok',
+    tables: [{
+      fields: ['日期', '成交張數', '成交仟元', '開盤', '最高', '最低', '收盤', '漲跌', '筆數'],
+      data: [['115/11/23', '33,228', '12,714,000', '362.00', '414.00', '351.00', '408.50', '27.50', '123,456']]
+    }]
+  };
+  assert.deepEqual(normalizeTPExTradingStock(payload), [{
+    time: '2026-11-23', volume: 33228000, turnover: 12714000000,
+    open: 362, high: 414, low: 351, close: 408.5
+  }]);
+});
