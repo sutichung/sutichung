@@ -22,7 +22,7 @@ const marketIntelligence = require('./lib/market-intelligence');
 const { diagnoseProviders } = require('./lib/provider-diagnostics');
 const { loadOfficialDailyQuotes, diagnoseOfficialDailyQuotes } = require('./lib/official-tw-market');
 const { monthStartKeys, normalizeStockDayRows, mergeStockDayPages } = require('./lib/official-twse-history');
-const { normalizeTPExTradingStock, mergeTPExHistoryPages } = require('./lib/official-tpex-history');
+const { formatTPExQueryMonth, normalizeTPExTradingStock, mergeTPExHistoryPages } = require('./lib/official-tpex-history');
 const { getOfficialFundamentals } = require('./lib/official-tw-fundamentals');
 const { epochMilliseconds, isStaleTimestamp } = require('./lib/market-timestamps');
 const { getTwseTradingRules, validDate: validTradingDate } = require('./lib/tw-market-rules');
@@ -223,7 +223,7 @@ function rateLimit(req){const ip=req.socket.remoteAddress||'unknown';const t=Dat
 async function loadTPExStockHistory(symbol){
   const months=monthStartKeys(36);
   const pages=await mapLimit(months,3,async month=>{
-    const date=month.slice(0,4)+'/'+month.slice(4,6)+'/01';
+    const date=formatTPExQueryMonth(month);
     const url='https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock?code='+encodeURIComponent(symbol)+'&date='+encodeURIComponent(date)+'&response=json';
     try{
       const payload=await fetchJson(url,15000,{'User-Agent':'TaiwanStockHunter/1.0','Referer':'https://www.tpex.org.tw/','Accept':'application/json, text/plain, */*'});
@@ -293,7 +293,7 @@ async function supabaseRequest(path,{method='GET',body,token,admin=false,extraHe
 async function persistOfficialHistoryBars(symbol,exchange,bars){
   if(!SUPABASE_CONFIGURED)return {persisted:false,reason:'supabase_not_configured',rows:bars.length};
   if(!SUPABASE_SERVICE_ROLE_KEY)return {persisted:false,reason:'SUPABASE_SERVICE_ROLE_KEY_not_configured',rows:bars.length};
-  const rows=(bars||[]).map(bar=>({symbol:String(symbol),exchange,trade_date:String(bar.time).slice(0,10),open:bar.open,high:bar.high,low:bar.low,close:bar.close,volume:bar.volume,turnover:Number.isFinite(bar.turnover)?bar.turnover:null,trades:null,source:exchange==='TWSE'?'TWSE 官方 STOCK_DAY':'TPEx 官方網站 afterTrading/tradingStock',source_url:exchange==='TWSE'?'https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date='+String(bar.time).slice(0,7).replace('-','')+'01&stockNo='+encodeURIComponent(symbol)+'&response=json':'https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock?code='+encodeURIComponent(symbol)+'&date='+String(bar.time).slice(0,7).replace('-','/')+'/01&response=json',received_at:now()}));
+  const rows=(bars||[]).map(bar=>({symbol:String(symbol),exchange,trade_date:String(bar.time).slice(0,10),open:bar.open,high:bar.high,low:bar.low,close:bar.close,volume:bar.volume,turnover:Number.isFinite(bar.turnover)?bar.turnover:null,trades:null,source:exchange==='TWSE'?'TWSE 官方 STOCK_DAY':'TPEx 官方網站 afterTrading/tradingStock',source_url:exchange==='TWSE'?'https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date='+String(bar.time).slice(0,7).replace('-','')+'01&stockNo='+encodeURIComponent(symbol)+'&response=json':'https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock?code='+encodeURIComponent(symbol)+'&date='+encodeURIComponent(formatTPExQueryMonth(String(bar.time).slice(0,7).replace('-','')+'01'))+'&response=json',received_at:now()}));
   try{
     let upserted=0;
     for(let offset=0;offset<rows.length;offset+=500){
