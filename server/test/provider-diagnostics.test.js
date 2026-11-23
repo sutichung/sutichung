@@ -31,6 +31,7 @@ test('provider diagnostics verify actual public crypto ticker responses and expo
   const originalFetch = global.fetch;
   const payloads = [
     ['openapi.twse.com.tw', [{ Code: '2330' }]],
+    ['www.tpex.org.tw', [{ SecuritiesCompanyCode: '6488', CompanyName: '環球晶', Open: '450', High: '460', Low: '448', Close: '455', TradingShares: '1234', TransactionAmount: '560000' }]],
     ['data-api.ecb.europa.eu', 'KEY,OBS_VALUE' + String.fromCharCode(10) + 'X,1.1'],
     ['www.bankofcanada.ca/valet/observations/FXCADUSD', { observations: [{ d: '2026-11-17', FXCADUSD: { v: '0.6997' } }] }],
     ['data-api.binance.vision', { symbol: 'BTCUSDT', price: '65000' }],
@@ -69,6 +70,7 @@ test('ECB provider falls back to the official daily XML feed when the primary AP
   const originalFetch = global.fetch;
   global.fetch = async url => {
     const target = String(url);
+    if (target.includes('www.tpex.org.tw')) return {ok:true,status:200,text:async()=>JSON.stringify([{SecuritiesCompanyCode:'6488',CompanyName:'環球晶',Open:'450',High:'460',Low:'448',Close:'455',TradingShares:'1234',TransactionAmount:'560000'}])};
     if (target.includes('data-api.ecb.europa.eu')) {
       const error = new Error('simulated timeout'); error.name = 'AbortError'; throw error;
     }
@@ -102,6 +104,7 @@ test('exchange diagnostics check public API connectivity independently from redi
  const original=global.fetch;
  const payloads=[
   ['openapi.twse.com.tw',[{Code:'2330'}]],
+  ['www.tpex.org.tw',[{SecuritiesCompanyCode:'6488',CompanyName:'環球晶',Open:'450',High:'460',Low:'448',Close:'455',TradingShares:'1234',TransactionAmount:'560000'}]],
   ['data-api.ecb.europa.eu','KEY,OBS_VALUE\\nX,1.1'],
   ['bankofcanada.ca',{observations:[{d:'2026-11-17',FXCADUSD:{v:'0.6997'}}]}],
   ['data-api.binance.vision',{symbol:'BTCUSDT',price:'65000'}],
@@ -137,6 +140,7 @@ test('Shioaji is explicitly shown as not configured until its licensed adapter e
   global.fetch = async url => {
     const target = String(url);
     if (target.includes('openapi.twse.com.tw')) return {ok:true,status:200,text:async()=>JSON.stringify([{Code:'2330'}])};
+    if (target.includes('www.tpex.org.tw')) return {ok:true,status:200,text:async()=>JSON.stringify([{SecuritiesCompanyCode:'6488',CompanyName:'環球晶',Open:'450',High:'460',Low:'448',Close:'455',TradingShares:'1234',TransactionAmount:'560000'}])};
     if (target.includes('data-api.ecb.europa.eu')) return {ok:true,status:200,text:async()=>'KEY,OBS_VALUE\\nX,1.1'};
     if (target.includes('bankofcanada.ca')) return {ok:true,status:200,text:async()=>JSON.stringify({observations:[{d:'2026-11-19',FXCADUSD:{v:'0.7'}}]})};
     throw new Error('unexpected_test_url');
@@ -146,5 +150,37 @@ test('Shioaji is explicitly shown as not configured until its licensed adapter e
     const check = result.checks.find(x => x.id === 'shioaji');
     assert.equal(check.status, 'not_configured');
     assert.match(check.message, /永豐證券 API 帳戶/);
+  } finally { global.fetch = originalFetch; }
+});
+
+
+test('TPEx provider diagnostics fall back to the alternate official quote endpoint', async () => {
+  const originalFetch = global.fetch;
+  const calls = [];
+  global.fetch = async url => {
+    const target = String(url);
+    calls.push(target);
+    if (target.includes('tpex_mainboard_daily_close_quotes')) {
+      return { ok:false, status:503, text:async()=>'' };
+    }
+    if (target.includes('tpex_mainboard_quotes')) {
+      return { ok:true, status:200, text:async()=>JSON.stringify([{
+        SecuritiesCompanyCode:'6488',CompanyName:'環球晶',Open:'450',High:'460',Low:'448',Close:'455',
+        TradingShares:'1234',TransactionAmount:'560000'
+      }]) };
+    }
+    if (target.includes('openapi.twse.com.tw')) return {ok:true,status:200,text:async()=>JSON.stringify([{Code:'2330'}])};
+    if (target.includes('data-api.ecb.europa.eu')) return {ok:true,status:200,text:async()=>'KEY,OBS_VALUE\\nX,1.1'};
+    if (target.includes('bankofcanada.ca')) return {ok:true,status:200,text:async()=>JSON.stringify({observations:[{d:'2026-11-19',FXCADUSD:{v:'0.7'}}]})};
+    throw new Error('unexpected_test_url:'+target);
+  };
+  try {
+    const result = await diagnoseProviders({});
+    const check = result.checks.find(x => x.id === 'tpex');
+    assert.equal(check.status, 'connected');
+    assert.equal(check.dataCount, 1);
+    assert.match(check.message, /替代日行情端點正常/);
+    assert.ok(calls.some(url => url.includes('tpex_mainboard_daily_close_quotes')));
+    assert.ok(calls.some(url => url.includes('tpex_mainboard_quotes')));
   } finally { global.fetch = originalFetch; }
 });
