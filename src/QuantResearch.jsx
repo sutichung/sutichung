@@ -79,6 +79,15 @@ export default function QuantResearch({symbol='2330',source='',asOf='',market='t
      {strategy.periods.map(period=><div key={period.id} style={metric}><b style={{fontSize:12}}>{period.label}</b><div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:7,marginTop:8}}>{metrics(period.metrics).map(([k,v])=><div key={k}><small style={label}>{k}</small><div style={{...value,fontSize:15,color:k==='淨報酬'?(Number(period.metrics.netReturnPct)>0?'#34d399':'#fb7185'):'#e8eef8'}}>{v}</div></div>)}</div><small style={{display:'block',marginTop:7,color:'#91a1b8'}}>市場狀態：{period.marketRegime?.regime||'—'}｜區間報酬 {fmt(period.marketRegime?.periodReturnPct,'%')}</small></div>)}
     </div>
     <div style={{marginTop:9,padding:9,borderRadius:8,background:'#111a2b'}}>
+     <div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',alignItems:'center'}}><b style={{fontSize:12}}>樣本外基準比較｜買入持有</b><span style={{fontSize:11,color:strategy.benchmarkComparison?.outperformedBuyAndHold?'#34d399':'#fbbf24'}}>{strategy.benchmarkComparison?.outperformedBuyAndHold===true?'超越基準':strategy.benchmarkComparison?.outperformedBuyAndHold===false?'未超越基準':'資料不足'}</span></div>
+     <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:7,marginTop:8}}>
+      <div style={{background:'#172338',borderRadius:7,padding:8}}><small style={label}>買入持有淨報酬</small><div style={{...value,fontSize:15}}>{fmt(result.benchmarks?.buyAndHoldOutOfSample?.netReturnPct,'%')}</div></div>
+      <div style={{background:'#172338',borderRadius:7,padding:8}}><small style={label}>策略超額報酬</small><div style={{...value,fontSize:15,color:Number(strategy.benchmarkComparison?.excessReturnPct)>0?'#34d399':'#fb7185'}}>{fmt(strategy.benchmarkComparison?.excessReturnPct,'%')}</div></div>
+      <div style={{background:'#172338',borderRadius:7,padding:8}}><small style={label}>Sharpe 差</small><div style={{...value,fontSize:15}}>{fmt(strategy.benchmarkComparison?.sharpeDelta)}</div></div>
+     </div>
+     <small style={{display:'block',marginTop:7,color:'#91a1b8',lineHeight:1.6}}>基準與策略使用相同樣本外期間及交易成本假設。超額報酬是簡單報酬差，不是風險因子調整後的 Alpha，也不單獨構成策略通過條件。</small>
+    </div>
+    <div style={{marginTop:9,padding:9,borderRadius:8,background:'#111a2b'}}>
      <div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap'}}><b style={{fontSize:12}}>Walk-forward 三段樣本外驗證</b><span style={{fontSize:11,color:strategy.walkForward?.passed?'#34d399':'#fbbf24'}}>{strategy.walkForward?.passed?'三段條件通過':'尚未通過／樣本不足'}</span></div>
      <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:6,marginTop:8}}>
       {(strategy.walkForward?.folds||[]).map(fold=><div key={fold.fold} style={{background:'#172338',borderRadius:7,padding:7,minWidth:0}}><small style={label}>Fold {fold.fold}｜{fold.marketRegime?.regime||'—'}</small><div style={{fontSize:14,fontWeight:800,marginTop:4}}>{fmt(fold.metrics?.netReturnPct,'%')}</div><small style={label}>{fold.metrics?.trades??0} 筆交易</small></div>)}
