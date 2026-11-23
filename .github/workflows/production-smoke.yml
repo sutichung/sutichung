@@ -95,6 +95,8 @@ jobs:
           curl --fail --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 180 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/market" -o /tmp/market.json
           echo "Checking provider and firewall diagnostics"
           curl --fail --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 45 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/providers" -o /tmp/providers.json
+          echo "Checking TPEx official-history strategy lab with real OHLCV bars"
+          curl --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 180 "$MARKET_APP_URL/api/market/research/strategies/3105?market=tw-stock" -o /tmp/tpex-strategy.json
           echo "Checking dependency vulnerability risk data"
           curl --fail --silent --show-error --retry 1 --retry-all-errors --retry-delay 5 --max-time 90 -H "$AUTH_HEADER" "$MARKET_APP_URL/api/diagnostics/vulnerabilities" -o /tmp/vulnerabilities.json
           echo "Checking that Render did not switch to a different commit during the smoke run"
@@ -106,6 +108,7 @@ jobs:
           const healthAfter = JSON.parse(fs.readFileSync('/tmp/health-after.json', 'utf8'));
           const market = JSON.parse(fs.readFileSync('/tmp/market.json', 'utf8'));
           const providers = JSON.parse(fs.readFileSync('/tmp/providers.json', 'utf8'));
+          const tpexStrategy = JSON.parse(fs.readFileSync('/tmp/tpex-strategy.json', 'utf8'));
           const vulnerabilities = JSON.parse(fs.readFileSync('/tmp/vulnerabilities.json', 'utf8'));
           const taiwanProviderIds = new Set(['twse','tpex','fugle']);
           const providerFailures = (providers.checks || []).filter(x => taiwanProviderIds.has(x.id) && ['auth_error','permission_error','region_restricted','rate_limited','timeout','error','upstream_error','http_error','endpoint_error'].includes(x.status));
@@ -141,6 +144,16 @@ jobs:
               providerWarning: market.providerWarning || null,
               fallbackUsed: market.fallbackUsed === true
             },
+            strategyLab: {
+              ok: tpexStrategy.status === 'ok' && Number(tpexStrategy.barCount || 0) >= 130 && String(tpexStrategy.source || '').includes('TPEx 官方網站 afterTrading/tradingStock'),
+              symbol: tpexStrategy.symbol || '3105',
+              status: tpexStrategy.status || null,
+              source: tpexStrategy.source || null,
+              barCount: Number(tpexStrategy.barCount || 0),
+              asOf: tpexStrategy.asOf || null,
+              strategyCount: Number(tpexStrategy.strategyCount || 0),
+              error: tpexStrategy.error || null
+            },
             providerFailures,
             optionalProviderRestrictions,
             criticalProviderFailures,
@@ -168,6 +181,7 @@ jobs:
           if (healthAfter.commit !== process.env.EXPECTED_COMMIT) throw new Error('deployment_changed_during_production_smoke');
           if (!report.taiwan.ok || report.taiwan.quoteCount < 1) throw new Error('official_taiwan_market_source_unavailable');
           if (report.taiwan.dataMode !== 'END_OF_DAY' || report.taiwan.realtime !== false) throw new Error('official_taiwan_data_mode_not_explicitly_end_of_day');
+          if (!report.strategyLab.ok) throw new Error('tpex_official_history_strategy_lab_unavailable_or_insufficient_bars');
           if (report.criticalProviderFailures.length) throw new Error('one_or_more_critical_providers_failed');
           if (vulnerabilities.status === 'vulnerable' && Number(vulnerabilities.productionVulnerabilityCount || 0) > 0) throw new Error('production_dependency_vulnerabilities_detected');
           NODE
