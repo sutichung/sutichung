@@ -49,7 +49,7 @@ function mergeStockDayPages(pages) {
   const byDate = new Map();
   for (const page of Array.isArray(pages) ? pages : []) {
     for (const bar of Array.isArray(page) ? page : []) {
-      if (bar && /^\\d{4}-\\d{2}-\\d{2}$/.test(String(bar.time || ''))) byDate.set(bar.time, bar);
+      if (bar && /^\d{4}-\d{2}-\d{2}$/.test(String(bar.time || ''))) byDate.set(bar.time, bar);
     }
   }
   return [...byDate.values()].sort((a, b) => a.time.localeCompare(b.time));
