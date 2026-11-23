@@ -8,7 +8,7 @@ function parseNumber(value) {
 }
 
 function formatTPExQueryMonth(value) {
-  const match = String(value || '').match(/^(\\d{4})(\\d{2})(?:01)?$/);
+  const match = String(value || '').match(/^(\d{4})(\d{2})(?:01)?$/);
   if (!match) throw new Error('TPEx query month must be YYYYMM or YYYYMM01');
   const rocYear = Number(match[1]) - 1911;
   const month = Number(match[2]);
