@@ -129,6 +129,22 @@ function runStrategy(id, candles, start, end, costs) {
   return summarize(trades,dailyReturns,costs.annualization||252);
 }
 
+function runBuyAndHold(candles,start,end,costs) {
+  if(!Array.isArray(candles)||end-start<2)return {status:'insufficient_data',trades:0,netReturnPct:null,maxDrawdownPct:null,sharpe:null};
+  const first=candles[start],last=candles[end-1];
+  const entryCost=(costs.feeBps+costs.slippageBps)/10000;
+  const exitCost=(costs.feeBps+costs.slippageBps+costs.sellTaxBps)/10000;
+  const dailyReturns=[];
+  for(let i=start;i<end;i++){
+    let value=i===start?candles[i].close/candles[i].open-1:candles[i].close/candles[i-1].close-1;
+    if(i===start)value=(1+value)*(1-entryCost)-1;
+    if(i===end-1)value=(1+value)*(1-exitCost)-1;
+    dailyReturns.push(value);
+  }
+  const net=(last.close/first.open)*(1-entryCost)*(1-exitCost)-1;
+  return summarize([{returnPct:net*100,holdBars:end-start}],dailyReturns,costs.annualization||252);
+}
+
 function walkForward(id,candles,start,end,costs,foldCount=3) {
   const foldSize=Math.floor((end-start)/foldCount);
   if(foldSize<10)return {status:'insufficient_data',foldCount,folds:[],totalTrades:0,positiveFolds:0,passed:false};
@@ -193,6 +209,7 @@ function runStrategyLab(input, options={}) {
     {id:'in_sample',label:'訓練區間',start:trainStart,end:trainEnd},
     {id:'out_of_sample',label:'樣本外區間',start:testStart,end:testEnd}
   ];
+  const benchmark=runBuyAndHold(candles,testStart,testEnd,costs);
   const baseStrategies=STRATEGIES.map(strategy=>{
     const results=periods.map(period=>({...period,metrics:runStrategy(strategy.id,candles,period.start,period.end,costs),marketRegime:classifyRegime(candles.slice(period.start,period.end))}));
     const oos=results[1].metrics;
@@ -210,13 +227,25 @@ function runStrategyLab(input, options={}) {
     const halfCostMetrics=runStrategy(strategy.id,candles,testStart,testEnd,{...costs,feeBps:costs.feeBps*0.5,slippageBps:costs.slippageBps*0.5,sellTaxBps:costs.sellTaxBps*0.5});
     const doubleCostMetrics=runStrategy(strategy.id,candles,testStart,testEnd,{...costs,feeBps:costs.feeBps*2,slippageBps:costs.slippageBps*2,sellTaxBps:costs.sellTaxBps*2});
     const passed=oos.status==='ok'&&oos.trades>=10&&oos.netReturnPct>0&&oos.maxDrawdownPct<=15&&oos.sharpe!==null&&oos.sharpe>0&&oos.profitFactor!==null&&oos.profitFactor>1.1&&wf.passed;
-    return {...strategy,periods:results,walkForward:wf,autonomousLearning,costSensitivity:{halfCost:halfCostMetrics,baseCost:oos,doubleCost:doubleCostMetrics,doubleCostStillPositive:doubleCostMetrics.netReturnPct!==null&&doubleCostMetrics.netReturnPct>0},validation:{status:passed?'preliminary_pass':'not_validated',level:'single_holdout_plus_three_walk_forward_folds',rules:['單一樣本外區間至少 10 筆交易','樣本外淨報酬大於 0（已扣估算成本）','樣本外最大回撤不超過 15%','樣本外 Sharpe 大於 0','Profit Factor 大於 1.1','三個 Walk-forward 區段都必須有足夠交易樣本','Walk-forward 至少 2/3 區段為正報酬且總交易數至少 10 筆','Walk-forward 平均報酬為正且最差區段回撤不超過 15%','額外呈現半成本與雙倍成本敏感度'],passed}};
+    const benchmarkComparison={excessReturnPct:oos.netReturnPct!==null&&benchmark.netReturnPct!==null?round(oos.netReturnPct-benchmark.netReturnPct):null,sharpeDelta:oos.sharpe!==null&&benchmark.sharpe!==null?round(oos.sharpe-benchmark.sharpe,3):null,outperformedBuyAndHold:oos.netReturnPct!==null&&benchmark.netReturnPct!==null?oos.netReturnPct>benchmark.netReturnPct:null,benchmark:'buy_and_hold_same_out_of_sample_window_and_cost_assumptions'};
+    return {...strategy,periods:results,walkForward:wf,benchmarkComparison,autonomousLearning,costSensitivity:{halfCost:halfCostMetrics,baseCost:oos,doubleCost:doubleCostMetrics,doubleCostStillPositive:doubleCostMetrics.netReturnPct!==null&&doubleCostMetrics.netReturnPct>0},validation:{status:passed?'preliminary_pass':'not_validated',level:'single_holdout_plus_three_walk_forward_folds',rules:['單一樣本外區間至少 10 筆交易','樣本外淨報酬大於 0（已扣估算成本）','樣本外最大回撤不超過 15%','樣本外 Sharpe 大於 0','Profit Factor 大於 1.1','三個 Walk-forward 區段都必須有足夠交易樣本','Walk-forward 至少 2/3 區段為正報酬且總交易數至少 10 筆','Walk-forward 平均報酬為正且最差區段回撤不超過 15%','額外呈現半成本與雙倍成本敏感度'],passed}};
   });
   const consensus=runConsensusResearch(candles,{market,feeBps:costs.feeBps,slippageBps:costs.slippageBps,sellTaxBps:costs.sellTaxBps,annualization:costs.annualization});
   const advancedStrategies=runAdvancedStrategies(candles,split,costs);
   const mtf=options.htfCandles?runMtfStrategy(candles,options.htfCandles,costs):null;
-  const strategies=[...baseStrategies,...advancedStrategies,...(consensus.status==='ok'?[consensus]:[]),...(mtf&&mtf.status==='ok'?[mtf]:[])];
-  return {status:'ok',symbol:options.symbol||null,market,source:options.source||'provided OHLCV',asOf:candles.at(-1).time,barCount:candles.length,strategyCount:strategies.length,split:{trainBars:trainEnd-trainStart,outOfSampleBars:testEnd-testStart,ratio:'60/40',walkForwardFolds:3,method:'single_holdout_plus_three_walk_forward_folds'},costs:{feeBps:costs.feeBps,slippageBps:costs.slippageBps,sellTaxBps:costs.sellTaxBps,annualization:costs.annualization,barIntervalMs:costs.barIntervalMs,unit:'bps per side; sell tax charged on exit'},strategies,disclaimer:'研究與回測結果不是未來報酬保證。使用下一根 K 線開盤成交以避免同根收盤訊號前視偏誤，區間結束時將未平倉部位按最後收盤價估值並計入退出成本；仍未完整模擬限價排隊、停牌、漲跌停、融券限制及實際市場微結構。單一 60/40 樣本外與三段 Walk-forward 通過僅代表初步候選；另附半成本及雙倍成本敏感度，仍須多市場、多週期、不同景氣環境與交易樣本驗證；未校正多重策略比較偏誤，也未使用歷史時點成分股名單，存在多重測試與存活者偏誤；價格報酬未計股利及公司行動，空方未計融券借券費；未通過者不得當作推薦訊號。'};
+  const strategies=[...baseStrategies,...advancedStrategies,...(consensus.status==='ok'?[consensus]:[]),...(mtf&&mtf.status==='ok'?[mtf]:[])].map(strategy=>{
+    if(strategy.benchmarkComparison)return strategy;
+    const oos=strategy.periods?.find(period=>period.id==='out_of_sample')?.metrics||{};
+    const strategyReturn=oos.netReturnPct===null||oos.netReturnPct===undefined?null:Number(oos.netReturnPct);
+    const strategySharpe=oos.sharpe===null||oos.sharpe===undefined?null:Number(oos.sharpe);
+    return {...strategy,benchmarkComparison:{
+      excessReturnPct:Number.isFinite(strategyReturn)&&Number.isFinite(benchmark.netReturnPct)?round(strategyReturn-benchmark.netReturnPct):null,
+      sharpeDelta:Number.isFinite(strategySharpe)&&Number.isFinite(benchmark.sharpe)?round(strategySharpe-benchmark.sharpe,3):null,
+      outperformedBuyAndHold:Number.isFinite(strategyReturn)&&Number.isFinite(benchmark.netReturnPct)?strategyReturn>benchmark.netReturnPct:null,
+      benchmark:'buy_and_hold_same_out_of_sample_window_and_cost_assumptions'
+    }};
+  });
+  return {status:'ok',symbol:options.symbol||null,market,source:options.source||'provided OHLCV',asOf:candles.at(-1).time,barCount:candles.length,strategyCount:strategies.length,benchmarks:{buyAndHoldOutOfSample:benchmark,comparisonNote:'策略與買入持有基準使用相同樣本外區間及成本假設；超額報酬是簡單差值，不代表經風險因子調整的 Alpha。'},split:{trainBars:trainEnd-trainStart,outOfSampleBars:testEnd-testStart,ratio:'60/40',walkForwardFolds:3,method:'single_holdout_plus_three_walk_forward_folds'},costs:{feeBps:costs.feeBps,slippageBps:costs.slippageBps,sellTaxBps:costs.sellTaxBps,annualization:costs.annualization,barIntervalMs:costs.barIntervalMs,unit:'bps per side; sell tax charged on exit'},strategies,disclaimer:'研究與回測結果不是未來報酬保證。使用下一根 K 線開盤成交以避免同根收盤訊號前視偏誤，區間結束時將未平倉部位按最後收盤價估值並計入退出成本；仍未完整模擬限價排隊、停牌、漲跌停、融券限制及實際市場微結構。單一 60/40 樣本外與三段 Walk-forward 通過僅代表初步候選；另附半成本及雙倍成本敏感度，仍須多市場、多週期、不同景氣環境與交易樣本驗證；未校正多重策略比較偏誤，也未使用歷史時點成分股名單，存在多重測試與存活者偏誤；價格報酬未計股利及公司行動，空方未計融券借券費；未通過者不得當作推薦訊號。'};
 }
 
-module.exports={runStrategyLab,validateCandles,validateResearchHistory,walkForward,STRATEGIES,parseCandleTime,inferAnnualization};
+module.exports={runStrategyLab,validateCandles,validateResearchHistory,walkForward,runBuyAndHold,STRATEGIES,parseCandleTime,inferAnnualization};
