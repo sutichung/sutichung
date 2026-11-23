@@ -1,6 +1,6 @@
-# Taiwan Stock Hunter — 市場研究與量化分析系統
+# Taiwan Stock Hunter
 
-**Taiwan Stock Hunter** 是個人自用的台股、美股與加密貨幣市場研究及量化分析系統。台股官方行情、歷史資料、技術分析與風險監控各自獨立；本專案不包含任何代幣發行、錢包、銷售或區塊鏈部署功能。
+**Taiwan Stock Hunter** 是以台灣證券市場為核心的個人研究與行情分析系統，整合官方市場資料、量化研究、風險檢查與跨市場觀察。
 
 此 repository 包含 React 前端與 Node.js 後端 API 骨架。系統採「資料不足就不判斷」原則；沒有授權即時行情、全市場指標掃描、法人籌碼或台指期來源時，相關欄位會明確顯示缺資料，不會用假數字補齊。
 
@@ -139,5 +139,4 @@ API Key 僅放後端環境變數；不要提交 .env、Token、券商帳密或�
 正式驗收會檢查 Render commit、TWSE／TPEx 官方 OpenAPI 日收盤行情抽樣、多交易所加密貨幣、BTC 訂單簿與逐筆成交資料；未通過不會標記上線完成。
 
 `.github/workflows/production-smoke.yml` 會在 main 分支每次推送後，等待 Render 啟用對應 commit，並透過 GitHub Actions OIDC 驗證台股官方行情與多交易所加密貨幣資料；美股官方行情授權未設定時會明確列為警告，不冒充官方報價。
-
 
