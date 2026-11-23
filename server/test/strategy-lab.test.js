@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {runStrategyLab,validateCandles,validateResearchHistory,inferAnnualization}=require('../lib/strategy-lab');
+const {runStrategyLab,validateCandles,validateResearchHistory,inferAnnualization,runBuyAndHold}=require('../lib/strategy-lab');
 const {dailyTrendMap,runMtfStrategy}=require('../lib/mtf-structure-strategy');
 
 function candles(n=240,mode='trend'){
@@ -150,4 +150,30 @@ test('annualization follows the actual bar interval across daily and intraday ma
  assert.equal(inferAnnualization(intraday,'crypto').annualization,2190);
  assert.equal(inferAnnualization(intraday,'us-stock').annualization,410);
  assert.equal(inferAnnualization(intraday,'tw-stock').annualization,284);
+});
+
+
+test('buy-and-hold benchmark uses the same window and charges entry plus exit costs',()=>{
+ const data=Array.from({length:20},(_,i)=>({
+  time:new Date(Date.UTC(2025,0,1+i)).toISOString(),
+  open:100+i,high:102+i,low:99+i,close:101+i,volume:1000
+ }));
+ const costs={feeBps:10,slippageBps:5,sellTaxBps:30,annualization:252};
+ const result=runBuyAndHold(data,5,15,costs);
+ const expected=((data[14].close/data[5].open)*(1-0.0015)*(1-0.0045)-1)*100;
+ assert.equal(result.status,'ok');
+ assert.equal(result.trades,1);
+ assert.ok(Math.abs(result.netReturnPct-Number(expected.toFixed(2)))<0.02);
+});
+
+test('every strategy reports same out-of-sample buy-and-hold comparison without calling it risk-adjusted alpha',()=>{
+ const result=runStrategyLab(candles(260,'trend'),{market:'tw-stock',source:'unit-test'});
+ assert.equal(result.status,'ok');
+ assert.equal(result.benchmarks.buyAndHoldOutOfSample.status,'ok');
+ assert.match(result.benchmarks.comparisonNote,/不代表經風險因子調整的 Alpha/);
+ assert.ok(result.strategies.every(strategy=>{
+  const comparison=strategy.benchmarkComparison;
+  return comparison&&comparison.benchmark==='buy_and_hold_same_out_of_sample_window_and_cost_assumptions'&&
+    (comparison.excessReturnPct===null||Number.isFinite(comparison.excessReturnPct));
+ }));
 });
