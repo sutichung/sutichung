@@ -226,8 +226,8 @@ async function loadStockHistory(symbol){
     let historyStoreWarning=null;
     try{
       const persisted=await loadPersistedOfficialHistory(symbol,'TPEx');
-      if(persisted.length>=60)return {data:persisted,source:'TPEx 官方 OpenAPI 每日快照（Supabase 歷史累積；未還原權值）',timestamp:now(),asOf:persisted.at(-1).time,indicators:indicators(persisted),dataMode:'END_OF_DAY',historicalCoverage:persisted.length,historyStart:persisted[0].time};
-      historyStoreWarning='官方 TPEx 歷史快照目前僅累積 '+persisted.length+' 根有效日K；至少需要 60 根才能計算技術指標';
+      if(persisted.length)return {data:persisted,source:'TPEx 官方 OpenAPI 每日快照（Supabase 歷史累積；未還原權值）',timestamp:now(),asOf:persisted.at(-1).time,indicators:persisted.length>=60?indicators(persisted):null,dataMode:'END_OF_DAY',historicalCoverage:persisted.length,historyStart:persisted[0].time,historyLimitation:persisted.length<130?'官方快照目前累積 '+persisted.length+' 根有效日K；策略實驗室至少需要 130 根才可回測。':''};
+      historyStoreWarning='官方 TPEx 歷史快照目前尚無可用日K；策略實驗室至少需要 130 根有效日K';
     }catch(error){
       // Missing Supabase credentials or an unapplied migration must not block the official latest-day quote.
       historyStoreWarning=String(error.message||error).slice(0,180);
