@@ -50,7 +50,7 @@ function normalizeTPExTradingStock(payload) {
     const turnoverThousands = parseNumber(row[indexes.turnover]);
     if (!time || ![open, high, low, close, volumeThousands].every(Number.isFinite)) return null;
     if (open <= 0 || high <= 0 || low <= 0 || close <= 0 || volumeThousands < 0) return null;
-    if (high < Math.max(open, high === 0 ? open : close, low) || low > Math.min(open, close, high)) return null;
+    if (high < Math.max(open, close, low) || low > Math.min(open, close, high)) return null;
     return {
       time, open, high, low, close,
       volume: volumeThousands * 1000,
