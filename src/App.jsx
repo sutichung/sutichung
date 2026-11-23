@@ -9,6 +9,7 @@ const SignalRadar = lazy(() => import('./SignalRadar'));
 const QuantResearch = lazy(() => import('./QuantResearch'));
 const USMarket = lazy(() => import('./USMarket'));
 const CryptoMarket = lazy(() => import('./CryptoMarket'));
+const AntColony = lazy(() => import('./AntColony'));
 const GlobalFinance = lazy(() => import('./GlobalFinance'));
 const GlobalIntelligence = lazy(() => import('./GlobalIntelligence'));
 
@@ -122,6 +123,7 @@ export default function App(){
   <a href="#global-intelligence" style={{flex:'1 0 160px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#332334',border:'1px solid #75465c',color:'#fecdd3',fontWeight:800,fontSize:13}}>🛡️ 全球情報攻防中心</a>
   <a href="#strategy-lab" style={{flex:'1 0 130px',textAlign:'center',textDecoration:'none',padding:'11px 14px',borderRadius:9,background:'#1e3440',border:'1px solid #356274',color:'#bae6fd',fontWeight:800,fontSize:13}}>🧪 策略實驗室</a>
  </nav>
+ <DeferredSection minHeight={320}><AntColony/></DeferredSection>
  <DeferredSection minHeight={320}><GlobalFinance/></DeferredSection>
  <DeferredSection minHeight={320}><GlobalIntelligence/></DeferredSection>
  <DeferredSection minHeight={360}><USMarket/></DeferredSection>
