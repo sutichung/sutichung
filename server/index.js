@@ -24,6 +24,7 @@ const { diagnoseProviders } = require('./lib/provider-diagnostics');
 const { loadOfficialDailyQuotes, diagnoseOfficialDailyQuotes } = require('./lib/official-tw-market');
 const { getOfficialFundamentals } = require('./lib/official-tw-fundamentals');
 const { epochMilliseconds, isStaleTimestamp } = require('./lib/market-timestamps');
+const { getTwseTradingRules, validDate: validTradingDate } = require('./lib/tw-market-rules');
 const { createDependencyVulnerabilityScanner } = require('./lib/dependency-vulnerabilities');
 const { verifyGitHubActionsToken } = require('./lib/github-oidc');
 const { buildRuntimeHealth, buildDependencyReadiness } = require('./lib/health');
@@ -789,6 +790,11 @@ async function route(req,res){
     return json(res,200,result);
   }
   if(u.pathname==='/api/trading/readiness')return json(res,200,getTradingReadiness());
+  if(u.pathname==='/api/market/trading-rules'){
+    const date=u.searchParams.get('date')||new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    if(!validTradingDate(date))return json(res,400,{error:'invalid_date',message:'date must be a valid YYYY-MM-DD date'});
+    return json(res,200,{...getTwseTradingRules(date),generatedAt:now(),dataMode:'OFFICIAL_RULES'});
+  }
   if(u.pathname==='/api/market/universe'){
     const result=await safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,200,result);
