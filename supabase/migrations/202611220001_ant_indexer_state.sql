@@ -1,3 +1,5 @@
+-- Persistent checkpoint for the BSC testnet ANT log indexer.
+-- Service-role access only; no browser access is granted.
 create table if not exists public.ant_indexer_state (
   worker_key text primary key,
   chain_id bigint not null check (chain_id = 97),
