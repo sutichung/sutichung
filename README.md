@@ -43,25 +43,17 @@
 - 台指期：`{source, timestamp, data: {last, changePct, openInterestChange, asOf}}`
 - 情緒：`{source, timestamp, data: {fearGreed, label, retailBias, advanceDecline, asOf}}`
 
-## 三 AI 多空分析與互動 K 線圖
+## 個股量化分析與互動 K 線圖
 
-- 個股頁新增 Gemini（技術面）、Grok（市場情境）、DeepSeek（籌碼與風險）三個獨立 Agent；每個模型各自回傳方向、0–100 評分、信心分數、看多／看空依據、可公開的分析邏輯、風險與失效條件。
-- API：`GET /api/market/agents/:symbol`；加上 `?refresh=1` 可略過 10 分鐘結果快取重新分析。
-- 為避免未經同意產生 API 費用，三 AI 不會背景自動呼叫；使用者按下「啟動三 AI 分析」才送出三個模型請求。未設定金鑰時顯示未設定，不產生假評分。
-- Render 後端環境變數：`GEMINI_API_KEY`、`XAI_API_KEY`、`DEEPSEEK_API_KEY`；可選擇設定 `GEMINI_MODEL`、`XAI_MODEL`、`DEEPSEEK_MODEL`。金鑰不得放在 React 前端或提交到 Git。
-- 預設模型：Gemini `gemini-3.8-flash`、Grok `grok-4.7`、DeepSeek `deepseek-flash`。模型供應商依 token 用量計費與免費額度政策不同；啟用前請先確認帳戶額度。
-- 個股頁新增 TradingView Lightweight Charts：日／週／月 K、60／120／240 根、成交量、EMA5／20／60、布林通道切換、十字游標 OHLC、縮放與平移。資料仍以 TWSE／FinMind 歷史日線為準，日／週／月 K 不等於盤中分鐘 K。
-- 報價時間與行情來源分開顯示；歷史 K 線來源、最後 K 線日期及載入時間另外標示，避免把 API 接收時間誤認為成交時間。
+- 個股頁使用可驗證的行情、歷史 K 線及規則式技術指標進行研究排序；不呼叫外部生成式模型。
+- K 線圖支援日／週／月 K、60／120／240 根、成交量、EMA5／20／60、布林通道、十字游標 OHLC、縮放與平移。資料仍以來源實際提供的歷史日線為準。
 
-設定與操作詳見 [三 AI Agent 設定說明](./docs/AI_AGENTS_SETUP.md)。
-
-## 財經直播中心與自動 AI 分析（2026.11.17.12）
+## 財經直播中心（2026.11.17.12）
 
 - 官方 YouTube 頻道入口：57 東森財經、SBN 全球財經台、非凡商業台、寰宇財經新聞、TVBS 財經。免 API Key 時以官方 `/live` 連結外開；站內嵌入需當次直播影片 ID。
 - 官方外開直播：三立財經 iNEWS、非凡新聞台。若來源網站禁止 iframe，系統保留官方連結，不繞過限制。
 - 有聲播放由官方播放器控制；瀏覽器通常要求使用者點播放／解除靜音。
-- HLS 播放器採 hls.js 開源方案，支援加入已授權的 HLS `.m3u8` 來源；需串流伺服器允許 CORS。設定方式見 `docs/AI_AGENTS_SETUP.md`。
-- 三 AI 目前選取個股自動分析，首次載入及每 15 分鐘更新；全市場其他股票仍由規則掃描篩選。保持網站頁面開啟才會持續觸發；Render Free 不是全天候背景 worker。
+- HLS 播放器採 hls.js 開源方案，支援加入已授權的 HLS `.m3u8` 來源；需串流伺服器允許 CORS。設定方式依授權串流來源與部署環境設定。
 - 每個 AI 提供偏多、盤整、偏空三種風險劇本、觸發條件、應對、可推導目標／停損與失效條件。未設定 API Key 不會回傳假分數。
 - API Key 必須放在 Render 後端 Environment。模型使用量可能產生費用。
 
@@ -100,7 +92,6 @@ API Key 僅放後端環境變數；不要提交 .env、Token、券商帳密或�
 - `GET /api/us/market`：美股指數（S&P 500、Dow Jones、NASDAQ、VIX）、30 檔大型股／ETF 觀察清單、技術指標、規則式研究評分及美股新聞。
 - `GET /api/us/history/:symbol`：指定美股／ETF 的 2 年日 K 歷史資料，供 K 線與量化回測使用。
 - `GET /api/us/search?q=:query`：搜尋觀察清單以外的美股代號及公司名稱。
-- `GET /api/us/agents/:symbol`：Gemini、Groq、Cloudflare Workers AI 三方獨立分析；依序使用各自 API Key，若設定 OpenRouter 則可作為免費模型備援。
 - 美股行情與新聞使用 Yahoo Finance 非官方公開 Chart/Search 端點，無 API Key，但不屬於正式授權即時行情 API，可能延遲、限流或中斷；市場狀態不是 REGULAR、報價時間戳過期或休市時一律標示非即時。
 - 目前量化掃描僅涵蓋程式內 30 檔大型股／ETF，不等於美國所有上市股票；可用搜尋查找其他代號並載入單檔歷史資料。
 - SEC 官方 EDGAR 公司申報文件連結可由個股頁開啟；本版本尚未自動抽取 SEC XBRL 財報與估值比率。
