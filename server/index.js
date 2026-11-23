@@ -22,6 +22,7 @@ const marketIntelligence = require('./lib/market-intelligence');
 const { diagnoseProviders } = require('./lib/provider-diagnostics');
 const { loadOfficialDailyQuotes, diagnoseOfficialDailyQuotes } = require('./lib/official-tw-market');
 const { monthStartKeys, normalizeStockDayRows, mergeStockDayPages } = require('./lib/official-twse-history');
+const { normalizeTPExTradingStock, mergeTPExHistoryPages } = require('./lib/official-tpex-history');
 const { getOfficialFundamentals } = require('./lib/official-tw-fundamentals');
 const { epochMilliseconds, isStaleTimestamp } = require('./lib/market-timestamps');
 const { getTwseTradingRules, validDate: validTradingDate } = require('./lib/tw-market-rules');
@@ -219,24 +220,36 @@ async function twseInstitutionalFlows(){
 function validateSymbol(s){return /^[0-9A-Z]{2,10}$/.test(s||'');}
 function rateLimit(req){const ip=req.socket.remoteAddress||'unknown';const t=Date.now();let a=RATE.get(ip)||[];a=a.filter(x=>t-x<60000);if(a.length>=480)return false;a.push(t);RATE.set(ip,a);return true;}
 
+async function loadTPExStockHistory(symbol){
+  const months=monthStartKeys(36);
+  const pages=await mapLimit(months,3,async month=>{
+    const date=month.slice(0,4)+'/'+month.slice(4,6)+'/01';
+    const url='https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock?code='+encodeURIComponent(symbol)+'&date='+encodeURIComponent(date)+'&response=json';
+    try{
+      const payload=await fetchJson(url,15000,{'User-Agent':'TaiwanStockHunter/1.0','Referer':'https://www.tpex.org.tw/','Accept':'application/json, text/plain, */*'});
+      if(payload.stat&&String(payload.stat).toLowerCase()!=='ok')return {month:month.slice(0,6),rows:[],error:String(payload.stat).slice(0,140)};
+      return {month:month.slice(0,6),rows:normalizeTPExTradingStock(payload),error:null};
+    }catch(error){
+      return {month:month.slice(0,6),rows:[],error:String(error.message||error).slice(0,160)};
+    }
+  });
+  const data=mergeTPExHistoryPages(pages.map(page=>page.rows)).slice(-756);
+  const failedMonths=pages.filter(page=>page.error).map(page=>({month:page.month,error:page.error}));
+  if(!data.length)throw new Error('TPEx 官方 tradingStock 歷史日K沒有回傳有效資料；失敗月份 '+failedMonths.length+'/36');
+  return {
+    data,source:'TPEx 官方網站 afterTrading/tradingStock（月查詢；日收盤 OHLCV；未還原權值）',
+    timestamp:now(),asOf:data.at(-1).time,indicators:data.length>=60?indicators(data):null,
+    dataMode:'END_OF_DAY',historicalCoverage:data.length,historyStart:data[0].time,
+    requestedMonths:36,failedMonths,partialHistory:failedMonths.length>0,
+    historyLimitation:data.length<130?'目前取得 '+data.length+' 根有效官方日K；策略實驗室至少需要 130 根才可回測。':''
+  };
+}
 async function loadStockHistory(symbol){
   const listed=await safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],error:e.message}));
   const issuer=(listed.data||[]).find(x=>x.symbol===symbol);
   if(!issuer)throw new Error('官方上市櫃公司清單找不到此代號；不猜測市場別');
   if(issuer.exchange!=='TWSE'){
-    let historyStoreWarning=null;
-    try{
-      const persisted=await loadPersistedOfficialHistory(symbol,'TPEx');
-      if(persisted.length)return {data:persisted,source:'TPEx 官方 OpenAPI 每日快照（Supabase 歷史累積；未還原權值）',timestamp:now(),asOf:persisted.at(-1).time,indicators:persisted.length>=60?indicators(persisted):null,dataMode:'END_OF_DAY',historicalCoverage:persisted.length,historyStart:persisted[0].time,historyLimitation:persisted.length<130?'官方快照目前累積 '+persisted.length+' 根有效日K；策略實驗室至少需要 130 根才可回測。':''};
-      historyStoreWarning='官方 TPEx 歷史快照目前尚無可用日K；策略實驗室至少需要 130 根有效日K';
-    }catch(error){
-      // Missing Supabase credentials or an unapplied migration must not block the official latest-day quote.
-      historyStoreWarning=String(error.message||error).slice(0,180);
-    }
-    const latest=await loadOfficialDailyQuotes();
-    const quote=latest.data?.[symbol];
-    if(!quote)throw new Error('TPEx 官方 OpenAPI 僅提供最新交易日快照；尚無可用的官方歷史日K介面或已授權歷史資料，拒絕使用第三方歷史資料補值');
-    return {data:[{time:quote.asOf,open:quote.open,high:quote.high,low:quote.low,close:quote.close,volume:quote.volume}],source:'TPEx 官方 OpenAPI 最新日行情（單日快照；不足以計算技術指標）',timestamp:now(),asOf:quote.asOf,indicators:null,dataMode:'END_OF_DAY',historicalCoverage:1,historyLimitation:'官方公開 OpenAPI 未提供可查詢日期的歷史個股日K；需使用 TPEx 官方歷史資料商品或累積每日官方快照。',historyStoreWarning:typeof historyStoreWarning==='string'?historyStoreWarning:null};
+    return await loadTPExStockHistory(symbol);
   }
   const months=monthStartKeys(36);
   const pages=await mapLimit(months,3,async date=>{
