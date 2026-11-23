@@ -6,7 +6,6 @@ const { URL } = require('node:url');
 const { indicators } = require('./lib/indicators');
 const { scoreStock } = require('./lib/scoring');
 const { getTradingReadiness } = require('./lib/trading-readiness');
-const { buildAiCommittee } = require('./lib/agents');
 const { applyFirewall, getTelemetry } = require('./lib/firewall');
 const antColony = require('./lib/ant-colony');
 const { loadMarket: loadUsMarket, getChart: getUsChart, searchSymbols: searchUsSymbols, getUniversePage: getUsUniversePage } = require('./lib/us-market');
@@ -535,7 +534,7 @@ async function route(req,res){
     return json(res,result.status==='unavailable'?503:200,result);
   }
   if(u.pathname==='/api/health/ready'&&req.method==='GET'){const readiness=buildDependencyReadiness();return json(res,200,{...buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}),...readiness});}
-  if(u.pathname==='/api/health/details'){let cryptoStatus=cryptoRealtimeFeed.status();if(process.env.CRYPTO_STREAM_EMBEDDED==='false'){try{cryptoStatus=await cryptoEventStorage.readStatus();}catch(error){cryptoStatus={...cryptoStatus,workerStatusError:error.message};}}return json(res,200,{...buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}),auth:{configured:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY},provider:'TWSE + TPEx official OpenAPI',trading:getTradingReadiness(),cryptoStreaming:cryptoStatus,providers:{finmind:false,youtubeApiKeyConfigured:!!process.env.YOUTUBE_API_KEY,youtubeLiveResolver:!!process.env.YOUTUBE_API_KEY,youtubeChannelEmbedFallback:true,openrouter:!!process.env.OPENROUTER_API_KEY,gemini:!!process.env.GEMINI_API_KEY,groq:!!process.env.GROQ_API_KEY,xai:!!process.env.XAI_API_KEY,deepseek:!!process.env.DEEPSEEK_API_KEY,cloudflare:!!(process.env.CLOUDFLARE_API_TOKEN&&process.env.CLOUDFLARE_ACCOUNT_ID),realtime:cryptoStatus.connectedFeedCount>0,realtimeProviderConfigured:(cryptoStatus.exchanges||[]).length>0,officialDailyMarketData:true,twseOfficialOpenApi:true,tpexOfficialOpenApi:true,licensedRealtimeFeedConfigured:(cryptoStatus.exchanges||[]).length>0,cryptoEventStorageConfigured:cryptoStatus.storage?.configured===true,telegramAlertsConfigured:cryptoStatus.telegramConfigured===true,scan:stale('scan')?.status==='ready',flows:true,futures:true,sentiment:!!stale('sentiment')?.data,news:true,openDataArchive:false,officialFundamentals:true,twseHistoricalKline:true,tpexHistoricalKline:Number(stale('scan')?.markets?.TPEx||0)>0}});}
+  if(u.pathname==='/api/health/details'){let cryptoStatus=cryptoRealtimeFeed.status();if(process.env.CRYPTO_STREAM_EMBEDDED==='false'){try{cryptoStatus=await cryptoEventStorage.readStatus();}catch(error){cryptoStatus={...cryptoStatus,workerStatusError:error.message};}}return json(res,200,{...buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}),auth:{configured:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY},provider:'TWSE + TPEx official OpenAPI',trading:getTradingReadiness(),cryptoStreaming:cryptoStatus,providers:{finmind:false,youtubeApiKeyConfigured:!!process.env.YOUTUBE_API_KEY,youtubeLiveResolver:!!process.env.YOUTUBE_API_KEY,youtubeChannelEmbedFallback:true,realtime:cryptoStatus.connectedFeedCount>0,realtimeProviderConfigured:(cryptoStatus.exchanges||[]).length>0,officialDailyMarketData:true,twseOfficialOpenApi:true,tpexOfficialOpenApi:true,licensedRealtimeFeedConfigured:(cryptoStatus.exchanges||[]).length>0,cryptoEventStorageConfigured:cryptoStatus.storage?.configured===true,telegramAlertsConfigured:cryptoStatus.telegramConfigured===true,scan:stale('scan')?.status==='ready',flows:true,futures:true,sentiment:!!stale('sentiment')?.data,news:true,openDataArchive:false,officialFundamentals:true,twseHistoricalKline:true,tpexHistoricalKline:Number(stale('scan')?.markets?.TPEx||0)>0}});}
   if(SUPABASE_CONFIGURED&&u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/api/auth/')){
     const automationPaths=new Set(['/api/market/snapshot','/api/market/institutional-flows','/api/market/futures','/api/market/sentiment','/api/market/scan','/api/market/news','/api/market/calendar','/api/diagnostics/providers','/api/diagnostics/vulnerabilities','/api/diagnostics/market','/api/crypto/market','/api/crypto/realtime/status','/api/crypto/realtime/quotes','/api/crypto/risk/BTCUSDT','/api/us/market']);
     const smokeReadOnlyPaths=new Set(['/api/diagnostics/providers','/api/diagnostics/vulnerabilities','/api/diagnostics/market','/api/crypto/market','/api/crypto/realtime/status','/api/crypto/realtime/quotes','/api/crypto/risk/BTCUSDT']);
@@ -736,17 +735,6 @@ async function route(req,res){
     const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase(),exchange=u.searchParams.get('exchange')||'Binance';
     try{const data=await cryptoMarket.getDerivatives(symbol,exchange);return json(res,200,data);}catch(e){return json(res,502,{error:e.message});}
   }
-  if(u.pathname.startsWith('/api/crypto/agents/')){
-    const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase(),type=u.searchParams.get('type')==='perpetual'?'perpetual':'spot';
-    try{
-      const exchange=u.searchParams.get('exchange')||'Binance',nativeSymbol=u.searchParams.get('nativeSymbol')||symbol;
-      const history=await cryptoMarket.getHistory(symbol,type,'1d',exchange,nativeSymbol),derivatives=type==='perpetual'?await cryptoMarket.getDerivatives(symbol,exchange,nativeSymbol):null;
-      const quote={symbol,price:history.data.at(-1)?.close,source:history.source,timestamp:history.asOf};
-      const scan={[symbol]:{symbol,scorecard:{status:'research-ready',fresh:true,direction:history.indicators?.trend==='bullish'?'偏向買進':history.indicators?.trend==='bearish'?'偏向賣出':'中立觀望',score:50,confidence:history.indicators?75:0,reasons:['使用 '+exchange+' 日 K 技術指標；尚未接入完整鏈上／代幣基本面']}}};
-      const result=await buildAiCommittee(symbol,{getHistory:async()=>({data:history.data,indicators:history.indicators,source:history.source,asOf:history.asOf}),quotes:{[symbol]:quote},scan,flows:{},fundamentals:derivatives?{derivatives}:null,quoteSource:history.source,env:process.env});
-      return json(res,200,result);
-    }catch(e){return json(res,502,{error:e.message});}
-  }
   if(u.pathname==='/api/us/search'){
     const query=String(u.searchParams.get('q')||'').trim();
     if(!query)return json(res,200,{results:[],source:'Yahoo Finance Search'});
@@ -773,22 +761,6 @@ async function route(req,res){
       return {symbol:chart.symbol,data:chart.candles,asOf:chart.candles.at(-1).time,source:chart.source,timestamp:now(),quote:((({candles,...quote})=>quote)(chart))};
     },e=>({symbol,data:[],asOf:null,source:'unavailable',timestamp:now(),error:e.message}));
     return json(res,result.error?502:200,result);
-  }
-  if(u.pathname.startsWith('/api/us/agents/')){
-    const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase();
-    if(!/^[A-Z0-9.^=-]{1,12}$/.test(symbol))return json(res,400,{error:'invalid_us_symbol'});
-    const load=async()=>{
-      const history=await safeLoad('us-history:'+symbol,60*60*1000,async()=>{
-        const chart=await getUsChart(symbol,'2y','1d');
-        return {symbol:chart.symbol,data:chart.candles,asOf:chart.candles.at(-1)?.time,source:chart.source,quote:((({candles,...quote})=>quote)(chart)),indicators:indicators(chart.candles)};
-      },e=>({data:[],error:e.message}));
-      const market=stale('us-market')||{};
-      const quote=market.data?.[symbol]||history.quote||{};
-      const scan=(market.scan||[]).find(x=>x.symbol===symbol)||{};
-      return buildAiCommittee(symbol,{getHistory:async()=>history,quotes:{[symbol]:quote},scan:{[symbol]:scan},flows:{},fundamentals:null,quoteSource:quote.source||history.source,env:process.env});
-    };
-    const result=u.searchParams.get('refresh')==='1'?await load():await safeLoad('us-agents:'+symbol,10*60*1000,load,e=>({symbol,agents:['gemini','groq','cloudflare'].map(provider=>({provider,status:'error',message:e.message})),consensus:null,analysisTime:now()}));
-    return json(res,200,result);
   }
   if(u.pathname==='/api/trading/readiness')return json(res,200,getTradingReadiness());
   if(u.pathname==='/api/market/trading-rules'){
@@ -921,19 +893,6 @@ async function route(req,res){
       };
     },e=>({error:e.message,company:null,financials:null,source:'unavailable',timestamp:now()}));
     return json(res,result.error?503:200,result);
-  }
-  if(u.pathname.startsWith('/api/market/agents/')){
-    const symbol=decodeURIComponent(u.pathname.split('/').pop());
-    if(!validateSymbol(symbol))return json(res,400,{error:'invalid_symbol'});
-    const fundamentals=stale('fundamentals:'+symbol)||null;
-    const agentCacheKey='agents:'+symbol+':'+(fundamentals?.timestamp||'fundamentals-pending');
-    const load=()=>buildAiCommittee(symbol,{
-      getHistory:s=>safeLoad('history:'+s,TTL.history,()=>loadStockHistory(s),e=>({data:[],error:e.message})),
-      quotes:stale('snapshot')?.data||{},scan:stale('scan')?.data||{},flows:stale('flows')?.data||{},fundamentals,
-      quoteSource:stale('snapshot')?.source||'未取得報價來源',env:process.env
-    });
-    const result=u.searchParams.get('refresh')==='1'?await load():await safeLoad(agentCacheKey,10*60*1000,load,e=>({symbol,agents:['gemini','groq','cloudflare'].map(provider=>({provider,status:'error',message:e.message})),consensus:null,analysisTime:now()}));
-    return json(res,200,result);
   }
   if(u.pathname.startsWith('/api/market/history/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop());
