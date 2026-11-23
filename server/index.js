@@ -302,7 +302,19 @@ async function persistOfficialHistoryBars(symbol,exchange,bars){
       upserted+=batch.length;
     }
     return {persisted:true,upserted,source:'TWSE official STOCK_DAY -> Supabase tw_market_daily_bars'};
-  }catch(error){return {persisted:false,upserted:0,rows:rows.length,reason:String(error.message||error).slice(0,220),migrationRequired:/tw_market_daily_bars|relation .* does not exist|404/i.test(String(error.message||error))};}
+  }catch(error){
+    const reason=String(error.message||error).slice(0,220);
+    const invalidApiKey=error.status===401||/invalid api key|invalid_api_key/i.test(reason);
+    const migrationRequired=/tw_market_daily_bars|relation .* does not exist|404/i.test(reason);
+    return {
+      persisted:false,upserted:0,rows:rows.length,reason,
+      httpStatus:Number(error.status)||null,
+      errorCode:invalidApiKey?'supabase_invalid_api_key':migrationRequired?'supabase_history_table_missing':'supabase_history_upsert_failed',
+      requiredEnv:invalidApiKey?'SUPABASE_SERVICE_ROLE_KEY':null,
+      configurationRequired:invalidApiKey,
+      migrationRequired
+    };
+  }
 }
 async function persistOfficialDailyBars(snapshot){
   if(!SUPABASE_CONFIGURED)return {persisted:false,reason:'supabase_not_configured'};
@@ -560,8 +572,8 @@ async function route(req,res){
   if(u.pathname==='/api/health/ready'&&req.method==='GET'){const readiness=buildDependencyReadiness();return json(res,200,{...buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}),...readiness});}
   if(u.pathname==='/api/health/details'){let cryptoStatus=cryptoRealtimeFeed.status();if(process.env.CRYPTO_STREAM_EMBEDDED==='false'){try{cryptoStatus=await cryptoEventStorage.readStatus();}catch(error){cryptoStatus={...cryptoStatus,workerStatusError:error.message};}}return json(res,200,{...buildRuntimeHealth({mode:process.env.NODE_ENV==='production'?'production':'development'}),auth:{configured:SUPABASE_CONFIGURED,adminManagementConfigured:!!SUPABASE_SERVICE_ROLE_KEY},provider:'TWSE + TPEx official OpenAPI',trading:getTradingReadiness(),cryptoStreaming:cryptoStatus,providers:{finmind:false,youtubeApiKeyConfigured:!!process.env.YOUTUBE_API_KEY,youtubeLiveResolver:!!process.env.YOUTUBE_API_KEY,youtubeChannelEmbedFallback:true,realtime:cryptoStatus.connectedFeedCount>0,realtimeProviderConfigured:(cryptoStatus.exchanges||[]).length>0,officialDailyMarketData:true,twseOfficialOpenApi:true,tpexOfficialOpenApi:true,licensedRealtimeFeedConfigured:(cryptoStatus.exchanges||[]).length>0,cryptoEventStorageConfigured:cryptoStatus.storage?.configured===true,telegramAlertsConfigured:cryptoStatus.telegramConfigured===true,scan:stale('scan')?.status==='ready',flows:true,futures:true,sentiment:!!stale('sentiment')?.data,news:true,openDataArchive:false,officialFundamentals:true,twseHistoricalKline:true,tpexHistoricalKline:Number(stale('scan')?.markets?.TPEx||0)>0}});}
   if(SUPABASE_CONFIGURED&&u.pathname.startsWith('/api/')&&!u.pathname.startsWith('/api/auth/')){
-    const automationPaths=new Set(['/api/market/snapshot','/api/market/history/2330','/api/market/institutional-flows','/api/market/futures','/api/market/sentiment','/api/market/scan','/api/market/news','/api/market/calendar','/api/diagnostics/providers','/api/diagnostics/vulnerabilities','/api/diagnostics/market','/api/crypto/market','/api/crypto/realtime/status','/api/crypto/realtime/quotes','/api/crypto/risk/BTCUSDT','/api/us/market']);
-    const smokeAuthorizedPaths=new Set(['/api/market/history/2330','/api/diagnostics/providers','/api/diagnostics/vulnerabilities','/api/diagnostics/market','/api/crypto/market','/api/crypto/realtime/status','/api/crypto/realtime/quotes','/api/crypto/risk/BTCUSDT']);
+    const automationPaths=new Set(['/api/market/snapshot','/api/market/history/2330','/api/market/research/strategies/3105','/api/market/institutional-flows','/api/market/futures','/api/market/sentiment','/api/market/scan','/api/market/news','/api/market/calendar','/api/diagnostics/providers','/api/diagnostics/vulnerabilities','/api/diagnostics/market','/api/crypto/market','/api/crypto/realtime/status','/api/crypto/realtime/quotes','/api/crypto/risk/BTCUSDT','/api/us/market']);
+    const smokeAuthorizedPaths=new Set(['/api/market/history/2330','/api/market/research/strategies/3105','/api/diagnostics/providers','/api/diagnostics/vulnerabilities','/api/diagnostics/market','/api/crypto/market','/api/crypto/realtime/status','/api/crypto/realtime/quotes','/api/crypto/risk/BTCUSDT']);
     const automationAuthorized=req.method==='GET'&&automationPaths.has(u.pathname)&&await verifyGitHubActionsToken(bearerToken(req),{allowProductionSmoke:smokeAuthorizedPaths.has(u.pathname)});
     if(!automationAuthorized){
       const user=await authenticatedUser(req);if(!user)return json(res,401,{error:'authentication_required'});
