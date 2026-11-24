@@ -1,23 +1,7 @@
-# Build the React dashboard, then run the lightweight Node API/static server.
-FROM node:22-alpine AS build
+FROM node:22-alpine
 WORKDIR /app
-COPY package*.json ./
-RUN npm install --no-audit --no-fund
-COPY . .
-# Refresh advisory data on every source commit instead of reusing a cached audit layer.
-RUN npm audit --json > /app/dependency-audit.json || true
-RUN node --check server/index.js
-RUN npm run build
-
-FROM node:22-alpine AS runtime
-WORKDIR /app
-ENV NODE_ENV=production PORT=8787
-COPY --from=build /app/server ./server
-COPY --from=build /app/package-lock.json ./package-lock.json
-COPY --from=build /app/dependency-audit.json ./dependency-audit.json
-COPY --from=build /app/package.json ./package.json
-RUN npm ci --omit=dev --no-audit --no-fund
-COPY --from=build /app/build ./build
-EXPOSE 8787
+ENV NODE_ENV=production PORT=10000
+COPY ant-testnet-status.js ./ant-testnet-status.js
+EXPOSE 10000
 USER node
-CMD ["node", "server/index.js"]
+CMD ["node", "ant-testnet-status.js"]
