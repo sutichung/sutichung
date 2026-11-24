@@ -1,0 +1,66 @@
+name: Overnight Taiwan Stock Hunter maintenance
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/overnight-maintenance.yml'
+  schedule:
+    - cron: "0 16,18,20,22 * * *" # 00:00, 02:00, 04:00, 06:00 Asia/Taipei
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: taiwan-stock-hunter-overnight-maintenance
+  cancel-in-progress: false
+jobs:
+  verify-and-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build dashboard
+        run: npm run build
+      - name: Run backend regression tests
+        run: npm run test:server
+      - name: Check server syntax
+        run: node --check server/index.js
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Smoke test deployed Taiwan Stock Hunter health
+        run: |
+          node <<'NODE'
+          (async () => {
+            const url = 'https://taiwan-stock-hunter-o3tt.onrender.com/api/health';
+            let lastError;
+            for (let i = 0; i < 12; i++) {
+              try {
+                const r = await fetch(url, { headers: { accept: 'application/json' } });
+                if (!r.ok) throw new Error('Health endpoint returned HTTP ' + r.status);
+                const b = await r.json();
+                if (b.status && !['ok','healthy'].includes(String(b.status).toLowerCase())) {
+                  throw new Error('Health status is not healthy');
+                }
+                console.log('Taiwan Stock Hunter health endpoint responded successfully.');
+                return;
+              } catch (e) { lastError = e; }
+              await new Promise(resolve => setTimeout(resolve, 10000));
+            }
+            throw lastError || new Error('Health check timeout');
+          })().catch(e => { console.error(e.message); process.exit(1); });
+          NODE
+      - name: Record maintenance summary
+        if: always()
+        run: |
+          {
+            echo "## Taiwan Stock Hunter overnight maintenance"
+            echo "- Taiwan schedule: 00:00 / 02:00 / 04:00 / 06:00"
+            echo "- Dashboard build, backend tests, dependency audit, deployed health check"
+            echo "- Commit: $GITHUB_SHA"
+            echo "- Result: ${{ job.status }}"
+          } >> "$GITHUB_STEP_SUMMARY"
