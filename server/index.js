@@ -275,6 +275,21 @@ const SUPABASE_ANON_KEY=process.env.SUPABASE_ANON_KEY||'';
 const SUPABASE_SERVICE_ROLE_KEY=process.env.SUPABASE_SERVICE_ROLE_KEY||'';
 const SUPABASE_ADMIN_EMAIL=String(process.env.SUPABASE_ADMIN_EMAIL||'').trim().toLowerCase();
 const SUPABASE_CONFIGURED=!!(SUPABASE_URL&&SUPABASE_ANON_KEY);
+async function diagnoseOfficialHistoryPersistence(){
+  if(!SUPABASE_CONFIGURED)return {status:'blocked',code:'supabase_not_configured'};
+  if(!SUPABASE_SERVICE_ROLE_KEY)return {status:'blocked',code:'service_role_key_missing'};
+  try{
+    const rows=await supabaseRequest('/rest/v1/tw_market_daily_bars?select=symbol&limit=1',{admin:true});
+    return {status:'available',table:'tw_market_daily_bars',readable:true,sampleRows:Array.isArray(rows)?rows.length:0};
+  }catch(error){
+    const reason=String(error.message||error).slice(0,180);
+    const status=Number(error.status)||null;
+    const code=status===401||/invalid api key|invalid_api_key/i.test(reason)?'service_role_key_invalid':
+      /tw_market_daily_bars|relation .* does not exist|404/i.test(reason)?'history_table_missing':'history_table_unreachable';
+    return {status:'blocked',code,httpStatus:status,detail:reason};
+  }
+}
+
 async function readRequestJson(req,maxBytes=16384){
   let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw,'utf8')>maxBytes)throw new Error('request_body_too_large');}
   try{return raw?JSON.parse(raw):{};}catch(_){throw new Error('invalid_json');}
@@ -823,13 +838,22 @@ async function route(req,res){
     return json(res,200,{...result,historyPersistence});
   }
   if(u.pathname==='/api/diagnostics/data-quality'){
-    const [quotes,history,flows,listed]=await Promise.all([
+    const [quotes,history,flows,listed,persistence]=await Promise.all([
       safeLoad('market-quality-quotes',60*1000,diagnoseOfficialDailyQuotes,e=>({ok:false,quoteCount:0,realtime:false,dataMode:'unknown',error:e.message})),
       safeLoad('official-market-history-diagnostics',30*60*1000,()=>loadOfficialMarketHistory(120),e=>({data:{},error:e.message,historyDateCount:0,historyCount:0})),
       safeLoad('flows',TTL.flows,twseInstitutionalFlows,e=>({data:{},error:e.message})),
-      safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],error:e.message}))
+      safeLoad('universe',TTL.universe,twseListedUniverse,e=>({data:[],error:e.message})),
+      diagnoseOfficialHistoryPersistence()
     ]);
     const report=buildMarketDataQuality({quotes,history,flows,listed,now:now()});
+    report.historical.persistence=persistence;
+    if(persistence.status!=='available'){
+      report.status='degraded';
+      report.verified.historicalPersistence=false;
+      report.warnings.push('官方歷史 K 線資料庫持久化未通過連線檢查；不可宣稱資料已保存。');
+    }else{
+      report.verified.historicalPersistence=true;
+    }
     return json(res,report.status==='healthy'?200:503,report);
   }
   if(u.pathname==='/api/diagnostics/analysis'){
