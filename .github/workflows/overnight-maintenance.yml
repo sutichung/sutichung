@@ -63,3 +63,56 @@ jobs:
             echo "- Commit: $GITHUB_SHA"
             echo "- Result: ${{ job.status }}"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  verify-ant-testnet-branch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ant-token-testnet
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install ANT testnet branch dependencies
+        run: npm install --no-audit --no-fund
+      - name: Check status-only service syntax
+        run: node --check ant-testnet-status.js
+      - name: Run shared backend regression tests
+        run: npm run test:server
+      - name: Audit ANT testnet production dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Smoke test deployed ANT testnet status-only endpoint
+        run: |
+          node <<'NODE'
+          (async () => {
+            const url = 'https://zentrax-ant-testnet.onrender.com/healthz';
+            let lastError;
+            for (let i = 0; i < 12; i++) {
+              try {
+                const r = await fetch(url, { headers: { accept: 'application/json' } });
+                const b = await r.json();
+                if (!r.ok || b.ok !== true || b.service !== 'ant-testnet-status' ||
+                    b.mode !== 'status_only' || b.chainId !== 97 ||
+                    b.mainnetDeploymentEnabled !== false ||
+                    b.signerConfiguredInThisService !== false) {
+                  throw new Error('ANT testnet status-only safety contract mismatch');
+                }
+                console.log('ANT testnet status-only endpoint passed; no signer or mainnet deployment enabled.');
+                return;
+              } catch (e) { lastError = e; }
+              await new Promise(resolve => setTimeout(resolve, 10000));
+            }
+            throw lastError || new Error('ANT testnet smoke check timeout');
+          })().catch(e => { console.error(e.message); process.exit(1); });
+          NODE
+      - name: Record ANT testnet maintenance summary
+        if: always()
+        run: |
+          {
+            echo "## ANT testnet branch maintenance"
+            echo "- Checks: status-only syntax, backend tests, production dependency audit, deployed status endpoint"
+            echo "- Branch: ant-token-testnet"
+            echo "- Commit: $GITHUB_SHA"
+            echo "- Result: ${{ job.status }}"
+          } >> "$GITHUB_STEP_SUMMARY"
