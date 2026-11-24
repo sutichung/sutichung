@@ -639,10 +639,6 @@ async function route(req,res){
 
     return json(res,200,{results,offset,nextOffset:offset+batch.length,total:(market.markets||[]).length,done:offset+batch.length>=(market.markets||[]).length,source:'多交易所逐市場日K技術掃描',timestamp:now()});
   }
-  if(u.pathname==='/api/crypto/news'){
-      Promise.resolve({data:[],source:'disabled',status:'disabled'}),
-    return json(res,200,result);
-  }
   if(u.pathname.startsWith('/api/research/strategies/')||u.pathname.startsWith('/api/market/research/strategies/')){
     const symbol=decodeURIComponent(u.pathname.split('/').pop()).toUpperCase();
     const market=u.searchParams.get('market');
