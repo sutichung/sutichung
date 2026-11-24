@@ -116,3 +116,58 @@ jobs:
             echo "- Commit: $GITHUB_SHA"
             echo "- Result: ${{ job.status }}"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  verify-remote-services:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Smoke test Telegram, Neo Face AI, and FALCON services
+        run: |
+          node <<'NODE'
+          const checks = [
+            { name: 'Taiwan Telegram bot', url: 'https://taiwan-stock-telegram-bot-3b9o.onrender.com/healthz', service: 'taiwan-stock-telegram-bot', telegram: true },
+            { name: 'Crypto Radar v2', url: 'https://telegram-crypto-radar-v2.onrender.com/healthz', service: 'telegram-crypto-radar', telegram: true },
+            { name: 'Telegram webhook', url: 'https://telegram-crypto-radar-webhook.onrender.com/healthz', service: 'telegram-crypto-radar', telegram: true },
+            { name: 'Neo Face AI', url: 'https://neo-face-ai-bot-4tw4.onrender.com/health', service: 'neo-face-ai-bot' },
+            { name: 'FALCON', url: 'https://falcon-social-workspace.onrender.com/' }
+          ];
+          const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+          (async () => {
+            for (const check of checks) {
+              let lastError;
+              for (let attempt = 0; attempt < 12; attempt++) {
+                try {
+                  const response = await fetch(check.url, { headers: { accept: 'application/json' } });
+                  if (!response.ok) throw new Error('HTTP ' + response.status);
+                  const body = check.telegram || check.service === 'neo-face-ai-bot' ? await response.json() : null;
+                  if (check.service && body?.service !== check.service) throw new Error('Unexpected service identity');
+                  if (check.telegram && (body.status !== 'ok' || body.telegram_ready !== true)) {
+                    throw new Error('Telegram bot is not ready: ' + JSON.stringify({status:body.status,telegram_ready:body.telegram_ready}));
+                  }
+                  if (check.name === 'Neo Face AI' && body?.status !== 'ok') throw new Error('Neo Face AI health status is not ok');
+                  console.log(JSON.stringify({service:check.name,httpStatus:response.status,ready:true,
+                    groupPushConfigured:body?.group_push_configured ?? null,
+                    learningStoragePersistent:body?.learning_storage_persistent ?? null}));
+                  lastError = null;
+                  break;
+                } catch (error) {
+                  lastError = error;
+                  await sleep(10000);
+                }
+              }
+              if (lastError) throw new Error(check.name + ' failed: ' + lastError.message);
+            }
+          })().catch(error => { console.error(error.message); process.exit(1); });
+          NODE
+      - name: Record remote service maintenance summary
+        if: always()
+        run: |
+          {
+            echo "## Remote service maintenance"
+            echo "- Checked: Taiwan Telegram bot, Crypto Radar v2, Telegram webhook, Neo Face AI, FALCON"
+            echo "- Result: ${{ job.status }}"
+          } >> "$GITHUB_STEP_SUMMARY"
