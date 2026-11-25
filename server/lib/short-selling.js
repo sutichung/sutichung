@@ -1,6 +1,7 @@
 'use strict';
 
 const TWSE_URL = 'https://www.twse.com.tw/rwd/zh/marginTrading/TWT92U?response=json';
+const TPEX_URL = 'https://www.tpex.org.tw/openapi/tpex_margin_trading_margin_mark';
 
 function clean(value) {
   return String(value ?? '').trim();
@@ -46,31 +47,91 @@ function parseRows(payload) {
 }
 
 async function loadShortSellingStatus({ fetchJson, now = () => new Date().toISOString() }) {
-  const response = await fetchJson(TWSE_URL, 12000, {
+  const headers = {
     'User-Agent': 'TaiwanStockHunter/1.0',
     'Referer': 'https://www.twse.com.tw/',
     'Accept': 'application/json'
-  });
-  if (response.stat && response.stat !== 'OK') {
-    throw new Error('TWSE TWT92U status: ' + response.stat);
+  };
+  const [twseResult, tpexResult] = await Promise.allSettled([
+    fetchJson(TWSE_URL, 12000, headers),
+    fetchJson(TPEX_URL, 12000, { 'User-Agent': 'TaiwanStockHunter/1.0', 'Accept': 'application/json' })
+  ]);
+  const data = {};
+  const marketCoverage = { TWSE: false, TPEx: false };
+  const sourceStatus = {};
+  let dataDate = null;
+
+  if (twseResult.status === 'fulfilled') {
+    const payload = twseResult.value;
+    if (payload.stat && payload.stat !== 'OK') throw new Error('TWSE TWT92U status: ' + payload.stat);
+    const listed = parseRows(payload);
+    if (!listed.length) throw new Error('TWSE TWT92U returned no usable rows');
+    for (const row of listed) data[row.symbol] = row;
+    marketCoverage.TWSE = true;
+    sourceStatus.TWSE = { ok: true, rows: listed.length, source: TWSE_URL };
+    dataDate = payload.date || payload.queryDate || dataDate;
+  } else {
+    sourceStatus.TWSE = { ok: false, error: String(twseResult.reason?.message || twseResult.reason) };
   }
-  const listed = parseRows(response);
-  if (!listed.length) throw new Error('TWSE TWT92U returned no usable rows');
-  const data = Object.fromEntries(listed.map(row => [row.symbol, row]));
+
+  if (tpexResult.status === 'fulfilled') {
+    const payload = tpexResult.value;
+    const rows = Array.isArray(payload) ? payload
+      : Array.isArray(payload?.data) ? payload.data
+      : Array.isArray(payload?.result) ? payload.result : [];
+    const listed = rows.map(row => {
+      const get = (...keys) => {
+        for (const key of keys) if (row?.[key] !== undefined && row?.[key] !== null) return clean(row[key]);
+        return '';
+      };
+      const symbol = get('證券代號', '股票代號', '股票代碼', 'Code', 'SecuritiesCode');
+      if (!/^[0-9A-Z]{2,10}$/.test(symbol)) return null;
+      const marginSuspended = get('暫停融券賣出') === '*';
+      const sblSuspended = get('暫停借券賣出') === '*';
+      const belowReferenceRestricted = get('前一交易日收盤價跌停本日禁止平盤下融(借)券賣出',
+        '前一交易日收盤價跌停本日禁止平盤下融借券賣出') === '*';
+      return {
+        symbol,
+        name: get('證券中文名稱', '證券名稱', '股票名稱', 'Name') || symbol,
+        exchange: 'TPEx',
+        marginShortSuspended: marginSuspended,
+        securitiesLendingShortSuspended: sblSuspended,
+        belowReferenceRestricted,
+        status: marginSuspended && sblSuspended ? 'FULL_SHORT_SUSPENSION'
+          : marginSuspended || sblSuspended ? 'PARTIAL_SHORT_SUSPENSION'
+          : belowReferenceRestricted ? 'NO_BELOW_REFERENCE_SHORT' : 'NO_SYMBOL_SPECIFIC_RESTRICTION',
+        source: 'TPEx official MargMark'
+      };
+    }).filter(Boolean);
+    if (listed.length) {
+      for (const row of listed) data[row.symbol] = row;
+      marketCoverage.TPEx = true;
+      sourceStatus.TPEx = { ok: true, rows: listed.length, source: TPEX_URL, effectiveRule: 'T+1' };
+    } else {
+      sourceStatus.TPEx = { ok: false, error: 'TPEx MargMark returned no usable rows' };
+    }
+  } else {
+    sourceStatus.TPEx = { ok: false, error: String(tpexResult.reason?.message || tpexResult.reason) };
+  }
+
+  if (!marketCoverage.TWSE && !marketCoverage.TPEx) {
+    throw new Error('TWSE and TPEx official short-selling restriction sources unavailable');
+  }
   return {
     data,
-    source: 'TWSE official TWT92U',
+    source: 'TWSE TWT92U + TPEx MargMark official daily lists',
+    sourceStatus,
     timestamp: now(),
-    dataDate: response.date || response.queryDate || null,
-    marketCoverage: { TWSE: true, TPEx: false },
+    dataDate,
+    marketCoverage,
     globalRule: {
       effectiveDate: '2026-11-23',
       belowPreviousCloseShortSellingProhibited: true,
       appliesTo: ['TWSE', 'TPEx', 'TDR'],
       note: '融券及借券賣出價格不得低於前一交易日收盤價；這不是全面禁止放空。'
     },
-    warning: '上市個股旗標來自證交所官方名單；上櫃個股暫未接入櫃買中心 MargMark.csv 官方資料，請勿將缺少資料解讀為可放空。'
+    warning: '未成功取得的市場資料標示為未知，不可將缺少資料解讀為可放空。'
   };
 }
 
-module.exports = { loadShortSellingStatus, parseRows, TWSE_URL };
+module.exports = { loadShortSellingStatus, parseRows, TWSE_URL, TPEX_URL };
