@@ -1,7 +1,7 @@
 'use strict';
 
 const TWSE_URL = 'https://www.twse.com.tw/rwd/zh/marginTrading/TWT92U?response=json';
-const TPEX_URL = 'https://www.tpex.org.tw/openapi/tpex_margin_trading_margin_mark';
+const TPEX_URL = 'https://www.tpex.org.tw/openapi/v1/tpex_margin_trading_margin_mark';
 
 function clean(value) {
   return String(value ?? '').trim();
