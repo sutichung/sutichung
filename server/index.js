@@ -26,6 +26,7 @@ const { formatTPExQueryMonth, normalizeTPExTradingStock, mergeTPExHistoryPages }
 const { getOfficialFundamentals } = require('./lib/official-tw-fundamentals');
 const { epochMilliseconds, isStaleTimestamp } = require('./lib/market-timestamps');
 const { getTwseTradingRules, validDate: validTradingDate } = require('./lib/tw-market-rules');
+const { loadShortSellingStatus } = require('./lib/short-selling');
 const { buildMarketDataQuality } = require('./lib/market-data-quality');
 const { createDependencyVulnerabilityScanner } = require('./lib/dependency-vulnerabilities');
 const { verifyGitHubActionsToken } = require('./lib/github-oidc');
@@ -836,6 +837,10 @@ async function route(req,res){
     const result=await safeLoad('snapshot',TTL.snapshot,loadOfficialDailyQuotes,e=>({data:{},source:'unavailable',timestamp:now(),dataMode:'END_OF_DAY',delayed:true,error:e.message,quoteCount:0}));
     const historyPersistence=result.data&&Object.keys(result.data).length?await persistOfficialDailyBars(result):{persisted:false,reason:'no_official_snapshot'};
     return json(res,200,{...result,historyPersistence});
+  }
+  if(u.pathname==='/api/market/short-selling'){
+    const result=await safeLoad('short-selling-status',5*60*1000,()=>loadShortSellingStatus({fetchJson,now}),error=>({data:{},source:'unavailable',timestamp:now(),marketCoverage:{TWSE:false,TPEx:false},error:String(error.message||error),warning:'放空限制官方資料不可用；請勿視為可放空。'}));
+    return json(res,result.error?503:200,result);
   }
   if(u.pathname==='/api/diagnostics/data-quality'){
     const [quotes,history,flows,listed,persistence]=await Promise.all([
