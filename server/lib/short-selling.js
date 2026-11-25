@@ -62,14 +62,18 @@ async function loadShortSellingStatus({ fetchJson, now = () => new Date().toISOS
   let dataDate = null;
 
   if (twseResult.status === 'fulfilled') {
-    const payload = twseResult.value;
-    if (payload.stat && payload.stat !== 'OK') throw new Error('TWSE TWT92U status: ' + payload.stat);
-    const listed = parseRows(payload);
-    if (!listed.length) throw new Error('TWSE TWT92U returned no usable rows');
-    for (const row of listed) data[row.symbol] = row;
-    marketCoverage.TWSE = true;
-    sourceStatus.TWSE = { ok: true, rows: listed.length, source: TWSE_URL };
-    dataDate = payload.date || payload.queryDate || dataDate;
+    try {
+      const payload = twseResult.value;
+      if (payload.stat && payload.stat !== 'OK') throw new Error('TWSE TWT92U status: ' + payload.stat);
+      const listed = parseRows(payload);
+      if (!listed.length) throw new Error('TWSE TWT92U returned no usable rows');
+      for (const row of listed) data[row.symbol] = row;
+      marketCoverage.TWSE = true;
+      sourceStatus.TWSE = { ok: true, rows: listed.length, source: TWSE_URL };
+      dataDate = payload.date || payload.queryDate || dataDate;
+    } catch (error) {
+      sourceStatus.TWSE = { ok: false, error: String(error?.message || error) };
+    }
   } else {
     sourceStatus.TWSE = { ok: false, error: String(twseResult.reason?.message || twseResult.reason) };
   }
