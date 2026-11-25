@@ -1,0 +1,94 @@
+name: ANT overnight maintenance
+on:
+  schedule:
+    - cron: "10 0-7 * * *"
+      timezone: "Asia/Taipei"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ant-overnight-maintenance
+  cancel-in-progress: false
+
+jobs:
+  compile-test-and-readiness:
+    name: Compile, test, diagnose ANT launch readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out ANT testnet branch
+        uses: actions/checkout@v4
+        with:
+          ref: ant-token-testnet
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Syntax-check deployment and maintenance scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in scripts/*.js scripts/*.mjs; do
+            [ -f "$file" ] || continue
+            node --check "$file"
+          done
+
+      - name: Compile ANT contracts
+        run: npm run compile:token
+
+      - name: Run ANT contract tests (retry once on failure)
+        shell: bash
+        run: |
+          set -uo pipefail
+          for attempt in 1 2; do
+            echo "ANT test attempt $attempt"
+            if npm run test:token; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 1 ]; then
+              echo "First attempt failed; retrying once after a clean Hardhat cache."
+              rm -rf cache artifacts
+            fi
+          done
+          echo "ANT contract tests failed after retry."
+          exit 1
+
+      - name: Verify ANT listing-readiness evidence
+        run: node scripts/check-ant-listing-readiness.mjs
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Upload diagnostics and readiness evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ant-overnight-${{ github.run_number }}
+          path: |
+            artifacts/ant-listing-readiness.json
+            artifacts/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Write overnight report
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## ANT overnight maintenance"
+            echo "- Schedule: daily 00:10–07:10 Asia/Taipei"
+            echo "- Branch: ant-token-testnet"
+            echo "- Commit: $GITHUB_SHA"
+            echo "- Checks: script syntax, contract compilation, contract tests (one retry), listing readiness, production dependency audit"
+            echo "- Result: ${{ job.status }}"
+            echo "- Safety: no mainnet deployment, wallet signing, token minting, or liquidity funding is performed"
+          } >> "$GITHUB_STEP_SUMMARY"
