@@ -1,0 +1,46 @@
+name: ANT Testnet Status Service CI
+
+on:
+  push:
+    branches: [ant-token-testnet]
+    paths:
+      - "Dockerfile"
+      - "ant-testnet-status.js"
+      - ".github/workflows/ant-testnet-status-ci.yml"
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - "ant-testnet-status.js"
+      - ".github/workflows/ant-testnet-status-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ant-status-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  status-service:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax check
+        run: node --check ant-testnet-status.js
+      - name: Build isolated status image
+        run: docker build -t ant-testnet-status-ci .
+      - name: Smoke-test status endpoint
+        run: |
+          docker run -d --name ant-testnet-status-ci -p 10000:10000 ant-testnet-status-ci
+          trap 'docker rm -f ant-testnet-status-ci >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 15); do
+            if curl --connect-timeout 2 --max-time 3 --fail --silent http://127.0.0.1:10000/healthz -o /tmp/status.json; then
+              break
+            fi
+            sleep 1
+          done
+          node -e "const s=require('/tmp/status.json'); if(!s.ok || s.chainId!==97 || s.mainnetDeploymentEnabled!==false || s.mode!=='status_only') process.exit(1)"
