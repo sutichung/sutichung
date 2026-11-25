@@ -110,3 +110,19 @@ test('daily health report treats missing required authentication as a blocking c
  assert.deepEqual(report.failures.map(x=>x.id),['supabase']);
  assert.equal(report.providerSummary.criticalFailing,1);
 });
+
+test('daily health report counts region-restricted providers as optional failures',()=>{
+ const report=buildHealthReport(
+  {ok:true},
+  {checks:[
+   {id:'twse',status:'connected'},
+   {id:'binance-futures',status:'region_restricted',httpStatus:451,message:'region restricted'}
+  ]}
+ );
+ assert.equal(report.providerSummary.failing,1);
+ assert.equal(report.providerSummary.optionalFailing,1);
+ assert.equal(report.providerFailures[0].status,'region_restricted');
+ assert.equal(report.optionalProviderFailures[0].httpStatus,451);
+ assert.ok(report.warnings.includes('some_optional_providers_unavailable'));
+ assert.equal(report.overallStatus,'partial');
+});
