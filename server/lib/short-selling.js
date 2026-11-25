@@ -114,6 +114,54 @@ async function loadShortSellingStatus({ fetchJson, now = () => new Date().toISOS
     sourceStatus.TPEx = { ok: false, error: String(tpexResult.reason?.message || tpexResult.reason) };
   }
 
+  const preannouncementStatus = {};
+  for (const [market, url] of [
+    ['TWSE', 'https://www.twse.com.tw/rwd/zh/marginTrading/BFI84U?response=json'],
+    ['TPEx', 'https://www.tpex.org.tw/openapi/tpex_margin_trading_term']
+  ]) {
+    try {
+      const payload = await fetchJson(url, 12000, headers);
+      const table = Array.isArray(payload?.tables)
+        ? payload.tables.find(item => Array.isArray(item?.data)) : null;
+      const fields = table?.fields || payload?.fields || [];
+      const rows = Array.isArray(payload) ? payload
+        : Array.isArray(payload?.data) ? payload.data
+        : table?.data || [];
+      let count = 0;
+      for (const row of rows) {
+        const get = (...keys) => {
+          if (Array.isArray(row)) {
+            const idx = fields.findIndex(field => keys.some(key => clean(field).includes(key)));
+            return idx >= 0 ? clean(row[idx]) : '';
+          }
+          for (const key of keys) if (row?.[key] !== undefined && row?.[key] !== null) return clean(row[key]);
+          return '';
+        };
+        const symbol = get('股票代號', '證券代號', 'Code', 'SecuritiesCode');
+        if (!/^[0-9A-Z]{2,10}$/.test(symbol)) continue;
+        const notice = {
+          startDate: get('停券起日(最後回補日)', '停券起日', '停止融券賣出起日', 'StartDate'),
+          endDate: get('停券迄日', '停止融券賣出迄日', 'EndDate'),
+          reason: get('原因', 'Reason'),
+          source: market + ' official short-sale suspension preannouncement'
+        };
+        if (!data[symbol]) {
+          data[symbol] = {
+            symbol, name: get('股票名稱', '證券名稱', 'Name') || symbol,
+            exchange: market, marginShortSuspended: false,
+            securitiesLendingShortSuspended: false, belowReferenceRestricted: false,
+            status: 'PREANNOUNCED_SHORT_SUSPENSION'
+          };
+        }
+        data[symbol].preannouncement = notice;
+        count++;
+      }
+      preannouncementStatus[market] = { ok: true, rows: count, source: url };
+    } catch (error) {
+      preannouncementStatus[market] = { ok: false, error: String(error?.message || error) };
+    }
+  }
+
   if (!marketCoverage.TWSE && !marketCoverage.TPEx) {
     throw new Error('TWSE and TPEx official short-selling restriction sources unavailable');
   }
@@ -121,6 +169,7 @@ async function loadShortSellingStatus({ fetchJson, now = () => new Date().toISOS
     data,
     source: 'TWSE TWT92U + TPEx MargMark official daily lists',
     sourceStatus,
+    preannouncementStatus,
     timestamp: now(),
     dataDate,
     marketCoverage,
