@@ -14,7 +14,7 @@
 ## 啟動
 1. 安裝 Node.js 20 或更新版本。
 2. 複製環境設定：`cp .env.example .env`，填入可用資料供應商設定。
-3. 安裝依賴：`npm install`（目前 repository 尚未提交 lockfile，依賴版本尚非完全可重現；補齊 lockfile 後應改用 `npm ci`）。
+3. 安裝依賴：`npm ci`（`package-lock.json` 已提交，安裝版本可重現；新增依賴時才用 `npm install`）。
 4. 終端機 A 啟動後端：`npm run server`（預設 http://localhost:8787）。
 5. 終端機 B 啟動前端：`npm start`（Vite dev server 透過 vite.config.js proxy 連後端）。
 6. 測試：`npm run test:server`；正式前端建置：`npm run build`。
