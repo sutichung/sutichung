@@ -81,6 +81,29 @@ test('market data report fails closed when official Taiwan or all crypto exchang
   assert.equal(report.overallStatus, 'degraded');
 });
 
+test('daily health report treats crypto venues blocked only by missing redistribution licenses as expected disabled', () => {
+  const exchanges = ['Binance', 'Bybit', 'OKX', 'Coinbase', 'Kraken'].map(name => ({
+    name,
+    status: 'not_configured',
+    error: `market_data_license_required:${name}:${name.toUpperCase()}_MARKET_DATA_LICENSE_CONFIRMED`
+  }));
+  const report = buildHealthReport(
+    { ok: true, mode: 'production' },
+    { checks: [] },
+    null,
+    {
+      status: 'license_required',
+      markets: [],
+      summary: { connectedExchangeCount: 0, sourceTimestampCoveragePct: 0 },
+      exchanges
+    }
+  );
+  assert.equal(report.marketData.crypto.status, 'license_required');
+  assert.deepEqual(report.failures, []);
+  assert.ok(report.warnings.includes('crypto_market_data_disabled_pending_redistribution_license'));
+  assert.equal(report.overallStatus, 'partial');
+});
+
 test('daily health report blocks required Taiwan, ECB, and Supabase provider failures',()=>{
  const report=buildHealthReport(
   {ok:true},
