@@ -50,9 +50,13 @@ function buildHealthReport(health, diagnostics, marketDiagnostics = null, crypto
     const unavailableExchanges = exchanges.filter(x => x.status !== 'connected').map(x => ({
       name: x.name, status: x.status || 'unknown', error: x.error || null
     }));
+    const licenseRequired = cryptoMarket.status === 'license_required' &&
+      exchanges.length > 0 &&
+      exchanges.every(x => x.status === 'not_configured' &&
+        String(x.error || '').startsWith('market_data_license_required:'));
     const connected = marketCount > 0 && connectedCount > 0;
     crypto = {
-      status: connected ? (unavailableExchanges.length ? 'partial' : 'connected') : 'unavailable',
+      status: connected ? (unavailableExchanges.length ? 'partial' : 'connected') : licenseRequired ? 'license_required' : 'unavailable',
       marketCount,
       connectedExchangeCount: connectedCount,
       sourceTimestampCoveragePct: finiteOrNull(cryptoMarket.summary?.sourceTimestampCoveragePct),
@@ -64,11 +68,12 @@ function buildHealthReport(health, diagnostics, marketDiagnostics = null, crypto
       })),
       unavailableExchanges
     };
-    if (!connected) dataFailures.push({
+    if (!connected && !licenseRequired) dataFailures.push({
       id: 'crypto-market-data',
       status: 'unavailable',
       message: cryptoMarket.error || 'No usable public exchange market data returned'
     });
+    else if (licenseRequired) warnings.push('crypto_market_data_disabled_pending_redistribution_license');
     else if (unavailableExchanges.length) warnings.push('some_crypto_exchanges_unavailable');
   }
   const rawSecurity = diagnostics.security && typeof diagnostics.security === 'object' ? diagnostics.security : null;
