@@ -9,7 +9,7 @@ const finiteOrNull = value => value === null || value === undefined || value ===
 
 function buildHealthReport(health, diagnostics, marketDiagnostics = null, cryptoMarket = null) {
   const checks = Array.isArray(diagnostics.checks) ? diagnostics.checks : [];
-  const providerFailures = checks.filter(x => ['auth_error','permission_error','rate_limited','timeout','error','upstream_error','http_error','endpoint_error'].includes(x.status));
+  const providerFailures = checks.filter(x => ['auth_error','permission_error','rate_limited','timeout','error','upstream_error','http_error','endpoint_error','region_restricted'].includes(x.status));
   const requiredProviderIds = new Set(['twse','ecb','supabase']);
   const criticalProviderFailures = providerFailures.filter(x => requiredProviderIds.has(x.id));
   const requiredNotConfigured = checks.filter(x => requiredProviderIds.has(x.id) && x.status === 'not_configured');
