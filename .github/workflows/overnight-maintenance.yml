@@ -131,7 +131,8 @@ jobs:
           const checks = [
             { name: 'Taiwan Telegram bot', url: 'https://taiwan-stock-telegram-bot-3b9o.onrender.com/healthz', service: 'taiwan-stock-telegram-bot', telegram: true },
             { name: 'Crypto Radar v2', url: 'https://telegram-crypto-radar-v2.onrender.com/healthz', service: 'telegram-crypto-radar', telegram: true },
-            { name: 'Telegram webhook', url: 'https://telegram-crypto-radar-webhook.onrender.com/healthz', service: 'telegram-crypto-radar', telegram: true },
+            // This service is intentionally a passive HTTP endpoint; the active Telegram ingress is Crypto Radar v2.
+            { name: 'Crypto Radar passive webhook endpoint', url: 'https://telegram-crypto-radar-webhook.onrender.com/healthz', service: 'telegram-crypto-radar', expectedStatus: 'waiting_for_telegram_token' },
             { name: 'Neo Face AI', url: 'https://neo-face-ai-bot-4tw4.onrender.com/health', service: 'neo-face-ai-bot' },
             { name: 'FALCON', url: 'https://falcon-social-workspace.onrender.com/' }
           ];
@@ -143,14 +144,21 @@ jobs:
                 try {
                   const response = await fetch(check.url, { headers: { accept: 'application/json' } });
                   if (!response.ok) throw new Error('HTTP ' + response.status);
-                  const body = check.telegram || check.service === 'neo-face-ai-bot' ? await response.json() : null;
+                  const body = check.telegram || check.expectedStatus || check.service === 'neo-face-ai-bot' ? await response.json() : null;
                   if (check.service && body?.service !== check.service) throw new Error('Unexpected service identity');
                   if (check.telegram && (body.status !== 'ok' || body.telegram_ready !== true)) {
                     throw new Error('Telegram bot is not ready: ' + JSON.stringify({status:body.status,telegram_ready:body.telegram_ready}));
                   }
+                  if (check.expectedStatus && body?.status !== check.expectedStatus) {
+                    throw new Error('Unexpected passive endpoint role: ' + JSON.stringify({status:body?.status,telegram_ready:body?.telegram_ready}));
+                  }
                   if (check.name === 'Neo Face AI' && body?.status !== 'ok') throw new Error('Neo Face AI health status is not ok');
-                  console.log(JSON.stringify({service:check.name,httpStatus:response.status,ready:true,
+                  console.log(JSON.stringify({service:check.name,httpStatus:response.status,httpHealthy:true,
+                    role:check.telegram ? 'telegram_ingress' : check.expectedStatus ? 'passive_http_health_only' : 'http_service',
+                    telegramReady:body?.telegram_ready ?? null,
                     groupPushConfigured:body?.group_push_configured ?? null,
+                    groupPushDeliveryVerified:body?.group_push_delivery_verified ?? null,
+                    groupPushLastErrorType:body?.group_push_last_error_type ?? null,
                     learningStoragePersistent:body?.learning_storage_persistent ?? null}));
                   lastError = null;
                   break;
@@ -168,6 +176,6 @@ jobs:
         run: |
           {
             echo "## Remote service maintenance"
-            echo "- Checked: Taiwan Telegram bot, Crypto Radar v2, Telegram webhook, Neo Face AI, FALCON"
+            echo "- Checked: Taiwan Telegram bot, Crypto Radar v2 ingress, passive Crypto Radar webhook endpoint, Neo Face AI, FALCON"
             echo "- Result: ${{ job.status }}"
           } >> "$GITHUB_STEP_SUMMARY"
