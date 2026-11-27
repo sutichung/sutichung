@@ -1,7 +1,7 @@
 name: ANT overnight maintenance
 on:
   schedule:
-    - cron: "10 0-7 * * *"
+    - cron: "10 0-5 * * *"
       timezone: "Asia/Taipei"
   workflow_dispatch:
 
