@@ -5,7 +5,8 @@ on:
     paths:
       - '.github/workflows/overnight-maintenance.yml'
   schedule:
-    - cron: "0 16,18,20,22 * * *" # 00:00, 02:00, 04:00, 06:00 Asia/Taipei
+    - cron: "7 0,2,4,5 * * *"
+      timezone: "Asia/Taipei" # 00:07, 02:07, 04:07, 05:07; keep the full run inside the 00:00-06:00 window
   workflow_dispatch:
 permissions:
   contents: read
@@ -58,7 +59,7 @@ jobs:
         run: |
           {
             echo "## Taiwan Stock Hunter overnight maintenance"
-            echo "- Taiwan schedule: 00:00 / 02:00 / 04:00 / 06:00"
+            echo "- Taiwan schedule: 00:07 / 02:07 / 04:07 / 05:07"
             echo "- Dashboard build, backend tests, dependency audit, deployed health check"
             echo "- Commit: $GITHUB_SHA"
             echo "- Result: ${{ job.status }}"
