@@ -115,28 +115,17 @@ API Key 僅放後端環境變數；不要提交 .env、Token、券商帳密或�
 - **重要：美股行情目前仍有非官方 Yahoo Finance 端點，尚未完成官方授權來源替換；FinMind 與 MARKET_* 自訂來源也須逐一核實來源、授權與即時性。** 台股即時 feed 尚未取得授權；目前 TWSE／TPEx OpenAPI 路徑僅提供官方日收盤資料。
 - 此次提交完成的是工程規格文件，不代表已取得交易所即時行情授權或已完成程式接線。驗收清單未通過前，不得將來源標記為正式官方即時行情。
 
-## Crypto market microstructure (2026-11-18)
+## 加密貨幣功能封存狀態
 
-- 加密貨幣研究中心新增唯讀盤口微結構 API：`GET /api/crypto/microstructure/:symbol`，支援 Binance、Bybit、OKX 公開 REST 盤口、OBI、價差與大額成交 tape。
-- 手機版加密貨幣專區新增盤口與鯨魚成交面板；資料每 15 秒輪詢，不標示為 WebSocket 即時串流。
-- 加密貨幣行情前端每 15 秒輪詢，伺服器快取亦為 15 秒；這是公開 REST 快照更新，不是 WebSocket 逐筆串流。各交易所更新頻率與回傳時間仍以來源時間戳為準。
-- 欄位來源、資料時間戳、單位限制與風險解讀見 [微結構模組說明](./docs/CRYPTO_MICROSTRUCTURE.md)。
-- 這是唯讀公開市場資料；CCXT Pro 私人帳戶串流及自動下單仍未啟用，實盤交易鎖定維持。
-
-
-## 加密貨幣微結構與衍生品監控（擴充）
-
-- `GET /api/crypto/microstructure/:symbol?exchange=Binance&type=perpetual&depth=10&whaleUsd=50000`：Binance、Bybit、OKX 公開盤口與逐筆成交快照。
-- 盤口除一般 OBI 外，新增近端加權 OBI、最佳買賣檔數量、微價格（microprice）、微價格偏移 bps，以及 5／10／20 檔深度失衡。
-- 成交 Tape 新增已知主動方筆數、主動買入名目金額占比與標準化成交失衡；只有報價幣別及合約單位可可靠換算時才顯示大額美元分類。
-- 加密貨幣專區原有多交易所行情、K 線、技術掃描、資金費率、未平倉量、多空帳戶比、風險情境與 AI 研究維持獨立模組；不同交易所數量單位不直接相加。
-- 目前微結構介面為公開 REST 快照輪詢，不是 CCXT Pro WebSocket 串流；不使用私人 API Key、不監聽私人帳戶、不執行下單。若未來加入長連線 Worker，必須獨立部署、使用唯讀金鑰、具備持久化儲存與健康檢查，並先完成壓力及斷線測試。
-- OBI、微價格與大單只作為研究特徵，可能受撤單、隱藏流動性、交易所撮合規則及合約面額影響，不構成買賣指令。
-
+- 狀態：**SEALED / NOT AVAILABLE**。加密貨幣專區已從 Taiwan Stock Hunter 導覽與頁面組成移除；所有 /api/crypto/*、加密貨幣策略與市場情報端點均回傳 HTTP 503／feature_disabled。
+- 嵌入式即時 feed 不啟動，獨立 crypto worker 安全退出；不得把保留的歷史程式碼或文件描述為目前可用功能。
+- 舊有加密貨幣程式模組與研究文件保留作為未來審查材料，不代表目前有資料接線、即時行情或交易能力。
+- 重新啟用必須先取得明確核准，並完成正式資料授權、資料新鮮度與故障處理、API／安全測試、手機驗收及資源成本審查；不可只靠修改環境變數重新啟用。
+- 封存邊界與驗收條件見 [Crypto feature seal](./docs/CRYPTO_FEATURE_SEAL.md)。ANT BNB Smart Chain Testnet 部署追蹤屬於獨立 workflow，不代表 Taiwan Stock Hunter 提供 ANT 功能。
 
 ## 正式環境驗收
 
-正式驗收會檢查 Render commit、TWSE／TPEx 官方 OpenAPI 日收盤行情抽樣、多交易所加密貨幣、BTC 訂單簿與逐筆成交資料；未通過不會標記上線完成。
+正式驗收會檢查 Render commit、TWSE／TPEx 官方 OpenAPI 日收盤行情抽樣、行情來源與依賴風險診斷；加密貨幣功能封存期間不執行或宣稱多交易所加密貨幣驗收。
 
-`.github/workflows/production-smoke.yml` 會在 main 分支每次推送後，等待 Render 啟用對應 commit，並透過 GitHub Actions OIDC 驗證台股官方行情與多交易所加密貨幣資料；美股官方行情授權未設定時會明確列為警告，不冒充官方報價。
+production-smoke.yml 會在 Backend checks 完成後等待 Render 啟用對應 commit，並透過 GitHub Actions OIDC 驗證台股官方行情、來源與依賴診斷；加密貨幣封存期間不把 crypto data 當作上線驗收項目。美股官方行情授權未設定時會明確列為警告，不冒充官方報價。
 
